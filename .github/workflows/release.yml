@@ -1,0 +1,80 @@
+# Compila `mem` para las tres plataformas y cuelga los binarios de la release.
+#
+# Existe porque anathem se instala compilando, y compilar Rust es la barrera
+# más alta para quien solo quiere usar la herramienta. El binario de macOS es
+# el motivo real: no se puede cruzar desde Linux sin el SDK de Apple, así que
+# hace falta una máquina macOS, y acá son gratis para repos públicos.
+#
+# Se dispara al empujar una etiqueta `v*`. La release tiene que existir antes;
+# cada trabajo le agrega su archivo.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Etiqueta de la release a la que subir los binarios'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  construir:
+    name: ${{ matrix.nombre }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nombre: linux-x86_64
+            runner: ubuntu-latest
+            objetivo: x86_64-unknown-linux-gnu
+          - nombre: macos-arm64
+            runner: macos-14
+            objetivo: aarch64-apple-darwin
+          - nombre: macos-x86_64
+            runner: macos-13
+            objetivo: x86_64-apple-darwin
+          - nombre: windows-x86_64
+            runner: windows-latest
+            objetivo: x86_64-pc-windows-msvc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar el objetivo de Rust
+        run: rustup target add ${{ matrix.objetivo }}
+
+      - name: Compilar
+        run: cargo build --release --locked --target ${{ matrix.objetivo }}
+
+      - name: Comprobar que el binario corre y sabe su commit
+        if: matrix.runner != 'windows-latest'
+        run: ./target/${{ matrix.objetivo }}/release/mem --version
+
+      - name: Empaquetar (unix)
+        if: matrix.runner != 'windows-latest'
+        run: |
+          set -eu
+          nombre="mem-${{ matrix.nombre }}"
+          tar -C "target/${{ matrix.objetivo }}/release" -czf "$nombre.tar.gz" mem
+          shasum -a 256 "$nombre.tar.gz" > "$nombre.tar.gz.sha256"
+
+      - name: Empaquetar (windows)
+        if: matrix.runner == 'windows-latest'
+        shell: pwsh
+        run: |
+          $nombre = "mem-${{ matrix.nombre }}"
+          Compress-Archive -Path "target/${{ matrix.objetivo }}/release/mem.exe" -DestinationPath "$nombre.zip"
+          (Get-FileHash "$nombre.zip" -Algorithm SHA256).Hash.ToLower() + "  $nombre.zip" | Out-File -Encoding ascii "$nombre.zip.sha256"
+
+      - name: Subir a la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ETIQUETA: ${{ github.event.inputs.tag || github.ref_name }}
+        shell: bash
+        run: gh release upload "$ETIQUETA" mem-${{ matrix.nombre }}.* --clobber
