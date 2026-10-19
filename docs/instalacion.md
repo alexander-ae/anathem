@@ -114,8 +114,11 @@ Un test se saltea en macOS —el que mide memoria residente, porque lee
 `/proc`, que no existe ahí— y lo dice al correr. El resto de la batería corre
 completa.
 
-**No está probado en macOS.** No hay forma de verificarlo desde donde se
-desarrolló. Si lo instalás ahí y algo falla, es información valiosa.
+**Probado en macOS**, desde que hay CI: cada push compila en un runner
+`macos-14` (Apple Silicon) y corre la batería completa, 250 tests, más un
+recorrido de `init`, `save`, `search` y `doctor`. Lo que el CI no cubre es la
+instalación en sí —Gatekeeper, el `PATH` de tu shell, el plugin de Claude
+Code— así que si algo falla ahí, es información valiosa.
 
 **No hay servicio que levantar.** anathem no es un demonio: no escucha en
 ningún puerto, no hay nada que arrancar al prender la máquina, y después de
