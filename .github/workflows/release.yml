@@ -36,9 +36,16 @@ jobs:
           - nombre: macos-arm64
             runner: macos-14
             objetivo: aarch64-apple-darwin
+          # El Mac Intel se compila cruzado desde Apple Silicon y no en un
+          # runner Intel: `macos-13` se retiró en diciembre de 2025 y un job
+          # que lo pida queda en cola para siempre. El SDK de Apple apunta a
+          # las dos arquitecturas desde cualquiera de las dos, así que alcanza
+          # con el objetivo. Lo que se pierde es correr el binario para
+          # comprobarlo, porque el runner no puede ejecutar x86_64.
           - nombre: macos-x86_64
-            runner: macos-13
+            runner: macos-14
             objetivo: x86_64-apple-darwin
+            cruzado: true
           - nombre: windows-x86_64
             runner: windows-latest
             objetivo: x86_64-pc-windows-msvc
@@ -53,8 +60,15 @@ jobs:
         run: cargo build --release --locked --target ${{ matrix.objetivo }}
 
       - name: Comprobar que el binario corre y sabe su commit
-        if: matrix.runner != 'windows-latest'
+        if: matrix.runner != 'windows-latest' && !matrix.cruzado
         run: ./target/${{ matrix.objetivo }}/release/mem --version
+
+      - name: Comprobar que el binario es de la arquitectura pedida
+        if: matrix.cruzado
+        run: |
+          set -eu
+          file "target/${{ matrix.objetivo }}/release/mem"
+          file "target/${{ matrix.objetivo }}/release/mem" | grep -q x86_64
 
       - name: Empaquetar (unix)
         if: matrix.runner != 'windows-latest'
