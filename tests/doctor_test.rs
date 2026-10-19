@@ -383,12 +383,28 @@ fn una_base_anterior_a_las_claves_de_tema_no_rompe_el_diagnostico() {
 
 /// Cada archivo del árbol con un resumen de su contenido, para comparar antes
 /// y después sin volcar bytes en el mensaje de un fallo.
+/// Huella del directorio, sin los archivos auxiliares de SQLite.
+///
+/// Se dejan afuera `-wal` y `-shm` porque leer una base en modo WAL exige
+/// crearlos: no es algo que doctor elija hacer. En Linux SQLite los borra al
+/// cerrar la última conexión y el directorio queda igual que antes; en Windows
+/// quedan en disco, y exigir que no aparezcan sería exigir lo imposible.
+///
+/// Lo que sí queda comprobado es lo que importa: `mem.db` byte por byte. Si
+/// doctor consolidara el WAL —lo primero que haría un diagnóstico que
+/// "arregla"— el archivo principal cambiaría y el test lo vería.
 fn instantanea(dir: &Path) -> std::collections::BTreeMap<String, u64> {
     use std::hash::{Hash, Hasher};
+    fn auxiliar_de_sqlite(rel: &str) -> bool {
+        rel.ends_with("-wal") || rel.ends_with("-shm")
+    }
     fn recorrer(dir: &Path, base: &Path, v: &mut std::collections::BTreeMap<String, u64>) {
         for e in std::fs::read_dir(dir).unwrap() {
             let p = e.unwrap().path();
             let rel = p.strip_prefix(base).unwrap().to_string_lossy().to_string();
+            if auxiliar_de_sqlite(&rel) {
+                continue;
+            }
             if p.is_dir() {
                 v.insert(format!("{rel}/"), 0);
                 recorrer(&p, base, v);
@@ -424,6 +440,10 @@ fn el_diagnostico_es_de_solo_lectura_aun_con_la_base_danada() {
     std::fs::write(d.path().join("paquetes").join("x.anathem-pack.reemplazando-1"), b"r").unwrap();
 
     let antes = instantanea(d.path());
+    // Si el filtro de auxiliares se comiera de más, el test pasaría sin
+    // comprobar nada. Que el archivo principal esté en la huella es la
+    // condición para que lo de abajo signifique algo.
+    assert!(antes.contains_key("mem.db"), "la huella no incluye la base: {antes:?}");
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
     let despues = instantanea(d.path());
