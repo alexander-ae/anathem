@@ -2,21 +2,40 @@
 
 ## 0. La vía corta
 
+No hace falta compilar nada ni instalar Rust:
+
 ```bash
-git clone <url-del-repo> anathem
-cd anathem
-sh scripts/instalar.sh --configurar-path
+curl -fsSL https://raw.githubusercontent.com/alexander-ae/anathem/main/scripts/instalar.sh -o instalar.sh
+sh instalar.sh --configurar-path
 ```
 
-El script comprueba los requisitos, compila, instala, configura el `PATH` de
-tu shell y crea la base. Si algo falta —Rust, el compilador de C— se detiene
-y te dice el comando exacto para resolverlo, en vez de fallar a la mitad. Es
-idempotente: correrlo de nuevo no rompe nada.
+El script detecta tu plataforma, baja el binario de la última release,
+verifica su sha256, lo instala, configura el `PATH` de tu shell, crea la base
+y baja el paquete de vocabulario en-es. Al final corre `mem doctor` para que
+veas que quedó sano. Es idempotente: correrlo de nuevo no rompe nada.
 
-Si ya tenés el paquete de vocabulario, pasáselo y lo instala también:
+Se escribe el script a un archivo en vez de mandarlo a `sh` por una tubería a
+propósito. `curl ... | sh` ejecuta a ciegas lo que conteste el servidor; con el
+archivo podés leerlo antes, y son 240 líneas de `sh` sin nada raro.
+
+Hay binarios para Linux x86_64, macOS arm64 (los M1 en adelante), macOS x86_64
+y Windows x86_64. En cualquier otra plataforma el script avisa y compila desde
+fuente, que necesita Rust y un compilador de C.
+
+Opciones útiles:
 
 ```bash
-sh scripts/instalar.sh --configurar-path --paquete ~/Descargas/en-es.anathem-pack
+# compilar desde fuente aunque haya binario (necesita clonar el repo)
+sh scripts/instalar.sh --configurar-path --compilar
+
+# usar un paquete de vocabulario que ya tenés en disco
+sh instalar.sh --configurar-path --paquete ~/Descargas/en-es.anathem-pack
+
+# sin capa vectorial: búsqueda solo léxica, nada que bajar
+sh instalar.sh --configurar-path --sin-paquete
+
+# clavar una versión en vez de la última
+sh instalar.sh --etiqueta v0.1.0
 ```
 
 Lo único que el script **no** puede hacer por vos es conectar anathem a tu
@@ -26,10 +45,37 @@ terminar te los imprime.
 El resto de este documento explica cada paso por separado, por si preferís
 hacerlo a mano o algo falla.
 
-## 1. Compilar e instalar el binario
+## 1. Instalar el binario a mano
+
+### Bajando el ya compilado
+
+Elegí el archivo de tu plataforma en
+[las releases](https://github.com/alexander-ae/anathem/releases) —
+`mem-linux-x86_64.tar.gz`, `mem-macos-arm64.tar.gz`, `mem-macos-x86_64.tar.gz`
+o `mem-windows-x86_64.zip`— y descomprimilo:
 
 ```bash
-git clone <url-del-repo> anathem
+tar -xzf mem-macos-arm64.tar.gz
+mkdir -p ~/.local/bin && mv mem ~/.local/bin/mem && chmod 755 ~/.local/bin/mem
+mem --version
+```
+
+Cada archivo viene con su `.sha256` al lado. Para comprobarlo:
+
+```bash
+shasum -a 256 -c mem-macos-arm64.tar.gz.sha256   # macOS
+sha256sum -c mem-macos-x86_64.tar.gz.sha256      # Linux
+```
+
+En macOS, la primera vez Gatekeeper puede bloquear un binario bajado de
+internet, porque no está firmado con una cuenta de desarrollador de Apple. Se
+destraba con `xattr -d com.apple.quarantine ~/.local/bin/mem`, o desde
+Ajustes → Privacidad y seguridad, que ofrece abrirlo igual.
+
+### Compilando desde fuente
+
+```bash
+git clone https://github.com/alexander-ae/anathem.git anathem
 cd anathem
 cargo build --release
 mkdir -p ~/.local/bin && cp target/release/mem ~/.local/bin/mem && chmod 755 ~/.local/bin/mem

@@ -271,15 +271,31 @@ eval set para cualquier cambio futuro al ranking — el formato de
 
 ## Instalación
 
+Sin compilar nada, en Linux y macOS:
+
 ```bash
-git clone https://github.com/alexander-ae/anathem.git && cd anathem
-sh scripts/instalar.sh --configurar-path
+curl -fsSL https://raw.githubusercontent.com/alexander-ae/anathem/main/scripts/instalar.sh -o instalar.sh
+sh instalar.sh --configurar-path
 ```
 
-Comprueba requisitos, compila, instala, configura el `PATH` y crea la base.
-Si falta algo se detiene diciendo qué comando correr. Funciona en Linux y
-macOS — en macOS pide las herramientas de Xcode si no están. Para Windows,
-ver [`docs/windows.md`](docs/windows.md).
+Baja el binario de la última release, verifica su sha256, lo instala, configura
+el `PATH`, crea la base y baja el paquete de vocabulario en-es (22 MB). Es
+idempotente: correrlo de nuevo no rompe nada.
+
+El `curl` escribe el script en un archivo en vez de mandarlo a `sh` por una
+tubería, a propósito: así podés leerlo antes de correrlo, que son 240 líneas.
+
+Para compilar desde fuente —otra plataforma, o preferencia— cloná y agregá
+`--compilar`:
+
+```bash
+git clone https://github.com/alexander-ae/anathem.git && cd anathem
+sh scripts/instalar.sh --configurar-path --compilar
+```
+
+Eso sí necesita Rust y un compilador de C; el script se detiene diciendo qué
+comando correr si falta alguno. En macOS pide las herramientas de Xcode. Para
+Windows, ver [`docs/windows.md`](docs/windows.md).
 
 Paso a paso, y qué hace cada cosa: [`docs/instalacion.md`](docs/instalacion.md).
 
@@ -293,8 +309,7 @@ editar ningún JSON a mano:
 /plugin install anathem@anathem
 ```
 
-**Antes hay que compilar e instalar el binario**, y dejarlo en el `PATH` como
-`mem` — ver [`docs/instalacion.md`](docs/instalacion.md). El plugin lo invoca
+**Antes hay que instalar el binario** y dejarlo en el `PATH` como `mem` — ver [`docs/instalacion.md`](docs/instalacion.md). El plugin lo invoca
 por nombre y usa `~/.anathem/mem.db` como base, que se crea sola.
 
 Se resolvió así, y no preguntando la ruta con el mecanismo `userConfig` que
