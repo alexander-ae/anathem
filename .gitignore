@@ -1,0 +1,10 @@
+/target
+/data/*.jsonl
+/eval/results/
+/eval/evalset.json
+/docs/superpowers/fase-2-candidatas-supersede.txt
+/.superpowers/
+*.db
+*.db-wal
+*.db-shm
+docs/historia/2026-09-21-anathem-fase1.md

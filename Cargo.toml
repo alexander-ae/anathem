@@ -1,0 +1,29 @@
+[package]
+name = "anathem"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97"
+
+[lib]
+name = "anathem"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mem"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+memmap2 = "0.9"
+regex = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
+
+[dev-dependencies]
+serde_yaml = "0.9.34"
+tempfile = "3"
