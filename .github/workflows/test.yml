@@ -1,0 +1,58 @@
+# Corre la batería de tests en las tres plataformas.
+#
+# Existe por una frase que estaba en docs/instalacion.md: "No está probado en
+# macOS. No hay forma de verificarlo desde donde se desarrolló." Acá sí la hay,
+# y gratis para repos públicos. Lo mismo vale para Windows, donde el soporte se
+# escribió a ciegas: hay código que solo se ejecuta ahí (USERPROFILE le gana a
+# HOME, notepad como editor por defecto, el reemplazo de archivos abiertos).
+
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  probar:
+    name: ${{ matrix.nombre }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nombre: linux
+            runner: ubuntu-latest
+          - nombre: macos-arm64
+            runner: macos-14
+          - nombre: windows
+            runner: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cachear las dependencias compiladas
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ matrix.runner }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ matrix.runner }}-cargo-
+
+      - name: Tests
+        run: cargo test --locked
+
+      - name: El binario corre y sabe su commit
+        run: cargo run --locked --quiet -- --version
+
+      - name: Diagnóstico sobre una base recién creada
+        shell: bash
+        run: |
+          set -eu
+          cargo run --locked --quiet -- --db prueba.db init
+          cargo run --locked --quiet -- --db prueba.db save "una nota de prueba"
+          cargo run --locked --quiet -- --db prueba.db search "prueba"
+          cargo run --locked --quiet -- --db prueba.db doctor
