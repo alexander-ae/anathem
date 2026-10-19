@@ -1,13 +1,18 @@
 # anathem en Windows
 
-**Estado: escrito y revisado, no probado.** El código es portable por
-construcción, pero nadie lo compiló ni lo corrió en Windows todavía. Este
-documento existe para que la primera persona que lo intente sepa qué se hizo,
-qué falta verificar y en qué orden probarlo.
+**Estado: compila y pasa la batería en CI; falta probarlo a mano.** Cada push
+compila con MSVC en un runner `windows-latest` y corre 249 tests (uno queda
+ignorado: el de permisos POSIX, que en Windows no aplica), más un recorrido de
+`init`, `save`, `search` y `doctor`. Antes de eso nadie lo había compilado
+nunca en Windows.
 
-Linux está probado (157 tests). macOS no se probó pero no hay motivo para que
-falle: semánticas POSIX iguales a Linux, `HOME` definida, y las dependencias en
-C compilan con las herramientas de línea de comandos de Xcode.
+Lo que el CI **no** puede cubrir está más abajo, en "Qué probar": el CI corre
+todo bajo un solo shell, así que no compara la ruta por defecto entre
+`cmd.exe` y Git Bash, que es el punto donde una precedencia mal puesta
+dejaría dos bases de datos distintas sin avisar.
+
+Para referencia: Linux pasa 251 y macOS 250 (el que falta lee `/proc`, que
+solo existe en Linux).
 
 ## Qué hacía falta arreglar
 
@@ -51,8 +56,8 @@ eso y no el código de anathem.
 
 ## Qué probar, en este orden
 
-1. **Que compile.** Es lo único que no se pudo verificar de ninguna forma desde
-   Linux. Si falla acá, el resto no importa.
+1. ~~**Que compile.**~~ Ya está: el CI compila con MSVC en cada push. Era lo
+   único que no se podía verificar de ninguna forma desde Linux.
 2. **La ruta por defecto.** Corré `mem init` desde `cmd.exe` y después desde
    Git Bash, y comprobá que las dos imprimen **la misma** ruta. Si difieren, la
    precedencia de variables está mal y vas a tener dos bases.
