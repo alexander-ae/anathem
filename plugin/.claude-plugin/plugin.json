@@ -1,0 +1,19 @@
+{
+  "name": "anathem",
+  "description": "Memoria local para agentes de código: un binario, un archivo SQLite, sin daemon. Requiere el ejecutable `mem` en el PATH — ver la guía de instalación del repositorio.",
+  "version": "0.1.0",
+  "author": {
+    "name": "alexander-ae"
+  },
+  "homepage": "https://github.com/alexander-ae/anathem",
+  "repository": "https://github.com/alexander-ae/anathem",
+  "license": "MIT",
+  "keywords": [
+    "memoria",
+    "memory",
+    "mcp",
+    "sqlite",
+    "local",
+    "multiidioma"
+  ]
+}

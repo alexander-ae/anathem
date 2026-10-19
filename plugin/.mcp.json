@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "anathem": {
+      "command": "mem",
+      "args": ["--db", "~/.anathem/mem.db", "serve"]
+    }
+  }
+}
