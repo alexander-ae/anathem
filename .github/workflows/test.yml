@@ -1,34 +1,22 @@
-# Corre la batería de tests en las tres plataformas.
+# Corre la batería en macOS, que es lo único que GitLab no puede darnos.
 #
-# Existe por una frase que estaba en docs/instalacion.md: "No está probado en
-# macOS. No hay forma de verificarlo desde donde se desarrolló." Acá sí la hay,
-# y gratis para repos públicos. Lo mismo vale para Windows, donde el soporte se
-# escribió a ciegas: hay código que solo se ejecuta ahí (USERPROFILE le gana a
-# HOME, notepad como editor por defecto, el reemplazo de archivos abiertos).
+# Linux y Windows se prueban en el CI de GitLab, donde vive el proyecto. macOS
+# necesita hardware Apple y los runners macOS de GitLab son solo Premium y
+# Ultimate, así que esta es la única forma de que la frase "probado en macOS"
+# sea cierta y no una suposición.
+#
+# Se dispara a mano y no en cada push, porque este repositorio es privado y los
+# minutos de macOS se cobran. Conviene correrlo antes de etiquetar una release
+# y después de cualquier cambio que toque rutas, archivos o procesos.
 
-name: tests
+name: tests en macOS
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 jobs:
   probar:
-    name: ${{ matrix.nombre }}
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - nombre: linux
-            runner: ubuntu-latest
-          - nombre: macos-arm64
-            runner: macos-14
-          - nombre: windows
-            runner: windows-latest
-
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
@@ -39,8 +27,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ matrix.runner }}-cargo-${{ hashFiles('Cargo.lock') }}
-          restore-keys: ${{ matrix.runner }}-cargo-
+          key: macos-14-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: macos-14-cargo-
 
       - name: Tests
         run: cargo test --locked
@@ -48,8 +36,7 @@ jobs:
       - name: El binario corre y sabe su commit
         run: cargo run --locked --quiet -- --version
 
-      - name: Diagnóstico sobre una base recién creada
-        shell: bash
+      - name: Recorrido mínimo sobre una base recién creada
         run: |
           set -eu
           cargo run --locked --quiet -- --db prueba.db init

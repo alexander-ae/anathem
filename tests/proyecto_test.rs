@@ -25,7 +25,7 @@ fn usa_el_nombre_del_remoto_y_no_el_de_la_carpeta() {
 #[test]
 fn entiende_una_url_https() {
     let d = tempfile::tempdir().unwrap();
-    repo(d.path(), Some("https://github.com/alexander-ae/anathem.git"));
+    repo(d.path(), Some("https://gitlab.com/vibecoding-ae/anathem.git"));
     assert_eq!(detectar(d.path()).as_deref(), Some("anathem"));
 }
 

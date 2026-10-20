@@ -11,7 +11,7 @@
 # accionable. Es idempotente — correrlo dos veces no rompe nada.
 set -eu
 
-REPO="${ANATHEM_REPO:-alexander-ae/anathem}"
+REPO="${ANATHEM_REPO:-vibecoding-ae/anathem}"
 PREFIJO="${PREFIJO:-$HOME/.local/bin}"
 BASE="${ANATHEM_DB:-$HOME/.anathem/mem.db}"
 PAQUETE=""
@@ -101,11 +101,13 @@ verificar_sha() {
   ok "sha256 verificado"
 }
 
+# GitLab resuelve `permalink/latest` a la release más nueva y redirige al
+# archivo en el registro de paquetes. Anda sin token en proyectos públicos.
 url_release() {
   if [ "$ETIQUETA" = "latest" ]; then
-    echo "https://github.com/$REPO/releases/latest/download/$1"
+    echo "https://gitlab.com/$REPO/-/releases/permalink/latest/downloads/$1"
   else
-    echo "https://github.com/$REPO/releases/download/$ETIQUETA/$1"
+    echo "https://gitlab.com/$REPO/-/releases/$ETIQUETA/downloads/$1"
   fi
 }
 
@@ -157,7 +159,7 @@ else
   ok "plataforma: $SISTEMA/$ARQUITECTURA → $ARCHIVO"
   if ! bajar "$(url_release "$ARCHIVO")" "$TEMPORAL/$ARCHIVO"; then
     malo "no pude bajar el binario. Probá con --compilar, o revisá"
-    echo "    https://github.com/$REPO/releases" >&2
+    echo "    https://gitlab.com/$REPO/-/releases" >&2
     exit 1
   fi
   ok "bajado: $(url_release "$ARCHIVO")"
@@ -249,7 +251,7 @@ paso "6. Diagnóstico"
 paso "Listo. Falta conectarlo a tu agente:"
 cat <<FIN
   Claude Code — escribí estos dos comandos adentro de Claude Code:
-      /plugin marketplace add https://github.com/$REPO.git
+      /plugin marketplace add https://gitlab.com/$REPO.git
       /plugin install anathem@anathem
 
   opencode — agregá a ~/.config/opencode/opencode.jsonc, dentro de "mcp":

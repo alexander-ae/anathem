@@ -1,0 +1,130 @@
+# CI de anathem: corre la batería y publica los binarios de cada etiqueta.
+#
+# Cubre Linux y Windows, que es lo que los runners del plan Free alcanzan.
+# El binario de macOS no sale de acá: los runners macOS de GitLab son solo
+# Premium y Ultimate, y cruzar desde Linux necesitaría el SDK de Apple, cuya
+# licencia lo limita a hardware Apple. Se construye aparte y se sube a la
+# misma release; ver scripts/publicar-mac.sh.
+#
+# Si los pipelines no arrancan, es que la cuenta todavía no verificó una
+# tarjeta: GitLab lo exige para usar sus runners compartidos en el plan Free.
+# Sin eso, scripts/publicar.sh hace lo mismo desde tu máquina.
+
+stages:
+  - probar
+  - construir
+  - publicar
+
+variables:
+  CARGO_TERM_COLOR: always
+  # El registro de paquetes genéricos exige una versión X.Y.Z, sin la `v`.
+  PAQUETE: anathem
+
+.cache_cargo: &cache_cargo
+  cache:
+    key: "$CI_JOB_NAME-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .cargo/
+      - target/
+
+probar:linux:
+  stage: probar
+  image: rust:1-bookworm
+  <<: *cache_cargo
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+  script:
+    - cargo test --locked
+    - cargo run --locked --quiet -- --version
+    # Un recorrido de verdad: la batería usa bases temporales y no prueba el
+    # camino que hace alguien al instalar.
+    - cargo run --locked --quiet -- --db prueba.db init
+    - cargo run --locked --quiet -- --db prueba.db save "una nota de prueba"
+    - cargo run --locked --quiet -- --db prueba.db search "prueba"
+    - cargo run --locked --quiet -- --db prueba.db doctor
+
+probar:windows:
+  stage: probar
+  tags:
+    - saas-windows-medium-amd64
+  <<: *cache_cargo
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR\.cargo
+  before_script:
+    # El runner de Windows no trae Rust. Chocolatey sí, y `rust-ms` es el
+    # toolchain con MSVC, que es el que usa el binario publicado.
+    - choco install rust-ms -y --no-progress
+    - $env:Path = "C:\Program Files\Rust stable MSVC 1.*\bin;$env:Path"
+    - rustc --version
+  script:
+    - cargo test --locked
+    - cargo run --locked --quiet -- --version
+  allow_failure: true
+
+construir:linux:
+  stage: construir
+  image: rust:1-bookworm
+  <<: *cache_cargo
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+  script:
+    - cargo build --release --locked
+    - ./target/release/mem --version
+    - tar -C target/release -czf mem-linux-x86_64.tar.gz mem
+    - sha256sum mem-linux-x86_64.tar.gz > mem-linux-x86_64.tar.gz.sha256
+  artifacts:
+    paths:
+      - mem-linux-x86_64.tar.gz
+      - mem-linux-x86_64.tar.gz.sha256
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG
+
+construir:windows:
+  stage: construir
+  tags:
+    - saas-windows-medium-amd64
+  <<: *cache_cargo
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR\.cargo
+  before_script:
+    - choco install rust-ms -y --no-progress
+    - $env:Path = "C:\Program Files\Rust stable MSVC 1.*\bin;$env:Path"
+  script:
+    - cargo build --release --locked
+    - Compress-Archive -Path target\release\mem.exe -DestinationPath mem-windows-x86_64.zip
+    - (Get-FileHash mem-windows-x86_64.zip -Algorithm SHA256).Hash.ToLower() + "  mem-windows-x86_64.zip" | Out-File -Encoding ascii mem-windows-x86_64.zip.sha256
+  artifacts:
+    paths:
+      - mem-windows-x86_64.zip
+      - mem-windows-x86_64.zip.sha256
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG
+
+publicar:
+  stage: publicar
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+  script:
+    - VERSION="${CI_COMMIT_TAG#v}"
+    - |
+      for f in mem-linux-x86_64.tar.gz mem-linux-x86_64.tar.gz.sha256 \
+               mem-windows-x86_64.zip mem-windows-x86_64.zip.sha256; do
+        [ -f "$f" ] || { echo "falta $f, lo salteo"; continue; }
+        echo "subiendo $f"
+        curl --fail-with-body --silent --show-error \
+          --header "JOB-TOKEN: $CI_JOB_TOKEN" \
+          --upload-file "$f" \
+          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PAQUETE}/${VERSION}/${f}"
+      done
+  release:
+    tag_name: $CI_COMMIT_TAG
+    description: 'Ver el README para instalar. Los binarios y el paquete de vocabulario cuelgan de acá.'
+    assets:
+      links:
+        - name: mem-linux-x86_64.tar.gz
+          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/anathem/${CI_COMMIT_TAG}/mem-linux-x86_64.tar.gz'
+        - name: mem-windows-x86_64.zip
+          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/anathem/${CI_COMMIT_TAG}/mem-windows-x86_64.zip'

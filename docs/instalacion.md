@@ -5,7 +5,7 @@
 No hace falta compilar nada ni instalar Rust:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/alexander-ae/anathem/main/scripts/instalar.sh -o instalar.sh
+curl -fsSL https://gitlab.com/vibecoding-ae/anathem/-/raw/main/scripts/instalar.sh -o instalar.sh
 sh instalar.sh --configurar-path
 ```
 
@@ -50,7 +50,7 @@ hacerlo a mano o algo falla.
 ### Bajando el ya compilado
 
 Elegí el archivo de tu plataforma en
-[las releases](https://github.com/alexander-ae/anathem/releases) —
+[las releases](https://gitlab.com/vibecoding-ae/anathem/-/releases) —
 `mem-linux-x86_64.tar.gz`, `mem-macos-arm64.tar.gz`, `mem-macos-x86_64.tar.gz`
 o `mem-windows-x86_64.zip`— y descomprimilo:
 
@@ -75,7 +75,7 @@ Ajustes → Privacidad y seguridad, que ofrece abrirlo igual.
 ### Compilando desde fuente
 
 ```bash
-git clone https://github.com/alexander-ae/anathem.git anathem
+git clone https://gitlab.com/vibecoding-ae/anathem.git anathem
 cd anathem
 cargo build --release
 mkdir -p ~/.local/bin && cp target/release/mem ~/.local/bin/mem && chmod 755 ~/.local/bin/mem
