@@ -91,18 +91,50 @@ español, el recall@5 pasa de 34% a 58% (n=50). Ver
 
 ## Instalación
 
-Ver [`docs/instalacion.md`](docs/instalacion.md) para el procedimiento
-completo: compilar, instalar el binario, migrar un corpus, y conectar el
-servidor MCP a Claude Code y a opencode.
-
-Resumen:
+Sin compilar nada, en Linux y macOS:
 
 ```bash
-cargo build --release
-mkdir -p ~/.local/bin && cp target/release/mem ~/.local/bin/mem && chmod 755 ~/.local/bin/mem
-mem --db ~/.anathem/mem.db init
-mem --db ~/.anathem/mem.db migrate --from mi-export.jsonl
+curl -fsSL https://raw.githubusercontent.com/alexander-ae/anathem/main/scripts/instalar.sh -o instalar.sh
+sh instalar.sh --configurar-path
 ```
+
+Baja el binario de la última release, verifica su sha256, lo instala, configura
+el `PATH`, crea la base y baja el paquete de vocabulario en-es (22 MB). Es
+idempotente: correrlo de nuevo no rompe nada.
+
+El `curl` escribe el script en un archivo en vez de mandarlo a `sh` por una
+tubería, a propósito: así podés leerlo antes de correrlo, que son 240 líneas.
+
+Para compilar desde fuente —otra plataforma, o preferencia— cloná y agregá
+`--compilar`:
+
+```bash
+git clone https://github.com/alexander-ae/anathem.git && cd anathem
+sh scripts/instalar.sh --configurar-path --compilar
+```
+
+Eso sí necesita Rust y un compilador de C; el script se detiene diciendo qué
+comando correr si falta alguno. En macOS pide las herramientas de Xcode. Para
+Windows, ver [`docs/windows.md`](docs/windows.md).
+
+Paso a paso, y qué hace cada cosa: [`docs/instalacion.md`](docs/instalacion.md).
+
+### Los descargables
+
+Todo cuelga de [las releases](https://github.com/alexander-ae/anathem/releases),
+y cada archivo trae su `.sha256` al lado:
+
+| archivo | para |
+|---|---|
+| `mem-linux-x86_64.tar.gz` | Linux x86_64 |
+| `mem-macos-arm64.tar.gz` | macOS con Apple Silicon |
+| `mem-macos-x86_64.tar.gz` | macOS con Intel |
+| `mem-windows-x86_64.zip` | Windows x86_64 |
+| `en-es.anathem-pack` | paquete de vocabulario inglés/español, 22 MB |
+
+El paquete de vocabulario es la capa vectorial, y es opcional: sin él la
+búsqueda es solo léxica. El instalador lo baja solo; a mano se instala con
+`mem model install <archivo>`.
 
 ## Subcomandos
 
@@ -268,36 +300,6 @@ eval set para cualquier cambio futuro al ranking — el formato de
 - Instalación y conexión con los agentes: [`docs/instalacion.md`](docs/instalacion.md)
 - Paquetes de vocabulario (capa vectorial opcional): formato, cómo generarlos
   y cómo instalarlos: [`docs/paquetes-de-vocabulario.md`](docs/paquetes-de-vocabulario.md)
-
-## Instalación
-
-Sin compilar nada, en Linux y macOS:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/alexander-ae/anathem/main/scripts/instalar.sh -o instalar.sh
-sh instalar.sh --configurar-path
-```
-
-Baja el binario de la última release, verifica su sha256, lo instala, configura
-el `PATH`, crea la base y baja el paquete de vocabulario en-es (22 MB). Es
-idempotente: correrlo de nuevo no rompe nada.
-
-El `curl` escribe el script en un archivo en vez de mandarlo a `sh` por una
-tubería, a propósito: así podés leerlo antes de correrlo, que son 240 líneas.
-
-Para compilar desde fuente —otra plataforma, o preferencia— cloná y agregá
-`--compilar`:
-
-```bash
-git clone https://github.com/alexander-ae/anathem.git && cd anathem
-sh scripts/instalar.sh --configurar-path --compilar
-```
-
-Eso sí necesita Rust y un compilador de C; el script se detiene diciendo qué
-comando correr si falta alguno. En macOS pide las herramientas de Xcode. Para
-Windows, ver [`docs/windows.md`](docs/windows.md).
-
-Paso a paso, y qué hace cada cosa: [`docs/instalacion.md`](docs/instalacion.md).
 
 ## Instalar como plugin de Claude Code
 
