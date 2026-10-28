@@ -11,7 +11,7 @@
 # accionable. Es idempotente — correrlo dos veces no rompe nada.
 set -eu
 
-REPO="${ANATHEM_REPO:-vibecoding-ae/anathem}"
+REPO="${ANATHEM_REPO:-__alexander__/anathem}"
 PREFIJO="${PREFIJO:-$HOME/.local/bin}"
 BASE="${ANATHEM_DB:-$HOME/.anathem/mem.db}"
 PAQUETE=""

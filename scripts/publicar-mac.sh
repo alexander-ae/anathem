@@ -16,7 +16,7 @@ set -eu
 
 ETIQUETA="${1:-}"
 REPO_GH="${ANATHEM_REPO_GH:-alexander-ae/anathem}"
-REPO_GL="${ANATHEM_REPO:-vibecoding-ae/anathem}"
+REPO_GL="${ANATHEM_REPO:-__alexander__/anathem}"
 
 if [ -z "$ETIQUETA" ]; then
   echo "Uso: sh scripts/publicar-mac.sh <etiqueta>    (por ejemplo v0.1.0)" >&2

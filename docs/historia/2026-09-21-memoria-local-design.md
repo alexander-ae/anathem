@@ -8,7 +8,7 @@
 # anathem — sistema de memoria local para agentes
 
 Diseño. Fecha: 2026-09-21. Estado: propuesto, pendiente de revisión.
-Repo: `git@gitlab.com:vibecoding-ae/anathem.git`
+Repo: `git@gitlab.com:__alexander__/anathem.git`
 
 ## 1. Problema
 

@@ -94,7 +94,7 @@ español, el recall@5 pasa de 34% a 58% (n=50). Ver
 Sin compilar nada, en Linux y macOS:
 
 ```bash
-curl -fsSL https://gitlab.com/vibecoding-ae/anathem/-/raw/main/scripts/instalar.sh -o instalar.sh
+curl -fsSL https://gitlab.com/__alexander__/anathem/-/raw/main/scripts/instalar.sh -o instalar.sh
 sh instalar.sh --configurar-path
 ```
 
@@ -109,7 +109,7 @@ Para compilar desde fuente —otra plataforma, o preferencia— cloná y agregá
 `--compilar`:
 
 ```bash
-git clone https://gitlab.com/vibecoding-ae/anathem.git && cd anathem
+git clone https://gitlab.com/__alexander__/anathem.git && cd anathem
 sh scripts/instalar.sh --configurar-path --compilar
 ```
 
@@ -121,7 +121,7 @@ Paso a paso, y qué hace cada cosa: [`docs/instalacion.md`](docs/instalacion.md)
 
 ### Los descargables
 
-Todo cuelga de [las releases](https://gitlab.com/vibecoding-ae/anathem/-/releases),
+Todo cuelga de [las releases](https://gitlab.com/__alexander__/anathem/-/releases),
 y cada archivo trae su `.sha256` al lado:
 
 | archivo | para |
@@ -307,7 +307,7 @@ El repositorio es a la vez su propio *marketplace*, así que no hace falta
 editar ningún JSON a mano:
 
 ```
-/plugin marketplace add https://gitlab.com/vibecoding-ae/anathem.git
+/plugin marketplace add https://gitlab.com/__alexander__/anathem.git
 /plugin install anathem@anathem
 ```
 
