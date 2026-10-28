@@ -1,8 +1,8 @@
 > **Documento histórico.** Este spec se escribió durante el diseño original de
-> anathem, contra el corpus privado de notas de trabajo de su autor original
-> (nombres de proyecto, tickets, colegas y fragmentos de ese corpus incluidos).
-> Se conserva sin reescribir como registro del razonamiento y las métricas que
-> motivaron las decisiones de diseño — no describe el comportamiento genérico
+> anathem, midiendo contra un corpus privado de notas de trabajo. Los fragmentos
+> de ese corpus que ilustraban el razonamiento se reemplazaron por equivalentes
+> inventados antes de publicar; lo demás se conserva como registro de las
+> métricas y las decisiones de diseño. No describe el comportamiento genérico
 > del proyecto tal como se publica. Para eso, ver el [README](../../README.md).
 
 # anathem — sistema de memoria local para agentes
