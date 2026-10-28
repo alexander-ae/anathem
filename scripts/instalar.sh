@@ -280,6 +280,27 @@ for candidato in "${OPENCODE_CONFIG:-}" "$HOME/.config/opencode/opencode.jsonc" 
 done
 ENTRADA_OC="    \"anathem\": { \"type\": \"local\", \"command\": [\"$PREFIJO/mem\", \"--db\", \"$BASE\", \"serve\"], \"enabled\": true },"
 
+if [ -z "$OC" ] && [ "$CONECTAR" -eq 1 ] && command -v opencode >/dev/null 2>&1; then
+  # opencode instalado y sin configurar todavía: no hay archivo que editar,
+  # así que se crea. Es el caso de una instalación recién hecha, y saltearlo
+  # en silencio dejaba a opencode sin anathem sin que nadie se enterara.
+  OC="$HOME/.config/opencode/opencode.json"
+  mkdir -p "$(dirname "$OC")"
+  cat > "$OC" <<FIN
+{
+  "\$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "anathem": { "type": "local", "command": ["$PREFIJO/mem", "--db", "$BASE", "serve"], "enabled": true }
+  }
+}
+FIN
+  ok "creado $OC con anathem"
+  aviso "abrí una sesión nueva de opencode para que aparezcan las tools"
+  OC=""
+elif [ -z "$OC" ] && [ "$CONECTAR" -eq 1 ]; then
+  : # opencode no está instalado; no hay nada que decir.
+fi
+
 if [ -n "$OC" ]; then
   if grep -q '"anathem"' "$OC" 2>/dev/null; then
     ok "opencode ya tenía anathem configurado"
