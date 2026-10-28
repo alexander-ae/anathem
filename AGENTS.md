@@ -22,11 +22,16 @@ ahí sí pide Rust y un compilador de C.
 
 ## Lo que el script no puede hacer solo
 
-**opencode.** El script detecta si está instalado y te imprime la entrada,
-pero no edita `~/.config/opencode/opencode.jsonc` por su cuenta: ese archivo
-admite comentarios y reescribirlo con un parser de JSON se los borraría. Si la
-persona usa opencode, agregale esta entrada dentro de su clave `"mcp"`, a mano
-y sin tocar lo demás:
+**opencode, en algunos casos.** El script lo configura solo: busca
+`~/.config/opencode/opencode.jsonc`, después `.json`, y respeta
+`OPENCODE_CONFIG` si está definida. Inserta una línea dentro de la clave
+`"mcp"` en vez de reescribir el archivo —así no se pierden los comentarios— y
+deja una copia en `.bak-anathem`.
+
+Se abstiene, y te imprime la entrada, cuando el archivo tiene una forma que no
+puede editar sin riesgo: sin clave `"mcp"`, con la clave escrita de forma
+compacta, o con más de una. En ese caso agregala vos, dentro de su `"mcp"`, sin
+tocar lo demás:
 
 ```jsonc
 "anathem": {
@@ -37,6 +42,11 @@ y sin tocar lo demás:
 ```
 
 Reemplazá la ruta por la que el script haya impreso.
+
+**Claude Code sin el CLI.** El registro usa `claude mcp add --scope user`. Si
+el comando `claude` no está en el `PATH` —pasa cuando solo está la aplicación
+de escritorio— el script lo dice y sigue. Ahí hay que agregar a mano la entrada
+`mcpServers` que describe [`docs/instalacion.md`](docs/instalacion.md).
 
 **Reiniciar el agente.** Las tools nuevas aparecen en una sesión nueva, no en
 la que está corriendo. Decíselo al terminar.

@@ -71,11 +71,17 @@ case "$SISTEMA/$ARQUITECTURA" in
 esac
 
 # Baja $1 a $2. Acepta curl o wget, que entre los dos cubren todo.
+#
+# Los límites de tiempo no son decoración: `--retry` solo reacciona a errores,
+# y una descarga que se estanca sin fallar deja el instalador colgado para
+# siempre, sin decir nada. Se corta si no conecta en 20s o si el caudal baja
+# de 1 KB/s durante un minuto. No se pone un tope total porque el paquete de
+# 22 MB puede tardar varios minutos en una conexión lenta, legítimamente.
 bajar() {
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL --retry 3 -o "$2" "$1"
+    curl -fsSL --retry 3 --connect-timeout 20 --speed-limit 1024 --speed-time 60 -o "$2" "$1"
   elif command -v wget >/dev/null 2>&1; then
-    wget -q -O "$2" "$1"
+    wget -q --connect-timeout=20 --read-timeout=60 --tries=3 -O "$2" "$1"
   else
     malo "falta curl o wget para descargar."
     return 1
@@ -265,14 +271,64 @@ elif [ "$CONECTAR" -eq 1 ]; then
   aviso "no encontré el comando \`claude\` en el PATH; salteo el registro"
 fi
 
-if [ -f "$HOME/.config/opencode/opencode.jsonc" ]; then
-  if grep -q '"anathem"' "$HOME/.config/opencode/opencode.jsonc" 2>/dev/null; then
+# opencode acepta los dos nombres y la documentación oficial menciona `.json`,
+# pero muchas instalaciones tienen `.jsonc` porque admite comentarios. Se busca
+# el que exista; `OPENCODE_CONFIG` gana sobre los dos, como en opencode mismo.
+OC=""
+for candidato in "${OPENCODE_CONFIG:-}" "$HOME/.config/opencode/opencode.jsonc" "$HOME/.config/opencode/opencode.json"; do
+  if [ -n "$candidato" ] && [ -f "$candidato" ]; then OC="$candidato"; break; fi
+done
+ENTRADA_OC="    \"anathem\": { \"type\": \"local\", \"command\": [\"$PREFIJO/mem\", \"--db\", \"$BASE\", \"serve\"], \"enabled\": true },"
+
+if [ -n "$OC" ]; then
+  if grep -q '"anathem"' "$OC" 2>/dev/null; then
     ok "opencode ya tenía anathem configurado"
+  elif [ "$CONECTAR" -eq 0 ]; then
+    aviso "opencode está instalado pero sin anathem. Corré con --conectar, o agregá a su \"mcp\":"
+    echo "  $ENTRADA_OC"
   else
-    # No se edita automáticamente: ese archivo admite comentarios y es de la
-    # persona. Reescribirlo con un parser de JSON le borraría los comentarios.
-    aviso "opencode está instalado pero sin anathem. Agregá a su \"mcp\":"
-    echo "      \"anathem\": { \"type\": \"local\", \"command\": [\"$PREFIJO/mem\", \"--db\", \"$BASE\", \"serve\"], \"enabled\": true }"
+    # Se inserta una línea después de la clave `mcp` en vez de reescribir el
+    # archivo con un parser de JSON: ese formato admite comentarios y un
+    # parser se los comería. La inserción es puramente aditiva.
+    #
+    # Solo se hace si una línea termina justo en `"mcp": {`. Se exige que la
+    # llave cierre la línea porque con `"mcp": {}` en una sola —o cualquier
+    # forma compacta— insertar la línea siguiente dejaría la entrada fuera del
+    # objeto y rompería el archivo. Con cero coincidencias no hay dónde
+    # ponerla, y con más de una no se puede saber cuál es.
+    # `grep -c` imprime 0 y además sale con 1 cuando no encuentra nada, así que
+    # un `|| echo 0` dejaría la variable en "0\n0" y el `[` de abajo fallaría.
+    CUANTAS=$(grep -c '"mcp"[[:space:]]*:[[:space:]]*{[[:space:]]*$' "$OC" 2>/dev/null) || CUANTAS=0
+    if [ "$CUANTAS" -eq 1 ]; then
+      cp "$OC" "$OC.bak-anathem"
+      # Se lee el archivo entero para poder mirar la línea siguiente: si el
+      # objeto `mcp` está vacío, la entrada va sin coma final, porque una coma
+      # antes de `}` no es JSON válido aunque algunos lectores la perdonen.
+      awk -v entrada="$ENTRADA_OC" '
+        { linea[NR] = $0 }
+        END {
+          for (i = 1; i <= NR; i++) {
+            print linea[i]
+            if (hecho || linea[i] !~ /"mcp"[[:space:]]*:[[:space:]]*\{[[:space:]]*$/) continue
+            for (j = i + 1; j <= NR; j++) {
+              if (linea[j] ~ /^[[:space:]]*$/ || linea[j] ~ /^[[:space:]]*\/\//) continue
+              vacio = (linea[j] ~ /^[[:space:]]*\}/)
+              break
+            }
+            if (vacio) { sub(/,$/, "", entrada) }
+            print entrada
+            hecho = 1
+          }
+        }
+      ' "$OC.bak-anathem" > "$OC.nuevo-anathem" && mv "$OC.nuevo-anathem" "$OC"
+      ok "agregado a opencode (copia previa en $OC.bak-anathem)"
+      aviso "abrí una sesión nueva de opencode para que aparezcan las tools"
+    else
+      aviso "no encontré una clave \"mcp\" que abra al final de una línea en"
+      aviso "$OC; lo dejo sin tocar para no romperlo."
+      aviso "Agregá esta entrada adentro de su \"mcp\":"
+      echo "  $ENTRADA_OC"
+    fi
   fi
 fi
 
@@ -285,7 +341,8 @@ cat <<FIN
       /plugin marketplace add https://gitlab.com/$REPO.git
       /plugin install anathem@anathem
 
-  opencode — agregá a ~/.config/opencode/opencode.jsonc, dentro de "mcp":
+  opencode — si no quedó configurado solo, agregá a tu
+  ~/.config/opencode/opencode.json (o .jsonc), dentro de "mcp":
       "anathem": {
         "type": "local",
         "command": ["$PREFIJO/mem", "--db", "$BASE", "serve"],
