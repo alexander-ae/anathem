@@ -63,6 +63,9 @@ probar:windows:
 
 construir:linux:
   stage: construir
+  # Sin esperar a la etapa de pruebas: en el runner de Windows la batería
+  # tarda media hora, y dejaba la publicación entera detrás de ella.
+  needs: []
   image: rust:1-bookworm
   <<: *cache_cargo
   variables:
@@ -82,6 +85,10 @@ construir:linux:
 
 construir:windows:
   stage: construir
+  needs: []
+  # Que Windows no bloquee la release: el job que publica saltea el archivo
+  # que falte y lo dice.
+  allow_failure: true
   tags:
     - saas-windows-medium-amd64
   <<: *cache_cargo
@@ -104,6 +111,11 @@ construir:windows:
 
 publicar:
   stage: publicar
+  needs:
+    - job: construir:linux
+      artifacts: true
+    - job: construir:windows
+      artifacts: true
   # Esta imagen trae release-cli, que es lo que la palabra `release` necesita
   # para crear la release; una imagen cualquiera falla ahí.
   image: registry.gitlab.com/gitlab-org/release-cli:latest
