@@ -121,6 +121,10 @@ publicar:
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   rules:
     - if: $CI_COMMIT_TAG
+  before_script:
+    # La imagen de release-cli no trae curl, y sin esto el job falla recién al
+    # final, después de haber compilado las cuatro plataformas.
+    - command -v curl >/dev/null || apk add --no-cache curl
   script:
     - VERSION="${CI_COMMIT_TAG#v}"
     - |

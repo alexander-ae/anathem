@@ -17,6 +17,7 @@ BASE="${ANATHEM_DB:-$HOME/.anathem/mem.db}"
 PAQUETE=""
 SIN_PAQUETE=0
 CONFIGURAR_PATH=0
+CONECTAR=0
 COMPILAR=0
 ETIQUETA="latest"
 
@@ -29,6 +30,7 @@ Uso: scripts/instalar.sh [opciones]
   --paquete <archivo>   usa un paquete de vocabulario ya descargado
   --sin-paquete         no instala paquete (búsqueda solo léxica)
   --configurar-path     agrega el directorio de instalación a tu shell
+  --conectar            registra anathem como servidor MCP en Claude Code
   --prefijo <dir>       dónde instalar el binario (por defecto ~/.local/bin)
   -h, --help            esto
 
@@ -45,6 +47,7 @@ while [ $# -gt 0 ]; do
     --paquete) PAQUETE="${2:?--paquete necesita un archivo}"; shift 2 ;;
     --sin-paquete) SIN_PAQUETE=1; shift ;;
     --configurar-path) CONFIGURAR_PATH=1; shift ;;
+    --conectar) CONECTAR=1; shift ;;
     --prefijo) PREFIJO="${2:?--prefijo necesita un directorio}"; shift 2 ;;
     -h|--help) uso; exit 0 ;;
     *) echo "opción desconocida: $1" >&2; uso >&2; exit 2 ;;
@@ -245,7 +248,35 @@ else
   fi
 fi
 
-paso "6. Diagnóstico"
+paso "6. Conectar con los agentes"
+if [ "$CONECTAR" -eq 1 ] && command -v claude >/dev/null 2>&1; then
+  # `claude mcp add` falla si el nombre ya existe, y eso no es un error acá:
+  # el script tiene que poder correrse dos veces sin romper nada.
+  if claude mcp list 2>/dev/null | grep -q '^anathem'; then
+    ok "Claude Code ya tenía anathem registrado"
+  elif claude mcp add --scope user anathem -- "$PREFIJO/mem" --db "$BASE" serve >/dev/null 2>&1; then
+    ok "registrado en Claude Code (alcance: usuario)"
+    aviso "abrí una sesión nueva de Claude Code para que aparezcan las tools"
+  else
+    aviso "no pude registrarlo en Claude Code. A mano:"
+    echo "      claude mcp add --scope user anathem -- $PREFIJO/mem --db $BASE serve"
+  fi
+elif [ "$CONECTAR" -eq 1 ]; then
+  aviso "no encontré el comando \`claude\` en el PATH; salteo el registro"
+fi
+
+if [ -f "$HOME/.config/opencode/opencode.jsonc" ]; then
+  if grep -q '"anathem"' "$HOME/.config/opencode/opencode.jsonc" 2>/dev/null; then
+    ok "opencode ya tenía anathem configurado"
+  else
+    # No se edita automáticamente: ese archivo admite comentarios y es de la
+    # persona. Reescribirlo con un parser de JSON le borraría los comentarios.
+    aviso "opencode está instalado pero sin anathem. Agregá a su \"mcp\":"
+    echo "      \"anathem\": { \"type\": \"local\", \"command\": [\"$PREFIJO/mem\", \"--db\", \"$BASE\", \"serve\"], \"enabled\": true }"
+  fi
+fi
+
+paso "7. Diagnóstico"
 "$PREFIJO/mem" --db "$BASE" doctor | sed 's/^/  /' || true
 
 paso "Listo. Falta conectarlo a tu agente:"

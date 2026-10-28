@@ -95,12 +95,16 @@ Sin compilar nada, en Linux y macOS:
 
 ```bash
 curl -fsSL https://gitlab.com/__alexander__/anathem/-/raw/main/scripts/instalar.sh -o instalar.sh
-sh instalar.sh --configurar-path
+sh instalar.sh --configurar-path --conectar
 ```
 
 Baja el binario de la última release, verifica su sha256, lo instala, configura
-el `PATH`, crea la base y baja el paquete de vocabulario en-es (22 MB). Es
-idempotente: correrlo de nuevo no rompe nada.
+el `PATH`, crea la base, baja el paquete de vocabulario en-es (22 MB) y registra
+anathem como servidor MCP en Claude Code. Es idempotente: correrlo de nuevo no
+rompe nada.
+
+Si le pedís a un agente que haga la instalación, [`AGENTS.md`](AGENTS.md) tiene
+lo que necesita saber, incluido lo que el script no puede hacer solo.
 
 El `curl` escribe el script en un archivo en vez de mandarlo a `sh` por una
 tubería, a propósito: así podés leerlo antes de correrlo, que son 240 líneas.
