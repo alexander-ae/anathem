@@ -336,6 +336,12 @@ nada. De Cursor y Codex no encontré ni documentación ni forma de probarlo acá
 Para comprobarlo en el tuyo, hacé lo mismo: guardá algo con una palabra que no
 pueda adivinar y preguntale si la ve **antes** de que use ninguna tool.
 
+Ese texto va al prompt de sistema, así que es también una vía de inyección: una
+memoria que un agente guardó resumiendo una página web termina ahí. Va dentro
+de un bloque delimitado, saneado para que su contenido no pueda cerrarlo, y
+etiquetado como datos con el nombre de quién guardó cada nota. Qué cubre eso y
+qué no está en [`docs/seguridad.md`](docs/seguridad.md).
+
 Cuesta tokens en cada sesión, así que es corto, y se apaga o se achica desde
 `config.json`:
 
@@ -418,6 +424,8 @@ eval set para cualquier cambio futuro al ranking — el formato de
 - Insumos técnicos para una fase 2 (reranker / capa vectorial, hallazgos
   diferidos): [`docs/superpowers/fase-2-insumos.md`](docs/superpowers/fase-2-insumos.md)
 - Instalación y conexión con los agentes: [`docs/instalacion.md`](docs/instalacion.md)
+- Seguridad: por dónde entra texto que no escribiste, qué pasa cuando llega al
+  modelo, qué está mitigado y qué no: [`docs/seguridad.md`](docs/seguridad.md)
 - Paquetes de vocabulario (capa vectorial opcional): formato, cómo generarlos
   y cómo instalarlos: [`docs/paquetes-de-vocabulario.md`](docs/paquetes-de-vocabulario.md)
 
