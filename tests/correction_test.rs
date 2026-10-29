@@ -54,16 +54,16 @@ fn export_writes_markdown_with_frontmatter() {
     assert!(txt.contains("project: \"p\""), "frontmatter incompleto:\n{txt}");
     assert!(txt.contains("tags: [\"performance\"]"), "frontmatter incompleto:\n{txt}");
     assert!(txt.contains("el cache del breakdown"), "falta el cuerpo:\n{txt}");
-    // El formato nativo de Claude Code anida `type` bajo `metadata:`, no como
-    // clave plana — una clave plana produce un archivo que esa memoria nativa
-    // no puede leer, que es justamente el propósito del export.
+    // Claude Code's native format nests `type` under `metadata:`, not as a
+    // flat key — a flat key produces a file that native memory cannot read,
+    // which is precisely what the export is for.
     assert!(
         txt.contains("metadata:\n  type: project"),
         "type debe ir anidado bajo metadata, no como clave plana:\n{txt}"
     );
 }
 
-/// Extrae el bloque YAML entre los delimitadores `---` del frontmatter.
+/// Extracts the YAML block between the frontmatter's `---` delimiters.
 fn frontmatter_yaml(txt: &str) -> &str {
     let body = txt.strip_prefix("---\n").expect("falta el delimitador de apertura");
     let end = body.find("\n---\n").expect("falta el delimitador de cierre");
@@ -72,10 +72,9 @@ fn frontmatter_yaml(txt: &str) -> &str {
 
 #[test]
 fn export_frontmatter_is_valid_yaml_with_a_colon_in_the_title() {
-    // Regresión del hallazgo A: un título con "PROJ-136 2026-08-11: ..." hacía
-    // que YAML interpretara el ": " como una nueva clave anidada, rompiendo
-    // el parseo. Esta es la forma real en que aparecen los títulos migrados
-    // desde tickets con fecha en el nombre.
+    // Regression for finding A: a title like "PROJ-136 2026-08-11: ..." made
+    // YAML read the ": " as a new nested key, breaking the parse. This is the
+    // real shape of titles migrated from tickets with a date in the name.
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let title = "PROJ-136 2026-08-11: el rate limit se disparó tras el deploy";
@@ -126,9 +125,10 @@ fn export_frontmatter_is_valid_yaml_with_a_colon_in_the_title() {
 
 #[test]
 fn export_rechaza_path_traversal_via_project() {
-    // Regresión del hallazgo B: `project` llega desde afuera (CLI, y en
-    // producción desde argumentos MCP que un agente completa a partir de
-    // conversación) y no debe poder escribir fuera del directorio de salida.
+    // Regression for finding B: `project` arrives from outside (the CLI,
+    // and in production from MCP arguments an agent fills in from
+    // conversation) and must not be able to write outside the output
+    // directory.
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     ingest::insert(&conn, &NewMemory {
@@ -149,8 +149,8 @@ fn export_rechaza_path_traversal_via_project() {
     std::fs::create_dir_all(&out).unwrap();
     export::to_markdown(&conn, &out).unwrap();
 
-    // Nada debe haberse escrito fuera de `out`: ni en `dir` directamente, ni
-    // en un directorio hermano llamado ESCAPADO.
+    // Nothing may have been written outside `out`: not into `dir` directly,
+    // nor into a sibling directory named ESCAPADO.
     assert!(
         !dir.path().join("ESCAPADO").exists(),
         "escapó del directorio de salida hacia {}",
@@ -161,7 +161,7 @@ fn export_rechaza_path_traversal_via_project() {
         "escapó un nivel del directorio de salida"
     );
 
-    // Todo lo escrito debe quedar contenido dentro de `out`.
+    // Everything written has to stay contained inside `out`.
     for entry in walkdir(&out) {
         assert!(
             entry.starts_with(&out),
@@ -237,9 +237,10 @@ fn run_explained_exposes_the_score() {
 
 #[test]
 fn editing_the_body_recomputes_the_title() {
-    // El título se deriva del cuerpo. Si al editar no se recalcula, la memoria
-    // queda anunciándose con un texto que ya no contiene — que es exactamente
-    // lo que pasó al reimportar una memoria cuyo encabezado se quitó después.
+    // The title is derived from the body. If editing does not recompute it,
+    // the memory goes on announcing itself with text it no longer contains —
+    // which is exactly what happened on reimporting a memory whose heading
+    // was later removed.
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let id = seed(&conn, "encabezado viejo\n\ncuerpo original");
@@ -258,9 +259,9 @@ fn editing_the_body_recomputes_the_title() {
 
 #[test]
 fn export_preserves_everything_needed_to_migrate() {
-    // El export es la salida de emergencia del proyecto: si no alcanza para
-    // reconstruir la base en otra herramienta, encierra al usuario. Antes
-    // perdía refs, pinned, la cadena de supersession y el id externo.
+    // The export is the project's emergency exit: if it is not enough to
+    // rebuild the database in another tool, it locks the user in. It used to
+    // lose refs, pinned, the supersession chain and the external id.
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let older = ingest::insert(&conn, &NewMemory {
@@ -306,8 +307,8 @@ fn export_preserves_everything_needed_to_migrate() {
 
 #[test]
 fn export_includes_forgotten_memories() {
-    // `forget` oculta, no borra. Dejarlas afuera del export convertía cada
-    // migración en una pérdida de datos silenciosa.
+    // `forget` hides, it does not delete. Leaving them out of the export
+    // turned every migration into a silent loss of data.
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let id = seed(&conn, "algo que después se olvida");

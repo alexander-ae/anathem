@@ -1,11 +1,11 @@
-//! Clave de tema: guardar con la misma clave reemplaza (por supersession) a la
-//! memoria activa anterior del mismo proyecto.
+//! Topic key: saving under the same key supersedes the previous active
+//! memory of the same project.
 
 use anathem::{config::Config, db, ingest, mcp, search};
 use std::path::Path;
 use std::process::Command;
 
-/// Corre `mem` contra la base de `dir`. Devuelve (éxito, stdout, stderr).
+/// Runs `mem` against the database in `dir`. Returns (success, stdout, stderr).
 fn mem(dir: &Path, args: &[&str]) -> (bool, String, String) {
     let o = Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--db")
@@ -93,7 +93,7 @@ fn without_a_topic_key_saving_twice_leaves_both_active() {
 
     assert_eq!(status_(d.path(), 1), "active");
     assert_eq!(status_(d.path(), 2), "active");
-    // y sin clave no queda nada que listar
+    // and with no key there is nothing left to list
     assert!(mem_ok(d.path(), &["topics"]).contains("Sin claves de tema"));
 }
 
@@ -201,8 +201,8 @@ fn a_new_key_lists_the_ones_already_in_the_project() {
     mem_ok(d.path(), &["save", "El stack es React", "--project", "p", "--topic", "stack-del-frontend"]);
     mem_ok(d.path(), &["save", "Otra cosa", "--project", "p", "--topic", "politica-de-ramas"]);
     mem_ok(d.path(), &["save", "De otro proyecto", "--project", "q", "--topic", "solo-en-q"]);
-    // `stack-frontend` no coincide con `stack-del-frontend`: sin la lista,
-    // el mensaje sería idéntico al de una clave legítimamente nueva.
+    // `stack-frontend` does not match `stack-del-frontend`: without the
+    // list, the message would be identical to a legitimately new key's.
     let out = mem_ok(d.path(), &["save", "El stack es Svelte", "--project", "p", "--topic", "stack-frontend"]);
 
     assert!(out.contains("stack-del-frontend") && out.contains("politica-de-ramas"), "{out}");
@@ -227,7 +227,7 @@ fn on_superseding_no_other_keys_are_listed() {
     assert!(!out.contains("Claves que ya existen"), "{out}");
 }
 
-// -- la capa vectorial ------------------------------------------------------
+// -- the vector layer -------------------------------------------------------
 
 #[test]
 fn vector_search_does_not_return_the_superseded_memory_either() {
@@ -236,8 +236,8 @@ fn vector_search_does_not_return_the_superseded_memory_either() {
     let older = ingest::save_with_topic(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
     let newer = ingest::save_with_topic(&conn, PAGOS_NUEVO, "p", vec![], Some("pagos"), None).unwrap();
 
-    // El mismo vector para los fragmentos de las dos: si alguna se filtra, es
-    // por el estado y no por el parecido.
+    // The same vector for both memories' chunks: if one leaks through, it is
+    // because of its status and not its closeness.
     let blob: Vec<u8> = [1.0f32, 0.0].iter().flat_map(|f| f.to_le_bytes()).collect();
     for id in [older.id, newer.id] {
         conn.execute(
@@ -254,14 +254,14 @@ fn vector_search_does_not_return_the_superseded_memory_either() {
     assert_eq!(ids, vec![newer.id], "solo la vigente puede salir por vector: {ids:?}");
 }
 
-// -- el guardado lo hace una sola transacción --------------------------------
+// -- the save happens in a single transaction --------------------------------
 
 #[test]
 fn when_the_link_fails_the_new_memory_is_not_left_half_written() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
     let primera = ingest::save_with_topic(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
-    // Un trigger que aborta el supersede simula cualquier falla del enlace.
+    // A trigger aborting the supersede stands in for any failure of the link.
     conn.execute_batch(
         "create trigger no_superseder before update of status on memories
          when new.status = 'superseded' begin select raise(abort, 'falla simulada'); end;",
@@ -279,15 +279,16 @@ fn when_the_link_fails_the_new_memory_is_not_left_half_written() {
     assert_eq!(st, "active");
 }
 
-// -- varios procesos a la vez -------------------------------------------------
+// -- several processes at once ------------------------------------------------
 
 #[test]
 fn concurrent_saves_under_one_key_all_succeed_and_leave_a_single_active() {
-    // Con una transacción diferida, cada proceso lee la vigente con un lock
-    // de lectura y después intenta subirlo a escritura: SQLite no espera, falla
-    // al instante con `database is locked` (los que pierden la carrera salen
-    // con código 1 y su memoria se pierde). Con `begin immediate` el lock de
-    // escritura se toma antes de leer y el segundo espera su turno.
+    // With a deferred transaction, each process reads the current memory
+    // under a read lock and then tries to upgrade it to a write one: SQLite
+    // does not wait, it fails at once with `database is locked` (the ones
+    // losing the race exit 1 and their memory is lost). With `begin
+    // immediate` the write lock is taken before reading and the second one
+    // waits its turn.
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["init"]);
 
@@ -398,7 +399,7 @@ fn search_and_get_memory_show_the_key_so_it_can_be_reused() {
     assert!(body.contains("[tema: pagos]"), "{body}");
 }
 
-// -- supersedes: corregir una memoria concreta ya guardada ------------------------
+// -- supersedes: correcting one particular memory already saved ------------------
 
 fn total(conn: &rusqlite::Connection) -> i64 {
     conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap()
@@ -509,7 +510,7 @@ fn supersedes_with_a_new_key_leaves_the_key_ready_for_next_time() {
         "text": PAGOS_NUEVO, "project": "p", "topic": "pagos", "supersedes": 1}));
     assert!(out.contains("Reemplaza a la memoria 1") && out.contains("clave nueva"), "{out}");
 
-    // La siguiente con la clave ya reemplaza a la que corrigió la anterior.
+    // The next one under the key supersedes the one that corrected the previous.
     call(&conn, "save_memory", serde_json::json!({
         "text": "El proveedor de pagos es Mercado Pago", "project": "p", "topic": "pagos"}));
     assert_eq!(status(&conn, 2), "superseded");
@@ -556,9 +557,9 @@ fn export_keeps_the_topic_key() {
     assert_eq!(con_tema, 1);
 }
 
-// -- una base anterior a este cambio ------------------------------------------
+// -- a database predating this change -----------------------------------------
 
-/// El esquema tal cual era antes de la clave de tema: sin `memories.topic`.
+/// The schema exactly as it was before topic keys: with no `memories.topic`.
 const ESQUEMA_ANTERIOR: &str = r#"
 pragma journal_mode = wal;
 pragma foreign_keys = on;
@@ -670,7 +671,7 @@ fn an_older_database_still_opens_and_keeps_its_memories() {
 
     let out = mem_ok(d.path(), &["search", "postgres"]);
     assert!(out.contains("La base es Postgres"), "{out}");
-    // abrirla dos veces no puede fallar por la columna ya agregada
+    // opening it twice cannot fail over the already-added column
     let conn = db::open(&d.path().join("mem.db")).unwrap();
     db::open(&d.path().join("mem.db")).unwrap();
     let n: i64 = conn.query_row("select count(*) from memories where topic is null", [], |r| r.get(0)).unwrap();
@@ -704,7 +705,7 @@ fn an_index_over_project_and_key_exists() {
     assert_eq!(cols, ["project", "topic"]);
 }
 
-// -- invariante estructural: una activa por (proyecto, clave) ---------------------
+// -- structural invariant: one active per (project, key) -------------------------
 
 fn row_with_key(conn: &rusqlite::Connection, project: &str, topic: Option<&str>, status: &str) -> rusqlite::Result<usize> {
     conn.execute(
@@ -729,13 +730,13 @@ fn the_unique_index_does_not_bother_anything_but_the_current_one() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
     row_with_key(&conn, "p", Some("pagos"), "active").unwrap();
-    // otro proyecto, misma clave
+    // another project, the same key
     row_with_key(&conn, "q", Some("pagos"), "active").unwrap();
-    // la historia de la clave: superseded y forgotten pueden ser varias
+    // the key's history: there can be several superseded and forgotten ones
     for st in ["superseded", "superseded", "forgotten"] {
         row_with_key(&conn, "p", Some("pagos"), st).unwrap();
     }
-    // sin clave no hay tope
+    // with no key there is no cap
     for _ in 0..3 {
         row_with_key(&conn, "p", None, "active").unwrap();
     }

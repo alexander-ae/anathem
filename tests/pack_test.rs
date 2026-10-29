@@ -41,8 +41,8 @@ fn dos_tokens_promedian_sus_filas() {
 
 #[test]
 fn the_suffix_is_re_segmented_instead_of_falling_back_to_unknown() {
-    // "mundos" no es una pieza, pero "▁mundo" y "s" sí. Esta es la propiedad
-    // que hace que recortar el vocabulario no pierda calidad.
+    // "mundos" is not a piece, but "▁mundo" and "s" are. This is the
+    // property that lets the vocabulary be trimmed without losing quality.
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
@@ -95,12 +95,12 @@ fn it_rejects_a_truncated_file() {
 
 #[test]
 fn it_rejects_a_corrupt_tokenizer_length_without_panicking() {
-    // "largo del tokenizador" es un u64 leído crudo del archivo. Si un
-    // paquete corrupto lo declara cerca de u64::MAX, sumarlo al
-    // desplazamiento actual no debe desbordar la aritmética de punteros:
-    // bajo overflow-checks (el default de `cargo test`) eso paniquearía con
-    // "attempt to add with overflow" en vez de devolver un Err. Corrompemos
-    // los 8 bytes del campo para forzar ese valor.
+    // "tokenizer length" is a u64 read raw from the file. If a corrupt pack
+    // declares it near u64::MAX, adding it to the current offset must not
+    // overflow the pointer arithmetic: under overflow-checks (`cargo test`'s
+    // default) that would panic with "attempt to add with overflow" instead
+    // of returning an Err. We corrupt the field's 8 bytes to force that
+    // value.
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
@@ -127,12 +127,12 @@ fn the_sha256_is_stable_and_changes_with_the_content() {
 
 #[test]
 fn it_rejects_a_table_smaller_than_the_vocabulary() {
-    // Un paquete con menos filas que piezas tiene su tokenizador abre
-    // limpio, instala, reporta cobertura completa y produce SOLO vectores
-    // nulos: `embeber` saltea las filas que no existen, y si faltan todas
-    // las saltea todas. Ni una señal de que el paquete no sirve para nada.
-    // El `continue` de `embeber` es la red correcta contra el pánico; la
-    // incoherencia se detecta al abrir, una sola vez y nombrando el archivo.
+    // A pack with fewer rows than its tokenizer has pieces opens cleanly,
+    // installs, reports full coverage and produces NOTHING but null vectors:
+    // `embed` skips the rows that do not exist, and when all are missing it
+    // skips all of them. Not one sign that the pack is good for nothing.
+    // `embed`'s `continue` is the right net against panicking; the
+    // inconsistency is caught on open, once, and naming the file.
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("corto.anathem-pack");
     apoyo::escribir_pack_filas(&r, "corto-es", 4, &[vec![0, 0, 0, 0], vec![10, 0, 0, 0]]);
@@ -143,14 +143,14 @@ fn it_rejects_a_table_smaller_than_the_vocabulary() {
 
 #[test]
 fn it_accepts_an_added_token_whose_id_is_outside_the_table() {
-    // La tabla cubre exactamente las cuatro piezas del modelo, que es lo que
-    // el generador escribe. El tokenizador trae además un `added_token` con
-    // id 7, fuera de ese rango — la forma de cualquier sentencepiece podado.
+    // The table covers exactly the model's four pieces, which is what the
+    // generator writes. The tokenizer also carries an `added_token` with id
+    // 7, outside that range — the shape of any pruned sentencepiece.
     //
-    // La comprobación medía `get_vocab_size(true)`, la UNIÓN del vocabulario
-    // del modelo con los `added_tokens`: daba 5 contra 4 filas y rechazaba un
-    // paquete sano. La cantidad correcta es la del vocabulario del modelo;
-    // los ids agregados que caen fuera de la tabla los saltea `embeber`.
+    // The check measured `get_vocab_size(true)`, the UNION of the model's
+    // vocabulary with the `added_tokens`: it gave 5 against 4 rows and
+    // rejected a healthy pack. The right count is the model vocabulary's;
+    // added ids falling outside the table are skipped by `embed`.
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("agregados.anathem-pack");
     apoyo::escribir_pack_con_tokenizador(
@@ -162,10 +162,10 @@ fn it_accepts_an_added_token_whose_id_is_outside_the_table() {
     );
     let p = Pack::open_pack(&r).expect("un added_token fuera de rango no invalida la tabla");
     assert_eq!(p.name(), "agregados-es");
-    // Y sigue embebiendo igual que el fixture de siempre.
+    // And it still embeds just like the usual fixture.
     let v = p.embed("hola").unwrap();
     assert!((v[0] - 1.0).abs() < 1e-5, "esperaba el eje 0, salió {v:?}");
-    // El token agregado no tiene fila y no rompe nada.
+    // The added token has no row and breaks nothing.
     let v = p.embed("<mask> hola").unwrap();
     assert!((v[0] - 1.0).abs() < 1e-5, "esperaba el eje 0, salió {v:?}");
 }

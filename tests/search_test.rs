@@ -47,7 +47,7 @@ fn it_filters_by_project() {
 fn it_deduplicates_by_memory() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
-    // cuerpo largo => varios chunks, todos con la misma palabra
+    // a long body => several chunks, all with the same word
     let largo = "cache ".repeat(400);
     seed(&conn, "x", "p", &largo);
     let q = search::Query { text: "cache".into(), ..Default::default() };
@@ -93,11 +93,12 @@ fn pinned_ones_come_first() {
 
 #[test]
 fn the_order_is_deterministic_on_bm25_ties() {
-    // Regresión del hallazgo C: `best` era un HashMap y `into_values()` no
-    // garantiza orden; sin un tiebreak final tras el score, dos memorias con
-    // bm25 empatado podían salir en orden distinto entre corridas. Sembramos
-    // muchas memorias con cuerpo idéntico (mismo bm25 exacto) para forzar el
-    // empate y comparamos el orden devuelto en corridas repetidas.
+    // Regression for finding C: `best` was a HashMap and `into_values()`
+    // guarantees no order; with no final tiebreak after the score, two
+    // memories tied on bm25 could come out in a different order between
+    // runs. We seed many memories with an identical body (the exact same
+    // bm25) to force the tie and compare the order returned across repeated
+    // runs.
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     for i in 0..40 {
@@ -117,14 +118,15 @@ fn pinned_survives_the_candidate_trim() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
 
-    // 210 memorias con match fuerte del término: llenan de sobra el cupo de
-    // 200 candidatos que arma la consulta SQL con "order by score limit 200".
+    // 210 memories matching the term strongly: more than enough to fill the
+    // 200-candidate quota the SQL query builds with "order by score limit
+    // 200".
     for i in 0..210 {
         seed(&conn, &format!("c{i}"), "p", &"faro ".repeat(30));
     }
 
-    // Memoria pinned con match débil (el término aparece una sola vez, enterrado
-    // en relleno): en bm25 puro queda por debajo del corte de 200 candidatos.
+    // A pinned memory matching weakly (the term appears once, buried in
+    // padding): under pure bm25 it falls below the 200-candidate cut.
     let relleno = format!("{}faro", "relleno ".repeat(50));
     seed(&conn, "pinned1", "p", &relleno);
     conn.execute("update memories set pinned = 1 where ext_id = 'pinned1'", []).unwrap();
@@ -155,9 +157,9 @@ fn with_no_pack_the_result_is_the_usual_one() {
 
 #[test]
 fn with_a_pack_what_bm25_misses_shows_up() {
-    // El fixture mini solo conoce "hola", "mundo" y "s". Una memoria cuyo
-    // cuerpo es "mundo" no matchea la consulta "hola" por bm25, pero sí se
-    // parece por vector, así que la fusión tiene que sacarla a la superficie.
+    // The mini fixture only knows "hola", "mundo" and "s". A memory whose
+    // body is "mundo" does not match the query "hola" under bm25, but it is
+    // close by vector, so the fusion has to bring it to the surface.
     let dir = tempfile::tempdir().unwrap();
     let conn = anathem::db::open(&dir.path().join("t.db")).unwrap();
     let r = dir.path().join("mini.anathem-pack");
@@ -197,11 +199,11 @@ fn pinned_memories_still_come_first_under_fusion() {
 
 #[test]
 fn a_query_with_no_known_tokens_yields_no_spurious_results() {
-    // Ronda de arreglos 1: el tokenizador mini solo conoce "hola" y "mundo";
-    // todo lo demás cae en <unk>, cuya fila es el vector nulo. Sin el chequeo
-    // de norma cero, el coseno del vector nulo contra todo es 0 y
-    // `vecstore::buscar` devolvería memorias arbitrarias empatadas en 0:
-    // basura con apariencia de resultado válido.
+    // Fix round 1: the mini tokenizer only knows "hola" and "mundo";
+    // everything else falls to <unk>, whose row is the null vector. Without
+    // the zero-norm check, the cosine of the null vector against anything is
+    // 0 and `vecstore::search_vectors` would return arbitrary memories all
+    // tied at 0: garbage wearing the look of a valid result.
     let dir = tempfile::tempdir().unwrap();
     let conn = anathem::db::open(&dir.path().join("t.db")).unwrap();
     let r = dir.path().join("mini.anathem-pack");
@@ -221,9 +223,9 @@ fn a_query_with_no_known_tokens_yields_no_spurious_results() {
     );
 }
 
-/// Doce memorias con el mismo cuerpo largo (que entra en un solo chunk, ver
-/// `ingest::CHUNK_SIZE`), para poder comparar cuántas entran en el mismo
-/// presupuesto de tokens con y sin recorte de extracto.
+/// Twelve memories with the same long body (which fits in a single chunk,
+/// see `ingest::CHUNK_SIZE`), so we can compare how many fit in the same
+/// token budget with and without excerpt trimming.
 fn fixture_cuerpos_largos() -> (tempfile::TempDir, Connection) {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
@@ -236,11 +238,11 @@ fn fixture_cuerpos_largos() -> (tempfile::TempDir, Connection) {
 
 #[test]
 fn the_excerpt_lets_more_candidates_fit_in_the_same_budget() {
-    // Éste es el test que prueba que el recorte ocurre ANTES de contar el
-    // costo contra el presupuesto, dentro de `run_explained`, y no después:
-    // si se recortara al final (p.ej. en `mcp.rs`), el presupuesto ya habría
-    // cortado la lista al tamaño que daban los fragmentos completos y
-    // devolver más candidatos breves no cambiaría nada.
+    // This is the test proving the trim happens BEFORE the cost counts
+    // against the budget, inside `run_explained`, and not after: were it
+    // trimmed at the end (in `mcp.rs`, say), the budget would already have
+    // cut the list down to the size the full chunks gave, and returning more
+    // short candidates would change nothing.
     let (_d, conn) = fixture_cuerpos_largos();
     let ctx = search::SearchContext::bm25_only();
 
@@ -291,18 +293,18 @@ fn the_excerpt_trims_the_chunk_to_n_characters() {
 
 #[test]
 fn the_excerpt_does_not_split_a_multibyte_character() {
-    // El corpus es en español y tiene acentos: un recorte por bytes cortaría
-    // un carácter UTF-8 a la mitad (p.ej. partir "ñ" o "á" en dos bytes que ya
-    // no forman un carácter válido). `String` en Rust no puede contener bytes
-    // inválidos, así que un recorte incorrecto no produciría un string raro:
-    // haría panic al construirlo. Este test recorta justo en medio de una
-    // racha de acentos para forzar ese caso.
+    // The corpus is in Spanish and carries accents: trimming by bytes would
+    // cut a UTF-8 character in half (splitting "ñ" or "á" into two bytes that
+    // no longer form a valid character). A Rust `String` cannot hold invalid
+    // bytes, so an incorrect trim would not produce an odd string: it would
+    // panic on construction. This test trims right in the middle of a run of
+    // accents so as to force that case.
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
-    // Cada carácter de relleno ocupa más de un byte en UTF-8 (2 bytes cada
-    // uno), así que cortar por bytes en un índice impar partiría uno. El
-    // espacio entre repeticiones es necesario para que FTS5 las tokenice
-    // como palabras separadas en vez de una sola palabra de 300 caracteres.
+    // Each padding character takes more than one byte in UTF-8 (2 bytes
+    // each), so cutting by bytes at an odd index would split one. The space
+    // between repetitions is needed for FTS5 to tokenize them as separate
+    // words rather than one 300-character word.
     let body = "áéíóúñ ".repeat(50);
     seed(&conn, "acentos", "p", &body);
 
@@ -338,7 +340,7 @@ fn excerpt_none_leaves_the_whole_chunk_as_before() {
     for (a, b) in hits_viejo.iter().zip(hits_explicito.iter()) {
         assert_eq!(a.hit.snippet, b.hit.snippet, "extracto: None no debe alterar el fragmento");
     }
-    // Y el fragmento sigue siendo el cuerpo completo, no uno recortado.
+    // And the chunk is still the whole body, not a trimmed one.
     assert!(
         hits_viejo[0].hit.snippet.chars().count() > 20,
         "sin extracto el fragmento debe seguir siendo el completo"
