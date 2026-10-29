@@ -59,8 +59,8 @@ create table if not exists chunk_vectors (
 );
 
 create table if not exists meta (
-  clave text primary key,
-  valor text not null
+  key text primary key,
+  value text not null
 );
 
 create table if not exists search_log (
@@ -144,6 +144,49 @@ fn agregar_columna(conn: &Connection, nombre: &str, tipo: &str) -> Result<()> {
     Ok(())
 }
 
+/// Las columnas y tablas que nacieron con nombres en español, antes de que el
+/// proyecto unificara el código en inglés. Se renombran una sola vez; después
+/// esto no hace nada.
+///
+/// Se usa `alter table ... rename column`, que SQLite soporta desde la 3.25 y
+/// preserva los datos: no se copia nada ni se reconstruye la tabla, así que no
+/// hay ventana donde se puedan perder filas. Si la columna vieja ya no está
+/// —el caso de todas las bases nuevas— no se toca nada.
+fn renombrar_columnas_al_ingles(conn: &Connection) -> Result<()> {
+    for (tabla, viejo, nuevo) in [
+        ("memories", "agente", "agent"),
+        ("memories", "creado_ts", "created_ts"),
+        ("meta", "clave", "key"),
+        ("meta", "valor", "value"),
+    ] {
+        let existe: i64 = conn.query_row(
+            "select count(*) from pragma_table_info(?1) where name = ?2",
+            [tabla, viejo],
+            |r| r.get(0),
+        )?;
+        if existe == 0 {
+            continue;
+        }
+        // El índice viejo referencia la columna por su nombre anterior; se
+        // saca antes de renombrar y se vuelve a crear más abajo con el nuevo.
+        conn.execute("drop index if exists idx_mem_project_creado", [])?;
+        let sql = format!("alter table \"{tabla}\" rename column \"{viejo}\" to \"{nuevo}\"");
+        if let Err(e) = conn.execute(&sql, []) {
+            // Otro proceso pudo ganar la carrera, igual que con las columnas
+            // nuevas: si ya quedó renombrada, el resultado es el que se quería.
+            let ya: i64 = conn.query_row(
+                "select count(*) from pragma_table_info(?1) where name = ?2",
+                [tabla, nuevo],
+                |r| r.get(0),
+            )?;
+            if ya == 0 {
+                return Err(e.into());
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Las dos columnas que hacen posible contar qué pasó últimamente y quién lo
 /// escribió. Son opcionales en el sentido fuerte: una base donde nadie las
 /// use se comporta igual que antes, y las memorias viejas las tienen nulas.
@@ -154,12 +197,13 @@ fn agregar_columna(conn: &Connection, nombre: &str, tipo: &str) -> Result<()> {
 /// `agente` lo llena el servidor MCP con el nombre que el cliente manda en el
 /// `initialize`; lo guardado desde la CLI queda sin agente, que es la verdad.
 fn agregar_columnas_de_traspaso(conn: &Connection) -> Result<()> {
-    agregar_columna(conn, "agente", "text")?;
-    agregar_columna(conn, "creado_ts", "text")?;
+    renombrar_columnas_al_ingles(conn)?;
+    agregar_columna(conn, "agent", "text")?;
+    agregar_columna(conn, "created_ts", "text")?;
     // Sirve a la consulta de `mem recent`, que filtra por proyecto y ordena
     // por fecha descendente.
     conn.execute(
-        "create index if not exists idx_mem_project_creado on memories(project, creado_ts)",
+        "create index if not exists idx_mem_project_created on memories(project, created_ts)",
         [],
     )?;
     Ok(())

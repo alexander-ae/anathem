@@ -61,8 +61,8 @@ fn anotar_identidad(
         ("pack_dims", dims.to_string()),
     ] {
         conn.execute(
-            "insert into meta (clave, valor) values (?1, ?2)
-             on conflict(clave) do update set valor = ?2",
+            "insert into meta (key, value) values (?1, ?2)
+             on conflict(key) do update set value = ?2",
             params![k, v],
         )?;
     }
@@ -90,7 +90,7 @@ pub fn adoptar_pack(conn: &Connection, nombre: &str, sha: &str, dims: usize) -> 
     let tx = escritura(conn)?;
     tx.execute("delete from chunk_vectors", [])?;
     anotar_identidad(&tx, nombre, sha, dims)?;
-    tx.execute("delete from meta where clave = ?1", [INSTALANDO])?;
+    tx.execute("delete from meta where key = ?1", [INSTALANDO])?;
     tx.commit()?;
     Ok(())
 }
@@ -119,8 +119,8 @@ const INSTALANDO: &str = "pack_instalando";
 pub fn marcar_instalacion(conn: &Connection, nombre: &str) -> Result<()> {
     let tx = escritura(conn)?;
     tx.execute(
-        "insert into meta (clave, valor) values (?1, ?2)
-         on conflict(clave) do update set valor = ?2",
+        "insert into meta (key, value) values (?1, ?2)
+         on conflict(key) do update set value = ?2",
         params![INSTALANDO, nombre],
     )?;
     tx.commit()?;
@@ -129,7 +129,7 @@ pub fn marcar_instalacion(conn: &Connection, nombre: &str) -> Result<()> {
 
 /// El nombre del paquete cuya instalación quedó a medias, si quedó alguna.
 pub fn instalacion_pendiente(conn: &Connection) -> Result<Option<String>> {
-    match conn.query_row("select valor from meta where clave = ?1", [INSTALANDO], |r| {
+    match conn.query_row("select value from meta where key = ?1", [INSTALANDO], |r| {
         r.get::<_, String>(0)
     }) {
         Ok(v) => Ok(Some(v)),
@@ -143,7 +143,7 @@ pub fn instalacion_pendiente(conn: &Connection) -> Result<Option<String>> {
 /// no describe ningún riesgo.
 pub fn limpiar_instalacion(conn: &Connection) -> Result<()> {
     let tx = escritura(conn)?;
-    tx.execute("delete from meta where clave = ?1", [INSTALANDO])?;
+    tx.execute("delete from meta where key = ?1", [INSTALANDO])?;
     tx.commit()?;
     Ok(())
 }
@@ -160,7 +160,7 @@ pub fn pack_registrado(conn: &Connection) -> Result<Option<Identidad>> {
     // ausente, base corrupta) en `None`, indistinguible de "no hay paquete
     // registrado". Degradar a bm25 está bien; callarse un error real no.
     let leer = |k: &str| -> Result<Option<String>> {
-        match conn.query_row("select valor from meta where clave = ?1", [k], |r| {
+        match conn.query_row("select value from meta where key = ?1", [k], |r| {
             r.get::<_, String>(0)
         }) {
             Ok(v) => Ok(Some(v)),
@@ -179,7 +179,7 @@ pub fn olvidar_pack(conn: &Connection) -> Result<()> {
     tx.execute("delete from chunk_vectors", [])?;
     tx.execute(
         "delete from meta
-          where clave in ('pack_nombre','pack_sha256','pack_dims','pack_instalando')",
+          where key in ('pack_nombre','pack_sha256','pack_dims','pack_instalando')",
         [],
     )?;
     tx.commit()?;

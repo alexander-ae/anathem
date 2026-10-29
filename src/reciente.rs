@@ -72,8 +72,8 @@ pub fn listar(
     // dos formatos: una fecha suelta ("2026-10-28") queda antes que cualquier
     // hora de ese mismo día, que es el orden que uno espera al no saber más.
     let mut sql = String::from(
-        "select id, project, title, coalesce(creado_ts, created) as cuando,
-                agente, topic, body
+        "select id, project, title, coalesce(created_ts, created) as cuando,
+                agent, topic, body
            from memories
           where status = 'active'",
     );

@@ -69,9 +69,9 @@ fn borrar_una_memoria_se_lleva_sus_vectores() {
 fn meta_guarda_pares_clave_valor() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
-    conn.execute("insert into meta (clave, valor) values ('pack_nombre','en-es')", []).unwrap();
+    conn.execute("insert into meta (key, value) values ('pack_nombre','en-es')", []).unwrap();
     let v: String = conn
-        .query_row("select valor from meta where clave='pack_nombre'", [], |r| r.get(0))
+        .query_row("select value from meta where key='pack_nombre'", [], |r| r.get(0))
         .unwrap();
     assert_eq!(v, "en-es");
 }

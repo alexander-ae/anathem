@@ -323,7 +323,7 @@ fn status_no_cuenta_como_cubiertos_los_vectores_que_la_busqueda_descarta() {
 /// exista, y falla por lo que afirma y no por no compilar.
 fn marcas_de_instalacion(db: &std::path::Path) -> i64 {
     let conn = rusqlite::Connection::open(db).unwrap();
-    conn.query_row("select count(*) from meta where clave = 'pack_instalando'", [], |r| r.get(0))
+    conn.query_row("select count(*) from meta where key = 'pack_instalando'", [], |r| r.get(0))
         .unwrap()
 }
 

@@ -326,7 +326,7 @@ fn sincronizar_abandona_a_mitad_de_camino_si_el_paquete_cambia_entre_lotes() {
     conn.execute_batch(
         "create trigger cambia_el_paquete after insert on chunk_vectors
          begin
-           update meta set valor = 'otro-es' where clave = 'pack_nombre';
+           update meta set value = 'otro-es' where key = 'pack_nombre';
          end;",
     )
     .unwrap();

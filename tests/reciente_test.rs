@@ -25,7 +25,7 @@ fn mem(dir: &Path, args: &[&str]) -> (bool, String, String) {
 
 /// Fija `creado_ts` a mano para poder ordenar y filtrar sin esperar.
 fn fechar(conn: &Connection, id: i64, ts: &str) {
-    conn.execute("update memories set creado_ts = ?2 where id = ?1", rusqlite::params![id, ts])
+    conn.execute("update memories set created_ts = ?2 where id = ?1", rusqlite::params![id, ts])
         .unwrap();
 }
 
@@ -200,7 +200,7 @@ fn lo_guardado_desde_la_cli_no_tiene_agente() {
     let conn = db::open(&d.path().join("mem.db")).unwrap();
     let id = ingest::guardar_explicito(&conn, "desde la terminal", "p", vec![]).unwrap().0;
     let a: Option<String> = conn
-        .query_row("select agente from memories where id = ?1", [id], |r| r.get(0))
+        .query_row("select agent from memories where id = ?1", [id], |r| r.get(0))
         .unwrap();
     assert_eq!(a, None);
 }
@@ -259,13 +259,13 @@ fn una_base_anterior_a_estas_columnas_sigue_andando_y_se_migra_sola() {
         ingest::guardar_explicito(&conn, "memoria de antes", "p", vec![]).unwrap();
         // Se simula la base vieja. El índice referencia `creado_ts`, así que
         // sale primero: SQLite no deja tirar una columna que un índice usa.
-        conn.execute("drop index if exists idx_mem_project_creado", []).unwrap();
-        for col in ["agente", "creado_ts"] {
+        conn.execute("drop index if exists idx_mem_project_created", []).unwrap();
+        for col in ["agent", "created_ts"] {
             conn.execute(&format!("alter table memories drop column {col}"), []).unwrap();
         }
         let n: i64 = conn
             .query_row(
-                "select count(*) from pragma_table_info('memories') where name in ('agente','creado_ts')",
+                "select count(*) from pragma_table_info('memories') where name in ('agent','created_ts')",
                 [],
                 |r| r.get(0),
             )
@@ -277,7 +277,7 @@ fn una_base_anterior_a_estas_columnas_sigue_andando_y_se_migra_sola() {
     let conn = db::open(&db_path).unwrap();
     let n: i64 = conn
         .query_row(
-            "select count(*) from pragma_table_info('memories') where name in ('agente','creado_ts')",
+            "select count(*) from pragma_table_info('memories') where name in ('agent','created_ts')",
             [],
             |r| r.get(0),
         )
@@ -309,7 +309,7 @@ fn el_comando_recent_imprime_lo_ultimo() {
     // ventana, y el test no probaría nada.
     {
         let conn = Connection::open(d.path().join("mem.db")).unwrap();
-        conn.execute("update memories set creado_ts = ?1", [hace(200_000)]).unwrap();
+        conn.execute("update memories set created_ts = ?1", [hace(200_000)]).unwrap();
     }
     let (ok, out, _) = mem(d.path(), &["recent", "--project", "equis", "--desde", "1h"]);
     assert!(ok);

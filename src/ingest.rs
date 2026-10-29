@@ -33,7 +33,7 @@ fn insertar(tx: &Connection, m: &NewMemory, agente: Option<&str>) -> Result<i64>
     tx.execute(
         "insert into memories
            (project, title, body, created, updated, event_start, event_end,
-            source, ext_id, agente, creado_ts)
+            source, ext_id, agent, created_ts)
          values (?1, ?2, ?3, ?4, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![m.project, m.title, m.body, m.created,
                 m.event_start, m.event_end, m.source, m.ext_id,
