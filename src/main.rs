@@ -133,6 +133,11 @@ enum Cmd {
     History {
         id: i64,
     },
+    /// Comprueba si hay una versión más nueva publicada
+    ///
+    /// Consulta la red solo cuando lo pedís: anathem no habla con ningún
+    /// servidor por su cuenta. No baja ni reemplaza nada; te dice qué correr.
+    Update,
     /// Diagnostica la instalación sin modificar nada
     ///
     /// Sale con 0 si no hay problemas (los avisos y la información no
@@ -479,6 +484,9 @@ fn ejecutar(cli: Cli) -> Result<()> {
                     println!("{:<ancho_p$}  {:<ancho_t$}  {:>8}  {vigente}", t.project, t.topic, t.total);
                 }
             }
+        }
+        Cmd::Update => {
+            anathem::actualizar::comprobar()?;
         }
         Cmd::Recent { project, todos, desde, limite } => {
             let conn = anathem::db::open(&path)?;

@@ -69,6 +69,17 @@ mem save "una nota de prueba"
 mem search "prueba"
 ```
 
+## Actualizar
+
+```bash
+mem update
+```
+
+Dice si hay una versión más nueva. Consulta la red solo cuando se lo pide una
+persona; anathem no habla con ningún servidor por su cuenta. Para actualizar,
+el instalador hace lo mismo que la primera vez, y las memorias no se tocan:
+viven en la base, no en el binario.
+
 ## Si algo falla
 
 - **`mem: command not found`** tras instalar: el `PATH` no se recargó. Abrí

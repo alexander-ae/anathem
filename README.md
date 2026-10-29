@@ -164,6 +164,7 @@ búsqueda es solo léxica. El instalador lo baja solo; a mano se instala con
 | `model install <archivo>` | Instala un paquete de vocabulario (`.anathem-pack`) y reindexa todos los fragmentos | `mem model install mini-es.anathem-pack` |
 | `model status` | Muestra el paquete activo, sus dimensiones y la cobertura de vectores | `mem model status` |
 | `model remove` | Quita los vectores **y borra el archivo del paquete**; la búsqueda vuelve a ser solo bm25 | `mem model remove` |
+| `update` | Comprueba si hay una versión más nueva publicada. Consulta la red **solo cuando lo pedís**: anathem no habla con ningún servidor por su cuenta. No baja ni reemplaza nada, te dice qué correr | `mem update` |
 | `doctor` | Diagnostica la instalación sin modificar nada: versión y commit del binario, base (conteos, índice FTS5, huérfanos, cadenas de supersession), capa vectorial (paquete, archivo, cobertura) y `config.json`/`tags.json`. Sale con 0 si no hay problemas, 1 si los hay y 2 si no pudo correr, así un script distingue "encontró problemas" de "se rompió"; que no haya paquete instalado es información, no un problema, y una base que no existe es un aviso (código 0) | `mem doctor` |
 
 Todos los subcomandos aceptan `--db <ruta>` (por defecto `~/.anathem/mem.db`).
