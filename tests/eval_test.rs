@@ -28,7 +28,7 @@ fn calcula_metricas_sobre_fixture_conocido() {
         {{"id":"q3","query":"algo que no existe en ningun documento","expect_docs":["c"],"kind":"factual"}}
       ]}}"#).unwrap();
 
-    let r = evalrun::run(&conn, &es, "anathem bm25", &search::Contexto::solo_bm25()).unwrap();
+    let r = evalrun::run(&conn, &es, "anathem bm25", &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(r.n_cases, 3);
     // q1 y q2 aciertan en rango 1; q3 no acierta
     assert!((r.recall_at_5 - 2.0 / 3.0).abs() < 1e-9, "recall@5 = {}", r.recall_at_5);
@@ -71,7 +71,7 @@ fn hit_sin_ext_id_no_se_descarta_del_conteo_de_rango() {
         {"id":"q1","query":"gato","expect_docs":["x"],"kind":"factual"}
     ]}"#).unwrap();
 
-    let r = evalrun::run(&conn, &es, "anathem bm25", &search::Contexto::solo_bm25()).unwrap();
+    let r = evalrun::run(&conn, &es, "anathem bm25", &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(r.per_case.len(), 1);
     // El hit sin ext_id ocupa el rango 1 sin matchear nunca; el objetivo
     // aparece en rango 2, no en rango 1.
@@ -90,7 +90,7 @@ fn serializa_al_formato_compartido() {
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let es = dir.path().join("evalset.json");
     std::fs::write(&es, r#"{"corpus":"x","created":"2026-09-21","cases":[{"id":"q1","query":"nada","expect_docs":["z"],"kind":"factual"}]}"#).unwrap();
-    let r = evalrun::run(&conn, &es, "anathem bm25", &search::Contexto::solo_bm25()).unwrap();
+    let r = evalrun::run(&conn, &es, "anathem bm25", &search::SearchContext::bm25_only()).unwrap();
     let j: serde_json::Value = serde_json::to_value(&r).unwrap();
     for k in ["system", "n_cases", "recall_at_5", "recall_at_50", "mrr", "p50_ms", "per_case"] {
         assert!(j.get(k).is_some(), "falta la clave {k} en {j}");

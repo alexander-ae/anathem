@@ -58,7 +58,7 @@ fn tool_defs() -> Value {
 /// know which key to reuse when saving a correction to what it just found:
 /// without seeing it, it would have to guess, and a guessed key that does
 /// not match replaces nothing.
-fn etiqueta_de_tema(conn: &Connection, id: i64) -> String {
+fn topic_label_of(conn: &Connection, id: i64) -> String {
     let t: Option<String> = conn
         .query_row("select topic from memories where id = ?1", [id], |r| r.get(0))
         .unwrap_or(None);
@@ -67,7 +67,7 @@ fn etiqueta_de_tema(conn: &Connection, id: i64) -> String {
 
 fn call_tool(
     conn: &Connection,
-    ctx: &search::Contexto,
+    ctx: &search::SearchContext,
     cfg: &Config,
     name: &str,
     args: &Value,
@@ -107,7 +107,7 @@ fn call_tool(
             let body = hits.iter()
                 .map(|h| format!(
                     "[id:{}] [{}]{} {}\n{}",
-                    h.memory_id, h.project, etiqueta_de_tema(conn, h.memory_id), h.title, h.snippet
+                    h.memory_id, h.project, topic_label_of(conn, h.memory_id), h.title, h.snippet
                 ))
                 .collect::<Vec<_>>()
                 .join("\n\n");
@@ -127,7 +127,7 @@ fn call_tool(
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let project = crate::project::resolve(
                 args["project"].as_str().map(str::to_string), &cwd);
-            let tags_dados: Vec<String> = args["tags"].as_array().map(|a| {
+            let given_tags: Vec<String> = args["tags"].as_array().map(|a| {
                 a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()
             }).unwrap_or_default();
             let project_for_lookup = project.clone();
@@ -151,7 +151,7 @@ fn call_tool(
                 },
             };
             let g = match ingest::save_with_topic_by(
-                conn, text, &project, tags_dados, topic, supersedes, agent) {
+                conn, text, &project, given_tags, topic, supersedes, agent) {
                 Ok(g) => g,
                 // A request that cannot be fulfilled is not an internal
                 // error: the model has to read what to fix, and nothing was
@@ -169,8 +169,8 @@ fn call_tool(
             // embedding a large backlog can take minutes and in that time
             // another terminal can install whatever it likes: that is why
             // `sync` receives the identity and rechecks it on every batch.
-            if let Some((p, identidad)) = ctx.para_escribir() {
-                if crate::vecstore::sync(conn, p, identidad)?.abandonada() {
+            if let Some((p, identity)) = ctx.for_writing() {
+                if crate::vecstore::sync(conn, p, identity)?.abandonada() {
                     // The save succeeded and that is what the agent needs
                     // to hear; the vector gap is closed by the next write or
                     // a `mem reindex`. Returning an error here would report
@@ -184,7 +184,7 @@ fn call_tool(
             }
 
             let cand = crate::supersede::candidates(conn, text, &project_for_lookup, 3)?;
-            let aviso = if cand.is_empty() {
+            let warning = if cand.is_empty() {
                 String::new()
             } else {
                 let lista = cand.iter()
@@ -196,7 +196,7 @@ fn call_tool(
                 )
             };
             Ok(text_result(format!(
-                "Guardada como id:{id} [{}] {title}{aviso_tema}{aviso}", tag_list.join(", ")
+                "Guardada como id:{id} [{}] {title}{aviso_tema}{warning}", tag_list.join(", ")
             )))
         }
         "recent_memories" => {
@@ -210,8 +210,8 @@ fn call_tool(
                 },
                 None => Some(24 * 3600),
             };
-            let limit_ = args["limit"].as_u64().map(|l| l as usize).unwrap_or(15);
-            let items = crate::recent::list_recent(conn, Some(&project), window, limit_, cfg.excerpt)?;
+            let limit = args["limit"].as_u64().map(|l| l as usize).unwrap_or(15);
+            let items = crate::recent::list_recent(conn, Some(&project), window, limit, cfg.excerpt)?;
             Ok(text_result(crate::recent::format_items(&items, false)))
         }
         "get_memory" => {
@@ -227,7 +227,7 @@ fn call_tool(
                         rusqlite::params![id, chrono::Local::now().to_rfc3339()])?;
                     logsearch::mark_follow_up(conn, id)?;
                     Ok(text_result(format!(
-                        "[{project}]{} {title}\n\n{body}", etiqueta_de_tema(conn, id)
+                        "[{project}]{} {title}\n\n{body}", topic_label_of(conn, id)
                     )))
                 }
                 Err(_) => Ok(text_result(format!("No existe la memoria id:{id}."))),
@@ -249,7 +249,7 @@ fn call_tool(
 /// `id`).
 pub fn handle(
     conn: &Connection,
-    ctx: &search::Contexto,
+    ctx: &search::SearchContext,
     cfg: &Config,
     req: &Value,
 ) -> Result<Option<Value>> {
@@ -266,7 +266,7 @@ pub fn handle(
 /// once and the `tools/call`s come afterwards.
 pub fn handle_con_agente(
     conn: &Connection,
-    ctx: &search::Contexto,
+    ctx: &search::SearchContext,
     cfg: &Config,
     req: &Value,
     agent: &mut Option<String>,
@@ -293,14 +293,14 @@ pub fn handle_con_agente(
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let project = crate::project::resolve(None, &cwd);
             let traspaso = crate::recent::handoff_instructions(
-                conn, &project, cfg.traspaso_items, &cfg.traspaso_ventana, agent.as_deref());
+                conn, &project, cfg.handoff_items, &cfg.handoff_window, agent.as_deref());
             let mut res = json!({
                 "protocolVersion": PROTOCOL,
                 "capabilities": {"tools": {}},
                 "serverInfo": {"name": "anathem", "version": env!("CARGO_PKG_VERSION")}
             });
-            if let Some(texto) = traspaso {
-                res["instructions"] = json!(texto);
+            if let Some(handoff_text) = traspaso {
+                res["instructions"] = json!(handoff_text);
             }
             ok(&id, res)
         }
@@ -337,7 +337,7 @@ pub fn handle_con_agente(
 /// pack is requested from `live` only when the message is a call to one of
 /// those two. A session that never searches or saves never pays that heap.
 pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
-    let mut vivo = crate::packstore::LivePack::new_id(dir);
+    let mut live_pack = crate::packstore::LivePack::new_id(dir);
     // Who is on the other side, according to `initialize`. It is remembered
     // between messages because that handshake arrives once and the saves
     // come afterwards.
@@ -354,21 +354,21 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
     // would never get to.
     let (tx, rx) = std::sync::mpsc::channel::<std::io::Result<String>>();
     std::thread::spawn(move || {
-        let entrada = std::io::stdin();
-        for line_ in entrada.lock().lines() {
+        let entry = std::io::stdin();
+        for line_ in entry.lock().lines() {
             if tx.send(line_).is_err() {
                 break; // el otro lado cerró: nadie va a parse más
             }
         }
     });
 
-    let limit_ = std::time::Duration::from_secs(cfg.soltar_paquete_tras);
+    let limit = std::time::Duration::from_secs(cfg.release_pack_after);
     // Check more often than the deadline so it is not stretched to double,
     // but not so often that a session doing nothing wakes for no reason.
-    let intervalo = if limit_.is_zero() {
+    let intervalo = if limit.is_zero() {
         std::time::Duration::from_secs(60)
     } else {
-        (limit_ / 4).max(std::time::Duration::from_secs(5))
+        (limit / 4).max(std::time::Duration::from_secs(5))
     };
 
     loop {
@@ -379,10 +379,10 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
                 break;
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                if vivo.release_if_idle(limit_) {
+                if live_pack.release_if_idle(limit) {
                     eprintln!(
                         "anathem: paquete soltado tras {}s sin buscar; se reabre en la próxima búsqueda",
-                        cfg.soltar_paquete_tras
+                        cfg.release_pack_after
                     );
                 }
                 continue;
@@ -407,9 +407,9 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
                 Some("search_memory") | Some("save_memory")
             );
         let ctx = if necesita_paquete {
-            search::Contexto::de_servidor(vivo.actual(conn), cfg.bm25_weight)
+            search::SearchContext::for_server(live_pack.current(conn), cfg.bm25_weight)
         } else {
-            search::Contexto::de_servidor(None, cfg.bm25_weight)
+            search::SearchContext::for_server(None, cfg.bm25_weight)
         };
         if let Some(res) = handle_con_agente(conn, &ctx, cfg, &req, &mut agent)? {
             writeln!(stdout, "{}", serde_json::to_string(&res)?)?;

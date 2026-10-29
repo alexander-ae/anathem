@@ -17,10 +17,10 @@ fn replace_body_rechunkea_y_reindexa() {
     edit::replace_body(&conn, id, "texto nuevo sobre berenjenas").unwrap();
 
     let q = search::Query { text: "zanahorias".into(), ..Default::default() };
-    assert!(search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap().is_empty(), "el texto viejo sigue indexado");
+    assert!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().is_empty(), "el texto viejo sigue indexado");
 
     let q = search::Query { text: "berenjenas".into(), ..Default::default() };
-    assert_eq!(search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap().len(), 1, "el texto nuevo no se indexó");
+    assert_eq!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().len(), 1, "el texto nuevo no se indexó");
 }
 
 #[test]
@@ -31,11 +31,11 @@ fn reindex_reconstruye_desde_cero() {
     conn.execute("delete from chunks", []).unwrap();
 
     let q = search::Query { text: "cache".into(), ..Default::default() };
-    assert!(search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap().is_empty(), "precondición: índice vacío");
+    assert!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().is_empty(), "precondición: índice vacío");
 
     let n = edit::reindex(&conn).unwrap();
     assert_eq!(n, 1);
-    assert_eq!(search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap().len(), 1, "reindex no repobló el índice");
+    assert_eq!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().len(), 1, "reindex no repobló el índice");
 }
 
 #[test]
@@ -78,10 +78,10 @@ fn export_frontmatter_es_yaml_valido_con_dos_puntos_en_el_titulo() {
     // desde tickets con fecha en el nombre.
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
-    let titulo = "PROJ-136 2026-08-11: el rate limit se disparó tras el deploy";
+    let title = "PROJ-136 2026-08-11: el rate limit se disparó tras el deploy";
     ingest::insert(&conn, &NewMemory {
         project: "p".into(),
-        title: titulo.into(),
+        title: title.into(),
         body: "cuerpo de prueba con el hallazgo completo".into(),
         created: "2026-08-11".into(),
         event_start: None,
@@ -108,12 +108,12 @@ fn export_frontmatter_es_yaml_valido_con_dos_puntos_en_el_titulo() {
 
     assert_eq!(
         value["name"].as_str(),
-        Some(export::slug(titulo).as_str()),
+        Some(export::slug(title).as_str()),
         "name no sobrevivió el round trip"
     );
     assert_eq!(
         value["description"].as_str(),
-        Some(titulo),
+        Some(title),
         "description no sobrevivió el round trip"
     );
     assert_eq!(
@@ -230,7 +230,7 @@ fn run_explained_expone_el_score() {
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     seed(&conn, "el cache del breakdown no se justifica");
     let q = search::Query { text: "cache".into(), ..Default::default() };
-    let ex = search::run_explained(&conn, &q, &search::Contexto::solo_bm25()).unwrap();
+    let ex = search::run_explained(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(ex.len(), 1);
     assert!(ex[0].bm25.unwrap() < 0.0, "bm25() de SQLite es negativo, fue {:?}", ex[0].bm25);
 }
@@ -263,20 +263,20 @@ fn el_export_preserva_todo_lo_necesario_para_migrar() {
     // perdía refs, pinned, la cadena de supersession y el id externo.
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
-    let vieja = ingest::insert(&conn, &NewMemory {
+    let older = ingest::insert(&conn, &NewMemory {
         project: "p".into(), title: "la vieja".into(), body: "cuerpo viejo".into(),
         created: "2026-09-01".into(), event_start: None, event_end: None,
         source: "migrated".into(), ext_id: Some("EXT-123".into()),
         tags: vec!["testing".into()],
         refs: vec![("ticket".into(), "ABC-112".into()), ("pr".into(), "1234".into())],
     }).unwrap();
-    let nueva = ingest::insert(&conn, &NewMemory {
+    let newer = ingest::insert(&conn, &NewMemory {
         project: "p".into(), title: "la nueva".into(), body: "cuerpo nuevo".into(),
         created: "2026-09-02".into(), event_start: Some("2026-08-01".into()), event_end: None,
         source: "explicit".into(), ext_id: None, tags: vec![], refs: vec![],
     }).unwrap();
-    anathem::maint::pin(&conn, vieja, true).unwrap();
-    anathem::supersede::link(&conn, nueva, vieja).unwrap();
+    anathem::maint::pin(&conn, older, true).unwrap();
+    anathem::supersede::link(&conn, newer, older).unwrap();
 
     let out_text = dir.path().join("out");
     anathem::export::to_markdown(&conn, &out_text).unwrap();
@@ -289,7 +289,7 @@ fn el_export_preserva_todo_lo_necesario_para_migrar() {
         encontrado.unwrap_or_else(|| panic!("no se exportó la memoria {id}"))
     };
 
-    let v = parse(vieja);
+    let v = parse(older);
     assert!(v.contains("ext_id: \"EXT-123\""), "falta ext_id:\n{v}");
     assert!(v.contains("pinned: true"), "falta pinned:\n{v}");
     assert!(v.contains("kind: \"ticket\"") && v.contains("value: \"ABC-112\""), "faltan refs:\n{v}");
@@ -297,8 +297,8 @@ fn el_export_preserva_todo_lo_necesario_para_migrar() {
     assert!(v.contains("source: \"migrated\""), "falta source:\n{v}");
     assert!(v.contains("status: \"superseded\""), "la vieja quedó superseded:\n{v}");
 
-    let n = parse(nueva);
-    assert!(n.contains(&format!("supersedes: {vieja}")), "falta la cadena:\n{n}");
+    let n = parse(newer);
+    assert!(n.contains(&format!("supersedes: {older}")), "falta la cadena:\n{n}");
     assert!(n.contains("event_start: \"2026-08-01\""), "falta event_start:\n{n}");
     assert!(!n.contains("ext_id:"), "no debe emitir ext_id vacío:\n{n}");
     assert!(!n.contains("event_end:"), "no debe emitir event_end vacío:\n{n}");

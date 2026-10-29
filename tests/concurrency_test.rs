@@ -121,8 +121,8 @@ fn buscar_no_falla_aunque_no_pueda_reindexar() {
 
     // El archivo instalado pasa a ser, en realidad, otro paquete: la guarda
     // se dispara y el reindexado necesita renombrarlo.
-    let paquetes = d.path().join("paquetes");
-    apoyo::escribir_pack_permutado(&paquetes.join("mini-es.anathem-pack"), "otro-es");
+    let packs = d.path().join("paquetes");
+    apoyo::escribir_pack_permutado(&packs.join("mini-es.anathem-pack"), "otro-es");
 
     // El rename tiene que fallar, y tiene que fallar para cualquiera. Antes
     // esto era `paquetes/` en modo 0555, que a root no lo detiene: en CI
@@ -135,7 +135,7 @@ fn buscar_no_falla_aunque_no_pueda_reindexar() {
     // devuelve EISDIR —y ENOTEMPTY si el kernel llegara a mirar el contenido
     // primero— también para root. Ningún uid puede reemplazar un directorio
     // poblado por un archivo; no es una comprobación de permisos.
-    let target = paquetes.join("otro-es.anathem-pack");
+    let target = packs.join("otro-es.anathem-pack");
     std::fs::create_dir(&target).unwrap();
     std::fs::write(target.join("ocupado"), b"x").unwrap();
 
@@ -160,7 +160,7 @@ fn buscar_no_falla_aunque_no_pueda_reindexar() {
     let conn = rusqlite::Connection::open(&db).unwrap();
     let (name, _, _) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
     assert!(
-        paquetes.join(format!("{name}.anathem-pack")).exists(),
+        packs.join(format!("{name}.anathem-pack")).exists(),
         "el registro quedó apuntando a un archivo que no existe: {name}"
     );
 }

@@ -18,8 +18,8 @@ use std::process::Command;
 fn latest_release_api() -> String {
     let repo =
         std::env::var("ANATHEM_REPO").unwrap_or_else(|_| "__alexander__/anathem".to_string());
-    let codificado = repo.replace('/', "%2F");
-    format!("https://gitlab.com/api/v4/projects/{codificado}/releases/permalink/latest")
+    let encoded = repo.replace('/', "%2F");
+    format!("https://gitlab.com/api/v4/projects/{encoded}/releases/permalink/latest")
 }
 
 /// Fetches a URL with whatever the system has.
@@ -61,11 +61,11 @@ fn latest_published(json: &str) -> Result<String> {
 /// It compares number by number and not as text, because `0.10.0` is greater
 /// than `0.9.0` but smaller alphabetically, and that bug only shows up once
 /// the project reaches its tenth version.
-pub fn is_newer(publicada: &str, actual: &str) -> bool {
-    let partes = |s: &str| -> Vec<u64> {
+pub fn is_newer(published: &str, current: &str) -> bool {
+    let parts = |s: &str| -> Vec<u64> {
         s.split(['.', '-']).map(|x| x.parse().unwrap_or(0)).collect()
     };
-    let (a, b) = (partes(publicada), partes(actual));
+    let (a, b) = (parts(published), parts(current));
     for i in 0..a.len().max(b.len()) {
         let (x, y) = (a.get(i).copied().unwrap_or(0), b.get(i).copied().unwrap_or(0));
         if x != y {
@@ -77,11 +77,11 @@ pub fn is_newer(publicada: &str, actual: &str) -> bool {
 
 /// Looks it up and reports. Returns whether a newer one exists.
 pub fn check_for_update() -> Result<bool> {
-    let actual = env!("CARGO_PKG_VERSION");
+    let current = env!("CARGO_PKG_VERSION");
     let json = fetch(&latest_release_api())?;
-    let publicada = latest_published(&json)?;
-    if is_newer(&publicada, actual) {
-        println!("Hay una versión nueva: {publicada} (tenés la {actual}).");
+    let published = latest_published(&json)?;
+    if is_newer(&published, current) {
+        println!("Hay una versión nueva: {published} (tenés la {current}).");
         println!();
         println!("Para actualizar, el instalador hace lo mismo que la primera vez:");
         println!("    curl -fsSL https://gitlab.com/__alexander__/anathem/-/raw/main/scripts/instalar.sh -o instalar.sh");
@@ -89,15 +89,15 @@ pub fn check_for_update() -> Result<bool> {
         println!();
         println!("Tus memorias no se tocan: viven en la base, no en el binario.");
         Ok(true)
-    } else if publicada == actual {
-        println!("Estás al día: {actual} es la última publicada.");
+    } else if published == current {
+        println!("Estás al día: {current} es la última publicada.");
         Ok(false)
     } else {
         // Happens in a copy built from the repository, which runs ahead of
         // what is published. Saying "you are up to date" there would be
         // lying the other way around.
         println!(
-            "Tenés la {actual}, más nueva que la última publicada ({publicada}). \
+            "Tenés la {current}, más nueva que la última publicada ({published}). \
              Seguramente la compilaste vos."
         );
         Ok(false)

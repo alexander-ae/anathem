@@ -87,7 +87,7 @@ pub fn topics(conn: &Connection) -> Result<Vec<Tema>> {
           group by project, topic
           order by project, topic",
     )?;
-    let filas = stmt
+    let rows = stmt
         .query_map([], |r| {
             Ok(Tema {
                 project: r.get(0)?,
@@ -97,5 +97,5 @@ pub fn topics(conn: &Connection) -> Result<Vec<Tema>> {
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
-    Ok(filas)
+    Ok(rows)
 }

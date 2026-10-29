@@ -18,7 +18,7 @@ fn forget_saca_de_la_busqueda_sin_borrar() {
     maint::forget(&conn, id).unwrap();
 
     let q = search::Query { text: "cache".into(), ..Default::default() };
-    assert!(search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap().is_empty(), "forget debe sacarla de la búsqueda");
+    assert!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().is_empty(), "forget debe sacarla de la búsqueda");
 
     let n: i64 = conn.query_row("select count(*) from memories where id=?1", [id], |r| r.get(0)).unwrap();
     assert_eq!(n, 1, "forget no debe borrar la fila");
@@ -54,15 +54,15 @@ fn pin_en_id_inexistente_falla() {
 fn history_devuelve_la_cadena_de_supersession() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
-    let vieja = seed(&conn, "vieja");
-    let nueva = seed(&conn, "nueva");
-    conn.execute("update memories set supersedes_id=?1 where id=?2", [vieja, nueva]).unwrap();
-    conn.execute("update memories set status='superseded' where id=?1", [vieja]).unwrap();
+    let older = seed(&conn, "vieja");
+    let newer = seed(&conn, "nueva");
+    conn.execute("update memories set supersedes_id=?1 where id=?2", [older, newer]).unwrap();
+    conn.execute("update memories set status='superseded' where id=?1", [older]).unwrap();
 
-    let cadena = maint::history(&conn, nueva).unwrap();
+    let cadena = maint::history(&conn, newer).unwrap();
     assert_eq!(cadena.len(), 2, "cadena: {cadena:?}");
-    assert_eq!(cadena[0].0, nueva);
-    assert_eq!(cadena[1].0, vieja);
+    assert_eq!(cadena[0].0, newer);
+    assert_eq!(cadena[1].0, older);
 }
 
 /// El guardado explícito debe comportarse igual venga de la CLI o de MCP:
@@ -73,10 +73,10 @@ fn history_devuelve_la_cadena_de_supersession() {
 fn guardar_explicito_clasifica_y_extrae_refs() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
-    let texto = "Se decidió revertir: había un bug en los tests de ABC-42 (PR #7).";
+    let text = "Se decidió revertir: había un bug en los tests de ABC-42 (PR #7).";
 
-    let (id, usados) = anathem::ingest::save_explicit(&conn, texto, "p", Vec::new()).unwrap();
-    assert!(!usados.is_empty(), "no clasificó: {usados:?}");
+    let (id, used) = anathem::ingest::save_explicit(&conn, text, "p", Vec::new()).unwrap();
+    assert!(!used.is_empty(), "no clasificó: {used:?}");
 
     let n_tags: i64 = conn.query_row(
         "select count(*) from memory_tags where memory_id=?1", [id], |r| r.get(0)).unwrap();
@@ -91,9 +91,9 @@ fn guardar_explicito_clasifica_y_extrae_refs() {
 fn guardar_explicito_respeta_los_tags_dados() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
-    let (id, usados) = anathem::ingest::save_explicit(
+    let (id, used) = anathem::ingest::save_explicit(
         &conn, "un bug en los tests", "p", vec!["mio".to_string()]).unwrap();
-    assert_eq!(usados, vec!["mio".to_string()]);
+    assert_eq!(used, vec!["mio".to_string()]);
     let tags: Vec<String> = conn
         .prepare("select tag from memory_tags where memory_id=?1").unwrap()
         .query_map([id], |r| r.get(0)).unwrap().collect::<Result<_,_>>().unwrap();

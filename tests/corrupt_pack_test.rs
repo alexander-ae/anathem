@@ -28,9 +28,9 @@ fn paquete_corrupto_degrada_a_bm25_sin_tumbar_la_busqueda() {
         let conn = anathem::db::open(&db).unwrap();
         anathem::vecstore::register_pack(&conn, "mini-es", "deadbeef", 4).unwrap();
     }
-    let paquetes = dir.path().join("paquetes");
-    std::fs::create_dir_all(&paquetes).unwrap();
-    std::fs::write(paquetes.join("mini-es.anathem-pack"), b"esto no es un paquete valido").unwrap();
+    let packs = dir.path().join("paquetes");
+    std::fs::create_dir_all(&packs).unwrap();
+    std::fs::write(packs.join("mini-es.anathem-pack"), b"esto no es un paquete valido").unwrap();
 
     let (out, err, ok) = mem(&db, &["search", "cache staleness"]);
     assert!(ok, "un paquete corrupto no puede tumbar la búsqueda: stderr={err}");

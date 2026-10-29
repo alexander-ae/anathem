@@ -96,8 +96,8 @@ fn solo_el_proyecto_pedido_y_tambien_todos() {
     assert_eq!(solo.len(), 1);
     assert_eq!(solo[0].project, "uno");
 
-    let todos = recent::list_recent(&conn, None, None, 10, 120).unwrap();
-    assert_eq!(todos.len(), 2, "sin proyecto tiene que traer los dos");
+    let all_ = recent::list_recent(&conn, None, None, 10, 120).unwrap();
+    assert_eq!(all_.len(), 2, "sin proyecto tiene que traer los dos");
 }
 
 #[test]
@@ -141,7 +141,7 @@ fn el_limite_recorta_pero_conserva_lo_mas_nuevo() {
 fn el_servidor_mcp_anota_quien_lo_guardo_sin_que_nadie_lo_configure() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("mem.db")).unwrap();
-    let ctx = search::Contexto::solo_bm25();
+    let ctx = search::SearchContext::bm25_only();
     let cfg = Config::default();
     let mut agent = None;
 
@@ -170,7 +170,7 @@ fn el_servidor_mcp_anota_quien_lo_guardo_sin_que_nadie_lo_configure() {
 fn sin_clientinfo_no_se_inventa_un_agente() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("mem.db")).unwrap();
-    let ctx = search::Contexto::solo_bm25();
+    let ctx = search::SearchContext::bm25_only();
     let cfg = Config::default();
     let mut agent = None;
 
@@ -209,7 +209,7 @@ fn lo_guardado_desde_la_cli_no_tiene_agente() {
 fn la_tool_recent_memories_existe_y_contesta() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("mem.db")).unwrap();
-    let ctx = search::Contexto::solo_bm25();
+    let ctx = search::SearchContext::bm25_only();
     let cfg = Config::default();
 
     let lista = serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"});
@@ -240,7 +240,7 @@ fn una_ventana_invalida_en_la_tool_se_explica_y_no_rompe() {
         "jsonrpc": "2.0", "id": 1, "method": "tools/call",
         "params": {"name": "recent_memories", "arguments": {"since": "ayer"}}
     });
-    let res = mcp::handle(&conn, &search::Contexto::solo_bm25(), &Config::default(), &call)
+    let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &call)
         .unwrap()
         .unwrap();
     assert!(res["error"].is_null(), "no tiene que ser un error de protocolo: {res}");
@@ -342,7 +342,7 @@ fn instrucciones_de(conn: &Connection, cfg: &Config, who: &str) -> Option<String
         "jsonrpc": "2.0", "id": 1, "method": "initialize",
         "params": {"clientInfo": {"name": who}}
     });
-    let res = mcp::handle(conn, &search::Contexto::solo_bm25(), cfg, &req).unwrap().unwrap();
+    let res = mcp::handle(conn, &search::SearchContext::bm25_only(), cfg, &req).unwrap().unwrap();
     res["result"]["instructions"].as_str().map(str::to_string)
 }
 
@@ -368,7 +368,7 @@ fn se_puede_apagar_del_todo() {
     let conn = db::open(&d.path().join("mem.db")).unwrap();
     ingest::save_explicit(&conn, "algo recién guardado", &proyecto_del_cwd(), vec![]).unwrap();
 
-    let apagado = Config { traspaso_items: 0, ..Config::default() };
+    let apagado = Config { handoff_items: 0, ..Config::default() };
     assert_eq!(
         instrucciones_de(&conn, &apagado, "claude-code"),
         None,
@@ -382,7 +382,7 @@ fn se_puede_apagar_del_todo() {
 fn el_traspaso_dice_quien_guardo_cada_cosa() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("mem.db")).unwrap();
-    let ctx = search::Contexto::solo_bm25();
+    let ctx = search::SearchContext::bm25_only();
     let cfg = Config::default();
 
     // opencode guarda algo.
@@ -415,10 +415,10 @@ fn el_traspaso_se_limita_a_lo_pedido() {
     for i in 0..8 {
         ingest::save_explicit(&conn, &format!("memoria numero {i}"), &proyecto_del_cwd(), vec![]).unwrap();
     }
-    let cfg = Config { traspaso_items: 3, ..Config::default() };
+    let cfg = Config { handoff_items: 3, ..Config::default() };
     let txt = instrucciones_de(&conn, &cfg, "claude-code").unwrap();
-    let lines_ = txt.lines().filter(|l| l.starts_with("- ")).count();
-    assert_eq!(lines_, 3, "tenía que listar 3 y listó {lines_}:\n{txt}");
+    let lines = txt.lines().filter(|l| l.starts_with("- ")).count();
+    assert_eq!(lines, 3, "tenía que listar 3 y listó {lines}:\n{txt}");
 }
 
 #[test]
@@ -426,13 +426,13 @@ fn una_ventana_de_traspaso_ilegible_no_rompe_el_handshake() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("mem.db")).unwrap();
     ingest::save_explicit(&conn, "algo", &proyecto_del_cwd(), vec![]).unwrap();
-    let roto = Config { traspaso_ventana: "ayer".into(), ..Config::default() };
+    let roto = Config { handoff_window: "ayer".into(), ..Config::default() };
     // El initialize es el handshake: romperlo dejaría al agente sin memoria
     // entera por un ajuste mal escrito. Mejor sin traspaso que sin servidor.
     let req = serde_json::json!({
         "jsonrpc": "2.0", "id": 1, "method": "initialize",
         "params": {"clientInfo": {"name": "x"}}});
-    let res = mcp::handle(&conn, &search::Contexto::solo_bm25(), &roto, &req).unwrap().unwrap();
+    let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &roto, &req).unwrap().unwrap();
     assert!(res["error"].is_null(), "el handshake tiene que sobrevivir: {res}");
     assert_eq!(res["result"]["protocolVersion"].as_str().unwrap(), "2024-11-05");
     assert!(res["result"]["instructions"].is_null(), "sin traspaso, pero vivo");

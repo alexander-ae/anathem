@@ -41,7 +41,7 @@ pub fn candidates(conn: &Connection, body: &str, project: &str, k: usize) -> Res
     // memory may not be synced yet: the vector index would be incomplete in
     // precisely the case this function cares about. So it searches with bm25
     // alone, without the pack.
-    let mut hits = search::run(conn, &q, &search::Contexto::solo_bm25())?;
+    let mut hits = search::run(conn, &q, &search::SearchContext::bm25_only())?;
 
     let self_id = hits
         .iter()
@@ -86,18 +86,18 @@ pub fn candidates(conn: &Connection, body: &str, project: &str, k: usize) -> Res
 /// transaction without committing); `link` does not undo it on its own.
 /// Whoever calls it inside a transaction has to propagate the error and not
 /// commit.
-pub fn link(conn: &Connection, nueva: i64, vieja: i64) -> Result<()> {
-    if nueva == vieja {
+pub fn link(conn: &Connection, newer: i64, older: i64) -> Result<()> {
+    if newer == older {
         anyhow::bail!("una memoria no puede reemplazarse a sí misma");
     }
     let estado_nueva: Option<String> = conn
-        .query_row("select status from memories where id = ?1", [nueva], |r| r.get(0))
+        .query_row("select status from memories where id = ?1", [newer], |r| r.get(0))
         .optional()?;
     match estado_nueva.as_deref() {
-        None => anyhow::bail!("no existe la memoria nueva id:{nueva}"),
+        None => anyhow::bail!("no existe la memoria nueva id:{newer}"),
         Some("active") => {}
         Some(otro) => anyhow::bail!(
-            "la memoria nueva id:{nueva} no está activa (status={otro}); no puede replace_file \
+            "la memoria nueva id:{newer} no está activa (status={otro}); no puede replace_file \
              a otra memoria -- si ya fue superseded, esto formaría un ciclo"
         ),
     }
@@ -106,10 +106,10 @@ pub fn link(conn: &Connection, nueva: i64, vieja: i64) -> Result<()> {
     // not nest `BEGIN`. So both `update`s land inside theirs, and if either
     // fails everything is undone together with their insert.
     let propia = if conn.is_autocommit() { Some(conn.unchecked_transaction()?) } else { None };
-    conn.execute("update memories set supersedes_id = ?2 where id = ?1", params![nueva, vieja])?;
+    conn.execute("update memories set supersedes_id = ?2 where id = ?1", params![newer, older])?;
     conn.execute(
         "update memories set status = 'superseded', updated = ?2 where id = ?1",
-        params![vieja, chrono::Local::now().format("%Y-%m-%d").to_string()],
+        params![older, chrono::Local::now().format("%Y-%m-%d").to_string()],
     )?;
     if let Some(tx) = propia {
         tx.commit()?;

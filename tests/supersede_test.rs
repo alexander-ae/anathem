@@ -25,17 +25,17 @@ fn propone_candidatos_parecidos() {
 fn link_marca_la_vieja_y_la_saca_de_la_busqueda() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
-    let vieja = seed(&conn, "vieja", "El cache del breakdown se justifica");
-    let nueva = seed(&conn, "nueva", "El cache del breakdown no se justifica, medido");
-    supersede::link(&conn, nueva, vieja).unwrap();
+    let older = seed(&conn, "vieja", "El cache del breakdown se justifica");
+    let newer = seed(&conn, "nueva", "El cache del breakdown no se justifica, medido");
+    supersede::link(&conn, newer, older).unwrap();
 
-    let st: String = conn.query_row("select status from memories where id=?1", [vieja], |r| r.get(0)).unwrap();
+    let st: String = conn.query_row("select status from memories where id=?1", [older], |r| r.get(0)).unwrap();
     assert_eq!(st, "superseded");
-    let sup: i64 = conn.query_row("select supersedes_id from memories where id=?1", [nueva], |r| r.get(0)).unwrap();
-    assert_eq!(sup, vieja);
+    let sup: i64 = conn.query_row("select supersedes_id from memories where id=?1", [newer], |r| r.get(0)).unwrap();
+    assert_eq!(sup, older);
 
     let q = search::Query { text: "cache breakdown justifica".into(), ..Default::default() };
-    let hits = search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap();
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
     assert!(hits.iter().all(|h| h.ext_id.as_deref() != Some("vieja")), "la superseded sigue apareciendo");
 }
 
@@ -55,9 +55,9 @@ fn no_se_propone_a_si_misma() {
 fn link_con_nueva_inexistente_falla_y_no_toca_vieja() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
-    let vieja = seed(&conn, "vieja", "El cache del breakdown se justifica");
+    let older = seed(&conn, "vieja", "El cache del breakdown se justifica");
 
-    let err = supersede::link(&conn, 999_999, vieja)
+    let err = supersede::link(&conn, 999_999, older)
         .expect_err("link con nueva inexistente debe fallar, no reportar éxito");
     assert!(err.to_string().contains("999999"), "mensaje inesperado: {err}");
 
@@ -66,7 +66,7 @@ fn link_con_nueva_inexistente_falla_y_no_toca_vieja() {
     // la base.
     let (status, supersedes): (String, Option<i64>) = conn.query_row(
         "select status, supersedes_id from memories where id = ?1",
-        [vieja],
+        [older],
         |r| Ok((r.get(0)?, r.get(1)?)),
     ).unwrap();
     assert_eq!(status, "active", "vieja quedó superseded apuntando a nada");
@@ -107,20 +107,20 @@ fn link_rechaza_cerrar_un_ciclo_de_dos() {
 fn candidates_no_descarta_duplicados_preexistentes_del_mismo_proyecto() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
-    let texto = "El endpoint de boletas duplica el cobro de cuota mensual";
+    let text = "El endpoint de boletas duplica el cobro de cuota mensual";
 
     // dos memorias activas preexistentes, mismo proyecto, cuerpo idéntico
     // entre sí -- el caso real es 17/18, pero esas están en proyectos
     // distintos; acá lo reproducimos en un mismo proyecto a propósito, que
     // es el caso que la regla por id debe cubrir aunque hoy no esté en el
     // corpus migrado.
-    let dup_a = seed(&conn, "dup_a", texto);
-    let dup_b = seed(&conn, "dup_b", texto);
+    let dup_a = seed(&conn, "dup_a", text);
+    let dup_b = seed(&conn, "dup_b", text);
     // una tercera, recién insertada, con el mismo cuerpo -- es la que
     // candidates() debe tratar como "self" y excluir.
-    let recien_insertada = seed(&conn, "nueva", texto);
+    let recien_insertada = seed(&conn, "nueva", text);
 
-    let c = supersede::candidates(&conn, texto, "p", 5).unwrap();
+    let c = supersede::candidates(&conn, text, "p", 5).unwrap();
 
     // la regla anterior (excluir por cuerpo idéntico al query) habría
     // descartado dup_a, dup_b Y recien_insertada -- las tres tienen el

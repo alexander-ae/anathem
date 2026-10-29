@@ -39,17 +39,17 @@ pub const TOKENIZER_CON_AGREGADO_FUERA_DE_RANGO: &str = r#"{
 /// descuantizado es el byte tal cual y los vectores esperados se calculan a
 /// mano. `n_tokens` sale del largo de `filas`, que es justo el campo que hay
 /// que poder descuadrar para probar la validación de `Pack::abrir`.
-pub fn escribir_pack_filas(pack_path: &Path, nombre: &str, dims: usize, filas: &[Vec<u8>]) {
-    escribir_pack_con_tokenizador(pack_path, nombre, dims, filas, TOKENIZER_MINI);
+pub fn escribir_pack_filas(pack_path: &Path, name: &str, dims: usize, rows: &[Vec<u8>]) {
+    escribir_pack_con_tokenizador(pack_path, name, dims, rows, TOKENIZER_MINI);
 }
 
 /// `escribir_pack_filas` eligiendo también el tokenizador embebido, para
 /// poder descuadrar la relación entre la tabla y el vocabulario.
 pub fn escribir_pack_con_tokenizador(
     pack_path: &Path,
-    nombre: &str,
+    name: &str,
     dims: usize,
-    filas: &[Vec<u8>],
+    rows: &[Vec<u8>],
     tokenizador: &str,
 ) {
     let tok = tokenizador.as_bytes();
@@ -57,9 +57,9 @@ pub fn escribir_pack_con_tokenizador(
     b.extend_from_slice(b"ANPK");
     b.extend_from_slice(&1u32.to_le_bytes());
     b.extend_from_slice(&(dims as u32).to_le_bytes());
-    b.extend_from_slice(&(filas.len() as u32).to_le_bytes());
-    b.extend_from_slice(&(nombre.len() as u32).to_le_bytes());
-    b.extend_from_slice(nombre.as_bytes());
+    b.extend_from_slice(&(rows.len() as u32).to_le_bytes());
+    b.extend_from_slice(&(name.len() as u32).to_le_bytes());
+    b.extend_from_slice(name.as_bytes());
     b.extend_from_slice(&(tok.len() as u64).to_le_bytes());
     b.extend_from_slice(tok);
     for _ in 0..dims {
@@ -68,7 +68,7 @@ pub fn escribir_pack_con_tokenizador(
     for _ in 0..dims {
         b.extend_from_slice(&0.0f32.to_le_bytes());
     }
-    for f in filas {
+    for f in rows {
         assert_eq!(f.len(), dims, "cada fila tiene que medir dims bytes");
         b.extend_from_slice(f);
     }
@@ -79,10 +79,10 @@ pub fn escribir_pack_con_tokenizador(
 ///
 /// Filas: `<unk>`=[0,0,0,0], `▁hola`=[10,0,0,0], `▁mundo`=[0,10,0,0],
 /// `s`=[0,0,10,0].
-pub fn escribir_pack_mini(pack_path: &Path, nombre: &str) {
+pub fn escribir_pack_mini(pack_path: &Path, name: &str) {
     escribir_pack_filas(
         pack_path,
-        nombre,
+        name,
         4,
         &[vec![0, 0, 0, 0], vec![10, 0, 0, 0], vec![0, 10, 0, 0], vec![0, 0, 10, 0]],
     );
@@ -95,10 +95,10 @@ pub fn escribir_pack_mini(pack_path: &Path, nombre: &str) {
 /// fija 256 dimensiones para todo paquete, los blobs de dos paquetes
 /// distintos miden exactamente lo mismo y nada los distingue salvo mirar
 /// hacia dónde apuntan.
-pub fn escribir_pack_permutado(pack_path: &Path, nombre: &str) {
+pub fn escribir_pack_permutado(pack_path: &Path, name: &str) {
     escribir_pack_filas(
         pack_path,
-        nombre,
+        name,
         4,
         &[vec![0, 0, 0, 0], vec![0, 0, 0, 10], vec![0, 0, 10, 0], vec![0, 10, 0, 0]],
     );
@@ -106,8 +106,8 @@ pub fn escribir_pack_permutado(pack_path: &Path, nombre: &str) {
 
 /// Un paquete cuya tabla es todo ceros: abre, instala y produce solo
 /// vectores nulos.
-pub fn escribir_pack_nulo(pack_path: &Path, nombre: &str) {
-    escribir_pack_filas(pack_path, nombre, 4, &vec![vec![0u8; 4]; 4]);
+pub fn escribir_pack_nulo(pack_path: &Path, name: &str) {
+    escribir_pack_filas(pack_path, name, 4, &vec![vec![0u8; 4]; 4]);
 }
 
 /// Lee un vector de `chunk_vectors` como `Vec<f32>`.
@@ -117,9 +117,9 @@ pub fn leer_vector(conn: &rusqlite::Connection, sql: &str) -> Vec<f32> {
 }
 
 /// Reescribe un byte suelto del archivo, para construir paquetes corruptos.
-pub fn corromper(pack_path: &Path, offset: usize, valor: u8) {
+pub fn corromper(pack_path: &Path, offset: usize, value: u8) {
     let mut b = std::fs::read(pack_path).unwrap();
-    b[offset] = valor;
+    b[offset] = value;
     std::fs::write(pack_path, b).unwrap();
 }
 

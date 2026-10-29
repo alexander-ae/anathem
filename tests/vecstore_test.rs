@@ -3,11 +3,11 @@ mod apoyo;
 use anathem::{db, ingest, model::NewMemory, pack::Pack, search, vecstore};
 use rusqlite::Connection;
 
-fn sembrar(conn: &Connection, cuerpo: &str) -> i64 {
+fn sembrar(conn: &Connection, body: &str) -> i64 {
     ingest::insert(conn, &NewMemory {
         project: "p".into(),
-        title: cuerpo.chars().take(30).collect(),
-        body: cuerpo.into(),
+        title: body.chars().take(30).collect(),
+        body: body.into(),
         created: "2026-09-01".into(),
         event_start: None, event_end: None,
         source: "explicit".into(), ext_id: None,
@@ -29,8 +29,8 @@ fn sincronizar_llena_los_huecos_y_es_idempotente() {
     let (_d, conn, p) = fixture();
     sembrar(&conn, "hola");
     sembrar(&conn, "mundo");
-    assert_eq!(apoyo::registrar_y_sincronizar(&conn, &p).escritos(), 2);
-    assert_eq!(apoyo::registrar_y_sincronizar(&conn, &p).escritos(), 0, "no debe reembeber");
+    assert_eq!(apoyo::registrar_y_sincronizar(&conn, &p).written(), 2);
+    assert_eq!(apoyo::registrar_y_sincronizar(&conn, &p).written(), 0, "no debe reembeber");
     assert_eq!(vecstore::coverage(&conn, p.dims()).unwrap(), (2, 2));
 }
 
@@ -50,7 +50,7 @@ fn buscar_ordena_por_coseno() {
     let mundo = sembrar(&conn, "mundo");
     apoyo::registrar_y_sincronizar(&conn, &p);
     let q = search::Query { text: String::new(), ..Default::default() };
-    let v = p.embeber("hola").unwrap();
+    let v = p.embed("hola").unwrap();
     let r = vecstore::search_vectors(&conn, &v, &q, 10).unwrap();
     assert_eq!(r[0].memory_id, hola, "la más parecida debe ir primera");
     assert!(r[0].cosine > r[1].cosine);
@@ -72,7 +72,7 @@ fn buscar_respeta_el_filtro_de_proyecto() {
     }).unwrap();
     apoyo::registrar_y_sincronizar(&conn, &p);
     let q = search::Query { project: Some("uno".into()), ..Default::default() };
-    let r = vecstore::search_vectors(&conn, &p.embeber("hola").unwrap(), &q, 10).unwrap();
+    let r = vecstore::search_vectors(&conn, &p.embed("hola").unwrap(), &q, 10).unwrap();
     assert_eq!(r.len(), 1);
     assert_eq!(r[0].memory_id, a);
 }
@@ -83,7 +83,7 @@ fn buscar_ignora_las_memorias_no_activas() {
     let id = sembrar(&conn, "hola");
     apoyo::registrar_y_sincronizar(&conn, &p);
     conn.execute("update memories set status='forgotten' where id=?1", [id]).unwrap();
-    let r = vecstore::search_vectors(&conn, &p.embeber("hola").unwrap(), &search::Query::default(), 10).unwrap();
+    let r = vecstore::search_vectors(&conn, &p.embed("hola").unwrap(), &search::Query::default(), 10).unwrap();
     assert!(r.is_empty(), "una memoria olvidada no puede salir en la búsqueda vectorial");
 }
 
@@ -210,8 +210,8 @@ fn buscar_colapsa_varios_fragmentos_de_la_misma_memoria() {
     let (_d, conn, p) = fixture();
     let relleno = "mundo ".repeat(100); // 600 caracteres, puro "mundo"
     let goal = "hola ".repeat(50); // 250 caracteres, puro "hola"
-    let cuerpo = format!("{relleno}{goal}");
-    let id = sembrar(&conn, &cuerpo);
+    let body = format!("{relleno}{goal}");
+    let id = sembrar(&conn, &body);
 
     let n_fragmentos: i64 = conn
         .query_row("select count(*) from chunks where memory_id = ?1", [id], |r| r.get(0))
@@ -235,7 +235,7 @@ fn buscar_colapsa_varios_fragmentos_de_la_misma_memoria() {
         .unwrap();
 
     let q = search::Query::default();
-    let r = vecstore::search_vectors(&conn, &p.embeber("hola").unwrap(), &q, 10).unwrap();
+    let r = vecstore::search_vectors(&conn, &p.embed("hola").unwrap(), &q, 10).unwrap();
     let aciertos: Vec<&vecstore::VectorHit> = r.iter().filter(|a| a.memory_id == id).collect();
     assert_eq!(aciertos.len(), 1, "la memoria debe aparecer una sola vez, no una por fragmento");
     assert_eq!(
@@ -295,7 +295,7 @@ fn sincronizar_no_escribe_un_solo_vector_con_una_identidad_caducada() {
 
     assert_eq!(
         r,
-        vecstore::SyncOutcome::Abandonada(0),
+        vecstore::SyncOutcome::Abandoned(0),
         "con la identidad caducada el lote se abandona, no se escribe"
     );
     assert_eq!(
@@ -321,8 +321,8 @@ fn sincronizar_abandona_a_mitad_de_camino_si_el_paquete_cambia_entre_lotes() {
     let (_d, conn, p) = fixture();
     let total = 300usize; // más de un lote (el lote son 256)
     sembrar_pendientes(&conn, total);
-    let identidad = ("mini-es".to_string(), "sha-de-a".to_string(), p.dims());
-    vecstore::register_pack(&conn, &identidad.0, &identidad.1, identidad.2).unwrap();
+    let identity = ("mini-es".to_string(), "sha-de-a".to_string(), p.dims());
+    vecstore::register_pack(&conn, &identity.0, &identity.1, identity.2).unwrap();
     conn.execute_batch(
         "create trigger cambia_el_paquete after insert on chunk_vectors
          begin
@@ -331,15 +331,15 @@ fn sincronizar_abandona_a_mitad_de_camino_si_el_paquete_cambia_entre_lotes() {
     )
     .unwrap();
 
-    let r = vecstore::sync(&conn, &p, &identidad).unwrap();
+    let r = vecstore::sync(&conn, &p, &identity).unwrap();
 
     assert!(r.abandonada(), "el cambio de paquete a mitad de camino tiene que abandonar: {r:?}");
-    let escritos: i64 =
+    let written: i64 =
         conn.query_row("select count(*) from chunk_vectors", [], |r| r.get(0)).unwrap();
-    assert_eq!(escritos as usize, r.escritos(), "lo reportado y lo escrito tienen que coincidir");
-    assert!(escritos > 0, "el primer lote sí se escribió con la identidad correcta");
+    assert_eq!(written as usize, r.written(), "lo reportado y lo escrito tienen que coincidir");
+    assert!(written > 0, "el primer lote sí se escribió con la identidad correcta");
     assert!(
-        (escritos as usize) < total,
+        (written as usize) < total,
         "se escribieron los {total} fragmentos con un paquete que ya no era el registrado"
     );
 }
@@ -374,8 +374,8 @@ fn el_lado_vectorial_respeta_los_mismos_filtros_que_el_lexico() {
         conn.execute("insert into chunk_vectors (chunk_id, vec) values (?1, ?2)", rusqlite::params![id, v])
             .unwrap();
     }
-    let consulta = vec![1.0f32, 0.0, 0.0, 0.0];
-    assert_eq!(consulta.len(), dims);
+    let query_ = vec![1.0f32, 0.0, 0.0, 0.0];
+    assert_eq!(query_.len(), dims);
 
     let con_proyecto = anathem::search::Query {
         text: "nota".into(),
@@ -385,7 +385,7 @@ fn el_lado_vectorial_respeta_los_mismos_filtros_que_el_lexico() {
         budget_tokens: 10_000,
         excerpt: None,
     };
-    let r = anathem::vecstore::search_vectors(&conn, &consulta, &con_proyecto, 50).unwrap();
+    let r = anathem::vecstore::search_vectors(&conn, &query_, &con_proyecto, 50).unwrap();
     assert_eq!(r.len(), 1, "el filtro de proyecto tiene que valer también acá: {r:?}");
 
     let con_tag = anathem::search::Query {
@@ -396,7 +396,7 @@ fn el_lado_vectorial_respeta_los_mismos_filtros_que_el_lexico() {
         budget_tokens: 10_000,
         excerpt: None,
     };
-    let r = anathem::vecstore::search_vectors(&conn, &consulta, &con_tag, 50).unwrap();
+    let r = anathem::vecstore::search_vectors(&conn, &query_, &con_tag, 50).unwrap();
     assert_eq!(r.len(), 1, "el filtro de tags tiene que valer también acá: {r:?}");
 
     // Y sin filtros, los dos.
@@ -408,6 +408,6 @@ fn el_lado_vectorial_respeta_los_mismos_filtros_que_el_lexico() {
         budget_tokens: 10_000,
         excerpt: None,
     };
-    let r = anathem::vecstore::search_vectors(&conn, &consulta, &sin, 50).unwrap();
+    let r = anathem::vecstore::search_vectors(&conn, &query_, &sin, 50).unwrap();
     assert_eq!(r.len(), 2, "sin filtros tienen que venir las dos: {r:?}");
 }

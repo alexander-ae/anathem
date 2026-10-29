@@ -1,4 +1,4 @@
-use anathem::project::{detectar, resolve, SIN_PROYECTO};
+use anathem::project::{detect, resolve, NO_PROJECT};
 use std::fs;
 use std::path::Path;
 
@@ -19,21 +19,21 @@ fn usa_el_nombre_del_remoto_y_no_el_de_la_carpeta() {
     let w = d.path().join("API").join("Web");
     fs::create_dir_all(&w).unwrap();
     repo(&w, Some("git@github.com:acme/api-monolito.git"));
-    assert_eq!(detectar(&w).as_deref(), Some("api-monolito"));
+    assert_eq!(detect(&w).as_deref(), Some("api-monolito"));
 }
 
 #[test]
 fn entiende_una_url_https() {
     let d = tempfile::tempdir().unwrap();
     repo(d.path(), Some("https://gitlab.com/__alexander__/anathem.git"));
-    assert_eq!(detectar(d.path()).as_deref(), Some("anathem"));
+    assert_eq!(detect(d.path()).as_deref(), Some("anathem"));
 }
 
 #[test]
 fn una_url_sin_sufijo_git_tambien_sirve() {
     let d = tempfile::tempdir().unwrap();
     repo(d.path(), Some("https://gitlab.com/grupo/proyecto"));
-    assert_eq!(detectar(d.path()).as_deref(), Some("proyecto"));
+    assert_eq!(detect(d.path()).as_deref(), Some("proyecto"));
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn desde_un_subdirectorio_encuentra_la_raiz() {
     repo(d.path(), Some("git@host:g/repo.git"));
     let hondo = d.path().join("src").join("modulo").join("interno");
     fs::create_dir_all(&hondo).unwrap();
-    assert_eq!(detectar(&hondo).as_deref(), Some("repo"));
+    assert_eq!(detect(&hondo).as_deref(), Some("repo"));
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn en_un_worktree_da_el_proyecto_y_no_el_nombre_de_la_rama() {
     fs::write(gitdir.join("commondir"), "../..\n").unwrap();
     fs::write(wt.join(".git"), format!("gitdir: {}\n", gitdir.display())).unwrap();
 
-    assert_eq!(detectar(&wt).as_deref(), Some("api-monolito"),
+    assert_eq!(detect(&wt).as_deref(), Some("api-monolito"),
         "en un worktree tiene que dar el proyecto, no la rama");
 }
 
@@ -71,13 +71,13 @@ fn sin_remoto_cae_al_nombre_de_la_carpeta_del_repo() {
     let r = d.path().join("mi-proyecto-local");
     fs::create_dir_all(&r).unwrap();
     repo(&r, None);
-    assert_eq!(detectar(&r).as_deref(), Some("mi-proyecto-local"));
+    assert_eq!(detect(&r).as_deref(), Some("mi-proyecto-local"));
 }
 
 #[test]
 fn fuera_de_un_repo_no_detecta_nada() {
     let d = tempfile::tempdir().unwrap();
-    assert_eq!(detectar(d.path()), None);
+    assert_eq!(detect(d.path()), None);
 }
 
 #[test]
@@ -91,5 +91,5 @@ fn un_project_explicito_le_gana_a_la_deteccion() {
 #[test]
 fn sin_repo_y_sin_pedido_queda_el_generico() {
     let d = tempfile::tempdir().unwrap();
-    assert_eq!(resolve(None, d.path()), SIN_PROYECTO);
+    assert_eq!(resolve(None, d.path()), NO_PROJECT);
 }

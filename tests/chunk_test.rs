@@ -8,8 +8,8 @@ fn texto_corto_da_un_chunk() {
 
 #[test]
 fn respeta_tamano_y_paso() {
-    let texto: String = std::iter::repeat('a').take(1000).collect();
-    let c = chunk::split(&texto, 500, 400);
+    let text: String = std::iter::repeat('a').take(1000).collect();
+    let c = chunk::split(&text, 500, 400);
     assert_eq!(c.len(), 3, "1000 chars con paso 400 dan 3 chunks");
     assert_eq!(c[0].chars().count(), 500);
     assert_eq!(c[2].chars().count(), 200); // 800..1000
@@ -17,8 +17,8 @@ fn respeta_tamano_y_paso() {
 
 #[test]
 fn no_parte_caracteres_multibyte() {
-    let texto: String = std::iter::repeat('ñ').take(600).collect();
-    let c = chunk::split(&texto, 500, 400);
+    let text: String = std::iter::repeat('ñ').take(600).collect();
+    let c = chunk::split(&text, 500, 400);
     assert_eq!(c[0].chars().count(), 500);
     assert!(c.iter().all(|s| s.chars().all(|ch| ch == 'ñ')));
 }

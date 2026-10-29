@@ -33,7 +33,7 @@ pub const EXTENSION: &str = "anathem-pack";
 /// for this memory. Two hundred is enough: if not one of two hundred chunks
 /// holds a single word the pack recognises, the two hundred and first will
 /// not either.
-const MUESTRA: usize = 200;
+const SAMPLE: usize = 200;
 
 /// How the database identifies the pack it indexed with: name, sha256 and
 /// dimensions. It lives in `vecstore`, which reads and writes it; it is
@@ -64,29 +64,29 @@ pub struct Resolved {
     /// Searching does not need it — reading with the wrong pack gives a bad
     /// result, not a mixed index — so `resolve_and_warn` drops it and the
     /// read paths never see it.
-    pub identidad: Option<PackIdentity>,
+    pub identity: Option<PackIdentity>,
     /// What to tell the user, if there is anything to tell. With no pack
     /// installed it is always `None`: whoever does not use the layer reads
     /// no warnings.
-    pub aviso: Option<String>,
+    pub warning: Option<String>,
 }
 
 impl Resolved {
-    fn sin_paquete() -> Resolved {
-        Resolved { pack: None, identidad: None, aviso: None }
+    fn no_pack() -> Resolved {
+        Resolved { pack: None, identity: None, warning: None }
     }
 
-    fn degradado(aviso: String) -> Resolved {
-        Resolved { pack: None, identidad: None, aviso: Some(aviso) }
+    fn degraded(warning: String) -> Resolved {
+        Resolved { pack: None, identity: None, warning: Some(warning) }
     }
 
-    fn resuelto(pack: Pack, identidad: PackIdentity, aviso: Option<String>) -> Resolved {
-        Resolved { pack: Some(pack), identidad: Some(identidad), aviso }
+    fn resolved(pack: Pack, identity: PackIdentity, warning: Option<String>) -> Resolved {
+        Resolved { pack: Some(pack), identity: Some(identity), warning }
     }
 
     /// Prints the warning on stderr, if there is one.
     pub fn warn(&self) {
-        if let Some(a) = &self.aviso {
+        if let Some(a) = &self.warning {
             eprintln!("{a}");
         }
     }
@@ -94,8 +94,8 @@ impl Resolved {
     /// The pair needed by whoever is about to **write** vectors. `None`
     /// when there is no usable pack, which is when there is nothing to
     /// write.
-    pub fn para_escribir(&self) -> Option<(&Pack, &PackIdentity)> {
-        match (&self.pack, &self.identidad) {
+    pub fn for_writing(&self) -> Option<(&Pack, &PackIdentity)> {
+        match (&self.pack, &self.identity) {
             (Some(p), Some(i)) => Some((p, i)),
             _ => None,
         }
@@ -116,7 +116,7 @@ impl Resolved {
 pub fn resolve(conn: &Connection, dir: &Path) -> Resolved {
     match resolve_inner(conn, dir) {
         Ok(a) => a,
-        Err(e) => Resolved::degradado(format!(
+        Err(e) => Resolved::degraded(format!(
             "aviso: no se pudo resolve el paquete de vocabulario ({e}); \
              se busca solo con bm25."
         )),
@@ -134,7 +134,7 @@ pub fn resolve_and_warn(conn: &Connection, dir: &Path) -> Option<Pack> {
 fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     let Some((name, sha, dims)) = vecstore::registered_pack(conn)? else {
         // The path for whoever installed nothing: one query and out.
-        return Ok(Resolved::sin_paquete());
+        return Ok(Resolved::no_pack());
     };
     // An install may have died between the rename — which already replaced
     // the file — and the `adopt_pack` that was going to describe it. The
@@ -149,7 +149,7 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     //
     // Whoever installed nothing does not pay for this query: with no pack
     // registered we already returned above.
-    let sospechoso = match vecstore::instalacion_pendiente(conn)? {
+    let sospechoso = match vecstore::pending_install(conn)? {
         None => false,
         Some(instalando) if instalando == name => true,
         Some(_) => {
@@ -162,7 +162,7 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     // install.
     let ruta_registrada = pack_path(dir, &name);
     if !ruta_registrada.exists() {
-        return Ok(Resolved::degradado(format!(
+        return Ok(Resolved::degraded(format!(
             "aviso: el paquete {name} está registrado pero falta {}; \
              se busca solo con bm25. Reinstalalo con `mem model install`.",
             ruta_registrada.display()
@@ -171,7 +171,7 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     let p = match Pack::open_pack(&ruta_registrada) {
         Ok(p) => p,
         Err(e) => {
-            return Ok(Resolved::degradado(format!(
+            return Ok(Resolved::degraded(format!(
                 "aviso: el paquete {name} en {} no se pudo abrir ({e}); \
                  se busca solo con bm25. Reinstalalo con `mem model install`.",
                 ruta_registrada.display()
@@ -179,14 +179,14 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
         }
     };
     if !sospechoso && p.name() == name && p.dims() == dims {
-        return Ok(Resolved::resuelto(p, (name, sha, dims), None));
+        return Ok(Resolved::resolved(p, (name, sha, dims), None));
     }
     // Reconciling recomputes the sha, adopts again — which deletes the old
     // vectors and the mark in one transaction — and reindexes. For an
     // install interrupted before the rename that is extra work, but it is
     // one-time work on the safe side: the alternative is being unable to
     // tell apart the case where the file did change.
-    let aviso = if sospechoso {
+    let warning = if sospechoso {
         format!(
             "aviso: una instalación de {name} quedó a medias y el archivo en disco puede \
              no ser el que indexó esta base; reindexando para no mezclar vectores."
@@ -200,9 +200,9 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
         )
     };
     match reconcile(conn, dir, &ruta_registrada, p) {
-        Ok((p, id)) => Ok(Resolved::resuelto(p, id, Some(aviso))),
-        Err(e) => Ok(Resolved::degradado(format!(
-            "{aviso}\naviso: no se pudo reindexar ({e}); se busca solo con bm25 \
+        Ok((p, id)) => Ok(Resolved::resolved(p, id, Some(warning))),
+        Err(e) => Ok(Resolved::degraded(format!(
+            "{warning}\naviso: no se pudo reindexar ({e}); se busca solo con bm25 \
              hasta que se pueda. Reinstalá el paquete con `mem model install`."
         ))),
     }
@@ -259,10 +259,10 @@ fn reconcile(
         p
     };
     let adopcion = pack::sha256(&target).and_then(|sha| {
-        vecstore::adoptar_pack(conn, &name, &sha, dims)?;
+        vecstore::adopt_pack(conn, &name, &sha, dims)?;
         Ok((name.clone(), sha, dims))
     });
-    let identidad = match adopcion {
+    let identity = match adopcion {
         Ok(i) => i,
         Err(e) => {
             if hubo_rename {
@@ -285,24 +285,24 @@ fn reconcile(
     // pack that is not the registered one. It fails, which in `resolve_inner`
     // means degrading to bm25 this once; the next resolution finds the new
     // pack and starts clean.
-    if vecstore::sync(conn, &p, &identidad)?.abandonada() {
+    if vecstore::sync(conn, &p, &identity)?.abandonada() {
         bail!(
             "otro proceso cambió el paquete de vocabulario mientras se reindexaba con {}",
             name
         );
     }
-    Ok((p, identidad))
+    Ok((p, identity))
 }
 
 /// What `install` reports back to whoever ran it.
-pub struct Instalacion {
+pub struct Installed {
     pub name: String,
     pub dims: usize,
-    pub fragmentos: usize,
+    pub chunks: usize,
     /// `true` if another process changed the registered pack while this
     /// install was indexing: the pack is installed on disk but is no longer
     /// the one the database uses, and the index was left halfway.
-    pub desplazada: bool,
+    pub displaced: bool,
 }
 
 /// Replaces `target` with the contents of `source`, even when `target`
@@ -346,9 +346,9 @@ pub struct Instalacion {
 /// pack while the disk holds another with nothing noticing — does not depend
 /// on this window: it is covered by `target` being, at every moment, "the
 /// file for `name`" or simply not existing.
-fn replace_file(origen: &Path, target: &Path) -> std::io::Result<()> {
+fn replace_file(source: &Path, target: &Path) -> std::io::Result<()> {
     if !target.is_file() {
-        return std::fs::rename(origen, target);
+        return std::fs::rename(source, target);
     }
     let lateral = target.with_file_name(format!(
         "{}.reemplazando-{}",
@@ -356,7 +356,7 @@ fn replace_file(origen: &Path, target: &Path) -> std::io::Result<()> {
         std::process::id()
     ));
     std::fs::rename(target, &lateral)?;
-    match std::fs::rename(origen, target) {
+    match std::fs::rename(source, target) {
         Ok(()) => {
             // Best effort: if this fails a leftover sibling file is left
             // lying around, not an inconsistent state — `target` already
@@ -397,13 +397,13 @@ fn replace_file(origen: &Path, target: &Path) -> std::io::Result<()> {
 ///    to another.
 /// 6. Filling in the vectors stays outside, in batches, and is idempotent: a
 ///    Ctrl-C midway leaves fewer vectors, never mixed ones.
-pub fn install(conn: &Connection, dir: &Path, archivo: &Path) -> Result<Instalacion> {
-    let sha = pack::sha256(archivo)?;
-    verificar_firma(archivo, &sha)?;
+pub fn install(conn: &Connection, dir: &Path, file: &Path) -> Result<Installed> {
+    let sha = pack::sha256(file)?;
+    verify_signature(file, &sha)?;
 
     let (name, dims, sirve) = {
-        let p = Pack::open_pack(archivo)?;
-        (p.name().to_string(), p.dims(), !solo_vectores_nulos(conn, &p)?)
+        let p = Pack::open_pack(file)?;
+        (p.name().to_string(), p.dims(), !only_null_vectors(conn, &p)?)
     };
     if !sirve {
         bail!(
@@ -413,20 +413,20 @@ pub fn install(conn: &Connection, dir: &Path, archivo: &Path) -> Result<Instalac
         );
     }
 
-    let destino_dir = packs_dir(dir);
-    std::fs::create_dir_all(&destino_dir)?;
+    let target_dir = packs_dir(dir);
+    std::fs::create_dir_all(&target_dir)?;
     let target = pack_path(dir, &name);
-    let temporal = destino_dir.join(format!(".instalando-{}.{EXTENSION}", std::process::id()));
+    let temporal = target_dir.join(format!(".instalando-{}.{EXTENSION}", std::process::id()));
     let copia = (|| -> Result<()> {
-        std::fs::copy(archivo, &temporal).with_context(|| {
-            format!("no se pudo copiar {} a {}", archivo.display(), temporal.display())
+        std::fs::copy(file, &temporal).with_context(|| {
+            format!("no se pudo copiar {} a {}", file.display(), temporal.display())
         })?;
         // Make sure the copy is the copy: if it came out short or the disk
         // filled up, the sha does not match and the installed pack never
         // comes to exist.
         let sha_copia = pack::sha256(&temporal)?;
         if sha_copia != sha {
-            bail!("la copia de {} quedó incompleta; no se instaló nada", archivo.display());
+            bail!("la copia de {} quedó incompleta; no se instaló nada", file.display());
         }
         Pack::open_pack(&temporal)?;
         Ok(())
@@ -456,7 +456,7 @@ pub fn install(conn: &Connection, dir: &Path, archivo: &Path) -> Result<Instalac
     }
 
     // Clears the mark in the same transaction in which it adopts.
-    vecstore::adoptar_pack(conn, &name, &sha, dims)?;
+    vecstore::adopt_pack(conn, &name, &sha, dims)?;
     let p = Pack::open_pack(&target)?;
     // Indexing a large corpus takes minutes and another terminal may
     // install a different pack meanwhile. If that happens, this install is
@@ -464,7 +464,7 @@ pub fn install(conn: &Connection, dir: &Path, archivo: &Path) -> Result<Instalac
     // process is indexing its own — but it has to be said, because the index
     // was left incomplete and `model status` is the only place that shows.
     let s = vecstore::sync(conn, &p, &(name.clone(), sha, dims))?;
-    Ok(Instalacion { name, dims, fragmentos: s.escritos(), desplazada: s.abandonada() })
+    Ok(Installed { name, dims, chunks: s.written(), displaced: s.abandonada() })
 }
 
 /// Removes the pack and its vectors. Returns the name of the one that was
@@ -474,7 +474,7 @@ pub fn install(conn: &Connection, dir: &Path, archivo: &Path) -> Result<Instalac
 /// database is already pack-less and search is back to bm25 only, which is
 /// what was asked for. The other way round would leave a registry entry
 /// pointing at nothing.
-pub fn quitar(conn: &Connection, dir: &Path) -> Result<Option<String>> {
+pub fn remove_pack(conn: &Connection, dir: &Path) -> Result<Option<String>> {
     let Some((name, _, _)) = vecstore::registered_pack(conn)? else {
         return Ok(None);
     };
@@ -484,19 +484,19 @@ pub fn quitar(conn: &Connection, dir: &Path) -> Result<Option<String>> {
 }
 
 /// Verifies the `.sha256` travelling beside the pack, if one travels at all.
-fn verificar_firma(archivo: &Path, sha: &str) -> Result<()> {
-    let firma = archivo.with_file_name(format!(
+fn verify_signature(file: &Path, sha: &str) -> Result<()> {
+    let firma = file.with_file_name(format!(
         "{}.sha256",
-        archivo.file_name().unwrap_or_default().to_string_lossy()
+        file.file_name().unwrap_or_default().to_string_lossy()
     ));
     if !firma.exists() {
         return Ok(());
     }
     let raw = std::fs::read_to_string(&firma)?;
-    let esperado = raw.split_whitespace().next().unwrap_or("");
-    if esperado != sha {
+    let expected = raw.split_whitespace().next().unwrap_or("");
+    if expected != sha {
         bail!(
-            "el sha256 no coincide: el archivo da {sha} y {} dice {esperado}",
+            "el sha256 no coincide: el archivo da {sha} y {} dice {expected}",
             firma.display()
         );
     }
@@ -509,16 +509,16 @@ fn verificar_firma(archivo: &Path, sha: &str) -> Result<()> {
 /// memory uses: it installs cleanly, reports full coverage and never finds
 /// anything, with no signal at all. With an empty memory there is nothing to
 /// judge, so it is let through.
-fn solo_vectores_nulos(conn: &Connection, p: &Pack) -> Result<bool> {
-    let cuerpos: Vec<String> = conn
+fn only_null_vectors(conn: &Connection, p: &Pack) -> Result<bool> {
+    let bodies: Vec<String> = conn
         .prepare("select body from chunks where trim(body) <> '' limit ?1")?
-        .query_map([MUESTRA as i64], |r| r.get(0))?
+        .query_map([SAMPLE as i64], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?;
-    if cuerpos.is_empty() {
+    if bodies.is_empty() {
         return Ok(false);
     }
-    for c in &cuerpos {
-        if p.embeber(c)?.iter().any(|&x| x != 0.0) {
+    for c in &bodies {
+        if p.embed(c)?.iter().any(|&x| x != 0.0) {
             return Ok(false);
         }
     }
@@ -578,7 +578,7 @@ pub struct LivePack {
     /// are never built separately: that pair is what `sync` needs so it does
     /// not write a stale pack's vectors, and reading `meta` a second time to
     /// complete it would reopen the very window the pair closes.
-    activo: Option<(Pack, PackIdentity)>,
+    active: Option<(Pack, PackIdentity)>,
     /// When the pack was last used, so it can be released after a long idle
     /// stretch. `None` while none is open.
     last_used: Option<std::time::Instant>,
@@ -627,7 +627,7 @@ impl LivePack {
         LivePack {
             dir: dir.to_path_buf(),
             registro: None,
-            activo: None,
+            active: None,
             last_used: None,
             released: false,
         }
@@ -638,15 +638,15 @@ impl LivePack {
     /// Both come out of the same call on purpose: reading them separately
     /// would reopen the window this pair closes, because the registry can
     /// change between one read and the other.
-    pub fn actual(&mut self, conn: &Connection) -> Option<(&Pack, &PackIdentity)> {
+    pub fn current(&mut self, conn: &Connection) -> Option<(&Pack, &PackIdentity)> {
         let ahora = vecstore::registered_pack(conn).ok().flatten();
         if ahora != self.registro || self.released {
-            self.recargar(conn);
+            self.reload(conn);
         }
-        if self.activo.is_some() {
+        if self.active.is_some() {
             self.last_used = Some(std::time::Instant::now());
         }
-        self.activo.as_ref().map(|(p, i)| (p, i))
+        self.active.as_ref().map(|(p, i)| (p, i))
     }
 
     /// Releases the pack when it has gone longer than `limit` unused.
@@ -661,13 +661,13 @@ impl LivePack {
     ///
     /// The `registry` is not forgotten: it tells whether the pack changed,
     /// and dropping it would force rereading `meta` for no reason.
-    pub fn release_if_idle(&mut self, limit_: std::time::Duration) -> bool {
-        if limit_.is_zero() || self.activo.is_none() {
+    pub fn release_if_idle(&mut self, limit: std::time::Duration) -> bool {
+        if limit.is_zero() || self.active.is_none() {
             return false;
         }
         match self.last_used {
-            Some(t) if t.elapsed() >= limit_ => {
-                self.activo = None;
+            Some(t) if t.elapsed() >= limit => {
+                self.active = None;
                 self.last_used = None;
                 self.released = true;
                 return_heap_to_os();
@@ -679,16 +679,16 @@ impl LivePack {
 
     /// Whether a pack is open right now. For tests and diagnostics.
     pub fn has_open_pack(&self) -> bool {
-        self.activo.is_some()
+        self.active.is_some()
     }
 
-    fn recargar(&mut self, conn: &Connection) {
+    fn reload(&mut self, conn: &Connection) {
         let a = resolve(conn, &self.dir);
         a.warn();
         // The pair comes whole out of `resolve`, which knows what identity
         // it opened the pack under. Rereading `meta` here to complete it
         // could pair the pack from before with the registry from after.
-        self.activo = match (a.pack, a.identidad) {
+        self.active = match (a.pack, a.identity) {
             (Some(p), Some(i)) => Some((p, i)),
             _ => None,
         };
@@ -696,7 +696,7 @@ impl LivePack {
         // serves: `resolve` may have reindexed and changed the registry, and
         // storing the earlier one would reload on every message.
         self.registro = vecstore::registered_pack(conn).ok().flatten();
-        self.last_used = self.activo.as_ref().map(|_| std::time::Instant::now());
+        self.last_used = self.active.as_ref().map(|_| std::time::Instant::now());
         self.released = false;
     }
 }
@@ -709,7 +709,7 @@ mod tests {
     /// embedding, only that the pack opens and that
     /// `reconcile`/`replace_file` move the right file; one piece is
     /// enough.
-    const TOKENIZER_MINIMO: &str = r#"{
+    const MINIMAL_TOKENIZER: &str = r#"{
      "version":"1.0","truncation":null,"padding":null,"added_tokens":[],
      "normalizer":null,
      "pre_tokenizer":{"type":"Metaspace","replacement":"▁","prepend_scheme":"always","split":true},
@@ -726,7 +726,7 @@ mod tests {
     fn escribir_pack_de_prueba(pack_path: &Path, name: &str) {
         let dims = 4usize;
         let fila = [0u8, 0, 0, 0];
-        let tok = TOKENIZER_MINIMO.as_bytes();
+        let tok = MINIMAL_TOKENIZER.as_bytes();
         let mut b: Vec<u8> = Vec::new();
         b.extend_from_slice(b"ANPK");
         b.extend_from_slice(&1u32.to_le_bytes());
@@ -769,14 +769,14 @@ mod tests {
     #[test]
     fn reemplazar_sobre_destino_existente_deja_el_contenido_del_origen() {
         let d = tempfile::tempdir().unwrap();
-        let origen = d.path().join("origen");
+        let source = d.path().join("origen");
         let target = d.path().join("destino");
-        std::fs::write(&origen, b"contenido nuevo").unwrap();
+        std::fs::write(&source, b"contenido nuevo").unwrap();
         std::fs::write(&target, b"contenido viejo, mas largo que el nuevo").unwrap();
 
-        replace_file(&origen, &target).unwrap();
+        replace_file(&source, &target).unwrap();
 
-        assert!(!origen.exists(), "el origen tiene que haberse movido, no copiado");
+        assert!(!source.exists(), "el origen tiene que haberse movido, no copiado");
         assert_eq!(std::fs::read(&target).unwrap(), b"contenido nuevo");
         assert!(no_stray_files(d.path()), "no puede quedar un archivo lateral sobrante");
     }
@@ -784,11 +784,11 @@ mod tests {
     #[test]
     fn reemplazar_sin_destino_previo_tambien_funciona() {
         let d = tempfile::tempdir().unwrap();
-        let origen = d.path().join("origen");
+        let source = d.path().join("origen");
         let target = d.path().join("destino");
-        std::fs::write(&origen, b"contenido").unwrap();
+        std::fs::write(&source, b"contenido").unwrap();
 
-        replace_file(&origen, &target).unwrap();
+        replace_file(&source, &target).unwrap();
 
         assert_eq!(std::fs::read(&target).unwrap(), b"contenido");
     }
@@ -803,11 +803,11 @@ mod tests {
         // target: the old file, which had been working until then, was lost
         // for no reason. Now it has to still be there.
         let d = tempfile::tempdir().unwrap();
-        let origen = d.path().join("origen"); // deliberadamente no se crea
+        let source = d.path().join("origen"); // deliberadamente no se crea
         let target = d.path().join("destino");
         std::fs::write(&target, b"contenido viejo que todavia funciona").unwrap();
 
-        let err = replace_file(&origen, &target).unwrap_err();
+        let err = replace_file(&source, &target).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
 
         assert_eq!(
@@ -841,10 +841,10 @@ mod tests {
 
         let p = Pack::open_pack(&ruta_vieja).unwrap(); // mmap abierto sobre ruta_vieja
 
-        let (p2, identidad) = reconcile(&conn, dir, &ruta_vieja, p)
+        let (p2, identity) = reconcile(&conn, dir, &ruta_vieja, p)
             .expect("reconciliar tiene que poder renombrar el archivo que tiene mapeado");
 
-        assert_eq!(identidad.0, "nuevo-es");
+        assert_eq!(identity.0, "nuevo-es");
         assert_eq!(p2.name(), "nuevo-es");
         assert!(!ruta_vieja.exists(), "el archivo con el nombre viejo tiene que haberse ido");
         assert!(
@@ -863,7 +863,7 @@ mod tests {
         let sha = crate::pack::sha256(&pack_path(dir, "es")).unwrap();
         vecstore::register_pack(&conn, "es", &sha, 4).unwrap();
         let mut v = LivePack::new_id(dir);
-        assert!(v.actual(&conn).is_some(), "el escenario exige el paquete abierto");
+        assert!(v.current(&conn).is_some(), "el escenario exige el paquete abierto");
         (conn, v)
     }
 
@@ -886,7 +886,7 @@ mod tests {
 
         // And the next search reopens it on its own.
         let mut v = v;
-        assert!(v.actual(&conn).is_some(), "tenía que reabrirse al volver a usarlo");
+        assert!(v.current(&conn).is_some(), "tenía que reabrirse al volver a usarlo");
         assert!(v.has_open_pack());
     }
 
@@ -906,7 +906,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(30));
         // Using it right before checking the deadline: it has no longer
         // been idle for 20 ms.
-        assert!(v.actual(&conn).is_some());
+        assert!(v.current(&conn).is_some());
         assert!(
             !v.release_if_idle(std::time::Duration::from_millis(20)),
             "si se acaba de usar, no está inactivo"

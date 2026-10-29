@@ -16,7 +16,7 @@ pub struct Config {
     /// searches (66% to 56%) in exchange for 4 points across languages. At
     /// 1.0 monolingual search ties with pure bm25 and cross-lingual gains 24
     /// points. See `docs/superpowers/medicion-corpus-real.md`.
-    #[serde(default = "peso_por_defecto")]
+    #[serde(default = "default_bm25_weight")]
     pub bm25_weight: f64,
 
     /// How many candidates `search_memory` returns by default, at most.
@@ -30,14 +30,14 @@ pub struct Config {
     /// the earlier ~8 full-snippet candidates (1,150 against 1,173), but the
     /// right memory is among those shown far more often (82% against 72%;
     /// on paraphrastic queries, 50% against 25%).
-    #[serde(default = "candidatos_por_defecto")]
+    #[serde(default = "default_candidates")]
     pub candidates: usize,
 
     /// How many characters each candidate's snippet is trimmed to in
     /// `search_memory`, before its cost counts against the token budget
     /// (`search::run_explained`). See `candidates` above for why it is
     /// trimmed at all.
-    #[serde(default = "extracto_por_defecto")]
+    #[serde(default = "default_excerpt")]
     pub excerpt: usize,
 
     /// How many recent memories to tell the agent about on connect, so it
@@ -51,12 +51,14 @@ pub struct Config {
     /// It costs tokens in every session, so it is short and can be turned
     /// off with 0. If the project saw no activity in the window, nothing is
     /// sent at all.
-    #[serde(default = "traspaso_por_defecto")]
-    pub traspaso_items: usize,
+    #[serde(default = "default_handoff_items")]
+    #[serde(rename = "traspaso_items")]
+    pub handoff_items: usize,
 
     /// How far back to look for that summary: `6h`, `2d`. Defaults to 24h.
-    #[serde(default = "traspaso_ventana_por_defecto")]
-    pub traspaso_ventana: String,
+    #[serde(default = "default_handoff_window")]
+    #[serde(rename = "traspaso_ventana")]
+    pub handoff_window: String,
 
     /// After how many seconds without searching the server releases the
     /// vocabulary pack. At 0 it never releases it.
@@ -68,26 +70,27 @@ pub struct Config {
     /// — on the order of 90 ms — on the next search, which by definition
     /// comes after a gap.
     #[serde(default = "release_after_default")]
-    pub soltar_paquete_tras: u64,
+    #[serde(rename = "soltar_paquete_tras")]
+    pub release_pack_after: u64,
 }
 
-fn peso_por_defecto() -> f64 {
+fn default_bm25_weight() -> f64 {
     1.0
 }
 
-fn candidatos_por_defecto() -> usize {
+fn default_candidates() -> usize {
     20
 }
 
-fn extracto_por_defecto() -> usize {
+fn default_excerpt() -> usize {
     120
 }
 
-fn traspaso_por_defecto() -> usize {
+fn default_handoff_items() -> usize {
     5
 }
 
-fn traspaso_ventana_por_defecto() -> String {
+fn default_handoff_window() -> String {
     "24h".to_string()
 }
 
@@ -98,12 +101,12 @@ fn release_after_default() -> u64 {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            bm25_weight: peso_por_defecto(),
-            candidates: candidatos_por_defecto(),
-            excerpt: extracto_por_defecto(),
-            traspaso_items: traspaso_por_defecto(),
-            traspaso_ventana: traspaso_ventana_por_defecto(),
-            soltar_paquete_tras: release_after_default(),
+            bm25_weight: default_bm25_weight(),
+            candidates: default_candidates(),
+            excerpt: default_excerpt(),
+            handoff_items: default_handoff_items(),
+            handoff_window: default_handoff_window(),
+            release_pack_after: release_after_default(),
         }
     }
 }
@@ -112,7 +115,7 @@ impl Default for Config {
 /// defaults. If it exists and is malformed, it **fails**: just like
 /// `tags.json`, a broken configuration that degraded silently would let the
 /// user believe their setting is applied when it is not.
-pub fn cargar(dir: &Path) -> Result<Config> {
+pub fn load(dir: &Path) -> Result<Config> {
     let pack_path = dir.join("config.json");
     if !pack_path.exists() {
         return Ok(Config::default());

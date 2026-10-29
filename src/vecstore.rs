@@ -87,7 +87,7 @@ pub fn register_pack(conn: &Connection, name: &str, sha: &str, dims: usize) -> R
 /// It also clears the in-progress install mark, in that same transaction:
 /// the mark exists to cover the stretch that ends right here, and leaving it
 /// alive an instant longer would cost an unnecessary reindex.
-pub fn adoptar_pack(conn: &Connection, name: &str, sha: &str, dims: usize) -> Result<()> {
+pub fn adopt_pack(conn: &Connection, name: &str, sha: &str, dims: usize) -> Result<()> {
     let tx = escritura(conn)?;
     tx.execute("delete from chunk_vectors", [])?;
     record_identity(&tx, name, sha, dims)?;
@@ -128,7 +128,7 @@ pub fn mark_install(conn: &Connection, name: &str) -> Result<()> {
 }
 
 /// El nombre del paquete cuya instalación quedó a medias, si quedó alguna.
-pub fn instalacion_pendiente(conn: &Connection) -> Result<Option<String>> {
+pub fn pending_install(conn: &Connection) -> Result<Option<String>> {
     match conn.query_row("select value from meta where key = ?1", [INSTALANDO], |r| {
         r.get::<_, String>(0)
     }) {
@@ -191,7 +191,7 @@ pub fn forget_pack(conn: &Connection) -> Result<()> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncOutcome {
     /// No chunk was left without a vector. `n` new ones were written.
-    Completa(usize),
+    Complete(usize),
     /// Another process changed the registered pack while this one was
     /// embedding. The batch in flight was discarded without writing it and
     /// chunks are left without a vector; `n` are the ones that did get
@@ -202,19 +202,19 @@ pub enum SyncOutcome {
     /// same, and ending up with fewer vectors than there should be is
     /// exactly the acceptable degradation; the unacceptable one would have
     /// been writing that batch.
-    Abandonada(usize),
+    Abandoned(usize),
 }
 
 impl SyncOutcome {
     /// How many vectors were written, however it ended.
-    pub fn escritos(self) -> usize {
+    pub fn written(self) -> usize {
         match self {
-            SyncOutcome::Completa(n) | SyncOutcome::Abandonada(n) => n,
+            SyncOutcome::Complete(n) | SyncOutcome::Abandoned(n) => n,
         }
     }
 
     pub fn abandonada(self) -> bool {
-        matches!(self, SyncOutcome::Abandonada(_))
+        matches!(self, SyncOutcome::Abandoned(_))
     }
 }
 
@@ -248,12 +248,12 @@ impl SyncOutcome {
 /// under that very lock, the registered one. Batches already written need no
 /// undoing: whoever changes the identity goes through `adopt_pack`, which
 /// deletes `chunk_vectors` entirely.
-pub fn sync(conn: &Connection, pack: &Pack, esperada: &PackIdentity) -> Result<SyncOutcome> {
+pub fn sync(conn: &Connection, pack: &Pack, expected: &PackIdentity) -> Result<SyncOutcome> {
     let mut total = 0usize;
     loop {
         // The pending set is recomputed each round: between batches,
         // another process may have embedded part of what was missing.
-        let pendientes: Vec<(i64, String)> = conn
+        let pending: Vec<(i64, String)> = conn
             .prepare(
                 "select c.id, c.body from chunks c
                    left join chunk_vectors v on v.chunk_id = c.id
@@ -263,20 +263,20 @@ pub fn sync(conn: &Connection, pack: &Pack, esperada: &PackIdentity) -> Result<S
             )?
             .query_map([LOTE as i64], |r| Ok((r.get(0)?, r.get(1)?)))?
             .collect::<rusqlite::Result<_>>()?;
-        if pendientes.is_empty() {
+        if pending.is_empty() {
             break;
         }
-        let mut vectores: Vec<(i64, Vec<u8>)> = Vec::with_capacity(pendientes.len());
-        for (id, cuerpo) in &pendientes {
-            vectores.push((*id, a_blob(&pack.embeber(cuerpo)?)));
+        let mut vectores: Vec<(i64, Vec<u8>)> = Vec::with_capacity(pending.len());
+        for (id, body) in &pending {
+            vectores.push((*id, a_blob(&pack.embed(body)?)));
         }
         let tx = escritura(conn)?;
         // With the write lock already held: is the pack this batch was
         // embedded with still the registered one? If not, it is abandoned
         // without writing anything. The transaction dies without `commit`
         // and leaves no trace.
-        if registered_pack(&tx)?.as_ref() != Some(esperada) {
-            return Ok(SyncOutcome::Abandonada(total));
+        if registered_pack(&tx)?.as_ref() != Some(expected) {
+            return Ok(SyncOutcome::Abandoned(total));
         }
         for (id, blob) in &vectores {
             // Two things may have happened since the `select` above, and
@@ -298,11 +298,11 @@ pub fn sync(conn: &Connection, pack: &Pack, esperada: &PackIdentity) -> Result<S
             )?;
         }
         tx.commit()?;
-        if pendientes.len() < LOTE {
+        if pending.len() < LOTE {
             break;
         }
     }
-    Ok(SyncOutcome::Completa(total))
+    Ok(SyncOutcome::Complete(total))
 }
 
 /// (chunks with a **usable** vector, total chunks). A gap means there are
@@ -329,9 +329,9 @@ pub fn coverage(conn: &Connection, dims: usize) -> Result<(usize, usize)> {
 /// chunk.
 pub fn search_vectors(
     conn: &Connection,
-    consulta: &[f32],
+    query_: &[f32],
     q: &Query,
-    limit_: usize,
+    limit: usize,
 ) -> Result<Vec<VectorHit>> {
     let mut sql = String::from(
         "select m.id, v.chunk_id, v.vec
@@ -346,18 +346,18 @@ pub fn search_vectors(
     // bm25 discards and the merge would mix them in with nothing noticing.
     sql.push_str(&crate::search::filters_for(q, &mut ps));
     let mut stmt = conn.prepare(&sql)?;
-    let filas = stmt.query_map(rusqlite::params_from_iter(ps.iter()), |r| {
+    let rows = stmt.query_map(rusqlite::params_from_iter(ps.iter()), |r| {
         Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, Vec<u8>>(2)?))
     })?;
 
     let mut mejor: HashMap<i64, (i64, f32)> = HashMap::new();
-    for fila in filas {
+    for fila in rows {
         let (mid, cid, blob) = fila?;
         let v = de_blob(&blob);
-        if v.len() != consulta.len() {
+        if v.len() != query_.len() {
             continue; // dimensiones distintas: vector de otro paquete
         }
-        let cos: f32 = v.iter().zip(consulta).map(|(a, b)| a * b).sum();
+        let cos: f32 = v.iter().zip(query_).map(|(a, b)| a * b).sum();
         let e = mejor.entry(mid).or_insert((cid, f32::NEG_INFINITY));
         if cos > e.1 {
             *e = (cid, cos);
@@ -375,6 +375,6 @@ pub fn search_vectors(
             .unwrap_or(std::cmp::Ordering::Equal)
             .then(a.memory_id.cmp(&b.memory_id))
     });
-    out.truncate(limit_);
+    out.truncate(limit);
     Ok(out)
 }

@@ -15,7 +15,7 @@ const VERSION: u32 = 1;
 
 #[derive(Debug)]
 pub struct Pack {
-    map_: Mmap,
+    mapping: Mmap,
     tok: Tokenizer,
     name: String,
     dims: usize,
@@ -69,32 +69,32 @@ impl Pack {
     /// penalise whoever does not even use the vector layer. The sha is
     /// verified once, on install (see `mem model install`).
     pub fn open_pack(pack_path: &Path) -> Result<Pack> {
-        let archivo = std::fs::File::open(pack_path)
+        let file = std::fs::File::open(pack_path)
             .with_context(|| format!("no se pudo abrir el paquete {}", pack_path.display()))?;
-        let map_ = unsafe { Mmap::map(&archivo)? };
-        if map_.len() < 20 || &map_[0..4] != MARCA {
+        let mapping = unsafe { Mmap::map(&file)? };
+        if mapping.len() < 20 || &mapping[0..4] != MARCA {
             bail!("{} no es un paquete de anathem: falta la marca ANPK", pack_path.display());
         }
         let mut o = 4usize;
-        let version = u32_en(&map_, &mut o, pack_path, "versión")?;
+        let version = u32_en(&mapping, &mut o, pack_path, "versión")?;
         if version != VERSION {
             bail!(
                 "el paquete {} declara la versión {version} y este binario entiende la {VERSION}",
                 pack_path.display()
             );
         }
-        let dims = u32_en(&map_, &mut o, pack_path, "dimensiones")? as usize;
-        let n_tokens = u32_en(&map_, &mut o, pack_path, "cantidad de tokens")? as usize;
-        let name_len = u32_en(&map_, &mut o, pack_path, "largo del nombre")? as usize;
+        let dims = u32_en(&mapping, &mut o, pack_path, "dimensiones")? as usize;
+        let n_tokens = u32_en(&mapping, &mut o, pack_path, "cantidad de tokens")? as usize;
+        let name_len = u32_en(&mapping, &mut o, pack_path, "largo del nombre")? as usize;
         if dims == 0 || n_tokens == 0 {
             bail!("el paquete {} declara 0 dimensiones o 0 tokens", pack_path.display());
         }
-        let name_bytes = take_bytes(&map_, &mut o, name_len, pack_path, "nombre")?;
+        let name_bytes = take_bytes(&mapping, &mut o, name_len, pack_path, "nombre")?;
         let name = std::str::from_utf8(name_bytes)
             .with_context(|| format!("el nombre del paquete {} no es UTF-8 válido", pack_path.display()))?
             .to_string();
-        let tok_len = u64_en(&map_, &mut o, pack_path, "largo del tokenizador")? as usize;
-        let raw = take_bytes(&map_, &mut o, tok_len, pack_path, "tokenizador")?;
+        let tok_len = u64_en(&mapping, &mut o, pack_path, "largo del tokenizador")? as usize;
+        let raw = take_bytes(&mapping, &mut o, tok_len, pack_path, "tokenizador")?;
         let tok = Tokenizer::from_bytes(raw).map_err(|e| {
             anyhow::anyhow!("el tokenizador del paquete {} no se pudo leer: {e}", pack_path.display())
         })?;
@@ -124,8 +124,8 @@ impl Pack {
                 pack_path.display()
             );
         }
-        let scales = f32s_en(&map_, &mut o, dims, pack_path, "escalas")?;
-        let mins = f32s_en(&map_, &mut o, dims, pack_path, "mínimos")?;
+        let scales = f32s_en(&mapping, &mut o, dims, pack_path, "escalas")?;
+        let mins = f32s_en(&mapping, &mut o, dims, pack_path, "mínimos")?;
         let table_size = n_tokens.checked_mul(dims).with_context(|| {
             format!("el paquete {} declara una tabla demasiado grande", pack_path.display())
         })?;
@@ -133,10 +133,10 @@ impl Pack {
         let fin_tabla = o.checked_add(table_size).with_context(|| {
             format!("el paquete {} declara una tabla demasiado grande", pack_path.display())
         })?;
-        if map_.len() < fin_tabla {
+        if mapping.len() < fin_tabla {
             bail!("la tabla del paquete {} está truncada", pack_path.display());
         }
-        Ok(Pack { map_, tok, name, dims, n_tokens, scales, mins, table_start })
+        Ok(Pack { mapping, tok, name, dims, n_tokens, scales, mins, table_start })
     }
 
     pub fn name(&self) -> &str {
@@ -150,29 +150,29 @@ impl Pack {
     /// The average of the rows for the text's tokens, normalized. Text with
     /// no tokens returns the null vector instead of failing: it is a
     /// legitimate input (a chunk of nothing but whitespace), not an error.
-    pub fn embeber(&self, texto: &str) -> Result<Vec<f32>> {
+    pub fn embed(&self, text: &str) -> Result<Vec<f32>> {
         let enc = self
             .tok
-            .encode(texto, false)
+            .encode(text, false)
             .map_err(|e| anyhow::anyhow!("no se pudo tokenizar: {e}"))?;
         let mut v = vec![0f32; self.dims];
-        let mut usados = 0usize;
+        let mut used = 0usize;
         for &id in enc.get_ids() {
             let i = id as usize;
             if i >= self.n_tokens {
                 continue;
             }
             let a = self.table_start + i * self.dims;
-            let fila = &self.map_[a..a + self.dims];
+            let fila = &self.mapping[a..a + self.dims];
             for d in 0..self.dims {
                 v[d] += fila[d] as f32 * self.scales[d] + self.mins[d];
             }
-            usados += 1;
+            used += 1;
         }
-        if usados == 0 {
+        if used == 0 {
             return Ok(v);
         }
-        let k = usados as f32;
+        let k = used as f32;
         let mut norma = 0f32;
         for d in 0..self.dims {
             v[d] /= k;

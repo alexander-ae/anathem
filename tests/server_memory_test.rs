@@ -20,9 +20,9 @@ fn mem(db: &Path, args: &[&str]) -> std::process::Output {
 /// Lee `VmRSS` (memoria residente real, en kB) de `/proc/<pid>/status`.
 #[cfg(target_os = "linux")]
 fn vmrss_kb(pid: u32) -> u64 {
-    let contenido = std::fs::read_to_string(format!("/proc/{pid}/status"))
+    let content = std::fs::read_to_string(format!("/proc/{pid}/status"))
         .unwrap_or_else(|e| panic!("no se pudo leer /proc/{pid}/status: {e}"));
-    for line_ in contenido.lines() {
+    for line_ in content.lines() {
         if let Some(resto) = line_.strip_prefix("VmRSS:") {
             return resto
                 .split_whitespace()
@@ -36,8 +36,8 @@ fn vmrss_kb(pid: u32) -> u64 {
 }
 
 #[cfg(target_os = "linux")]
-fn enviar(entrada: &mut impl Write, json: &str) {
-    writeln!(entrada, "{json}").unwrap();
+fn enviar(entry: &mut impl Write, json: &str) {
+    writeln!(entry, "{json}").unwrap();
 }
 
 #[cfg(target_os = "linux")]
@@ -79,14 +79,14 @@ fn el_servidor_abre_el_paquete_recien_en_la_primera_busqueda() {
         .spawn()
         .unwrap();
     let pid = hijo.id();
-    let mut entrada = hijo.stdin.take().unwrap();
+    let mut entry = hijo.stdin.take().unwrap();
     let mut out_text = BufReader::new(hijo.stdout.take().unwrap());
 
-    enviar(&mut entrada, r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
+    enviar(&mut entry, r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
     let resp = leer_linea(&mut out_text);
     assert!(resp.contains("protocolVersion"), "el servidor no arrancó: {resp}");
 
-    enviar(&mut entrada, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#);
+    enviar(&mut entry, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#);
     let resp = leer_linea(&mut out_text);
     assert!(resp.contains("search_memory"), "tools/list no respondió bien: {resp}");
 
@@ -104,7 +104,7 @@ fn el_servidor_abre_el_paquete_recien_en_la_primera_busqueda() {
     );
 
     enviar(
-        &mut entrada,
+        &mut entry,
         r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search_memory","arguments":{"query":"hola"}}}"#,
     );
     let resp = leer_linea(&mut out_text);
@@ -141,7 +141,7 @@ fn avisa_al_arrancar_si_el_paquete_registrado_desaparecio() {
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("m.db");
     let conn = anathem::db::open(&db).unwrap();
-    anathem::vecstore::adoptar_pack(&conn, "fantasma", "abc", 256).unwrap();
+    anathem::vecstore::adopt_pack(&conn, "fantasma", "abc", 256).unwrap();
     drop(conn);
 
     let mut s = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))

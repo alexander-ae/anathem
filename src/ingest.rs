@@ -81,8 +81,8 @@ fn insert_row(tx: &Connection, m: &NewMemory, agent: Option<&str>) -> Result<i64
 /// from the body: if one path computed it differently — or did not recompute
 /// it when the body changed — the memory would end up showing a title that
 /// no longer describes what it holds.
-pub fn title_from(texto: &str) -> String {
-    texto
+pub fn title_from(text: &str) -> String {
+    text
         .lines()
         .map(str::trim)
         .find(|l| !l.is_empty())
@@ -94,11 +94,11 @@ pub fn title_from(texto: &str) -> String {
 
 pub fn save_explicit(
     conn: &Connection,
-    texto: &str,
+    text: &str,
     project: &str,
-    tags_dados: Vec<String>,
+    given_tags: Vec<String>,
 ) -> Result<(i64, Vec<String>)> {
-    let g = save_with_topic(conn, texto, project, tags_dados, None, None)?;
+    let g = save_with_topic(conn, text, project, given_tags, None, None)?;
     Ok((g.id, g.tags))
 }
 
@@ -136,8 +136,8 @@ pub struct Saved {
 /// a new topic and replaces nothing, with a message identical to that of a
 /// legitimately new key. What normalizing does not fix (`stack-frontend`
 /// against `stack-del-frontend`) is made visible by `Saved::other_keys`.
-pub fn normalize_topic(clave: &str) -> Result<String> {
-    let t = clave.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+pub fn normalize_topic(key: &str) -> Result<String> {
+    let t = key.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
     if t.is_empty() {
         bail!("la clave de tema no puede estar vacía");
     }
@@ -193,13 +193,13 @@ impl std::error::Error for BadRequest {}
 /// before reading and the second waits for the first.
 pub fn save_with_topic(
     conn: &Connection,
-    texto: &str,
+    text: &str,
     project: &str,
-    tags_dados: Vec<String>,
+    given_tags: Vec<String>,
     topic: Option<&str>,
     supersedes: Option<i64>,
 ) -> Result<Saved> {
-    save_with_topic_by(conn, texto, project, tags_dados, topic, supersedes, None)
+    save_with_topic_by(conn, text, project, given_tags, topic, supersedes, None)
 }
 
 /// Same as `save_with_topic`, recording which agent saved it.
@@ -212,30 +212,30 @@ pub fn save_with_topic(
 #[allow(clippy::too_many_arguments)]
 pub fn save_with_topic_by(
     conn: &Connection,
-    texto: &str,
+    text: &str,
     project: &str,
-    tags_dados: Vec<String>,
+    given_tags: Vec<String>,
     topic: Option<&str>,
     supersedes: Option<i64>,
     agent: Option<&str>,
 ) -> Result<Saved> {
     let topic = topic.map(normalize_topic).transpose()?;
-    let tags = if tags_dados.is_empty() {
-        crate::tags::classify(texto).map_err(|e| anyhow::anyhow!(e))?
+    let tags = if given_tags.is_empty() {
+        crate::tags::classify(text).map_err(|e| anyhow::anyhow!(e))?
     } else {
-        tags_dados
+        given_tags
     };
     let m = NewMemory {
         project: project.to_string(),
-        title: title_from(texto),
-        body: texto.to_string(),
+        title: title_from(text),
+        body: text.to_string(),
         created: chrono::Local::now().format("%Y-%m-%d").to_string(),
         event_start: None,
         event_end: None,
         source: "explicit".into(),
         ext_id: None,
         tags: tags.clone(),
-        refs: crate::tags::extract_refs(texto),
+        refs: crate::tags::extract_refs(text),
     };
 
     if topic.is_none() && supersedes.is_none() {
@@ -296,8 +296,8 @@ pub fn save_with_topic_by(
     let key_is_new = topic.is_some() && current_one.is_none();
     let goal = explicit_one.or(current_one);
     let id = insert_row(&tx, &m, agent)?;
-    if let Some((vieja, _)) = &goal {
-        crate::supersede::link(&tx, id, *vieja)?;
+    if let Some((older, _)) = &goal {
+        crate::supersede::link(&tx, id, *older)?;
     }
     if let Some(t) = &topic {
         tx.execute("update memories set topic = ?2 where id = ?1", params![id, t])?;
@@ -326,10 +326,10 @@ fn active_topic_keys(conn: &Connection, project: &str, excepto: &str) -> Result<
           where project = ?1 and topic is not null and topic <> ?2 and status = 'active'
           order by topic limit ?3",
     )?;
-    let claves = stmt
+    let keys = stmt
         .query_map(params![project, excepto, MAX_KEYS_LISTED as i64 + 1], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?;
-    Ok(claves)
+    Ok(keys)
 }
 
 impl Saved {
@@ -351,18 +351,18 @@ impl Saved {
                 r.id, r.title, self.id
             )
         });
-        let Some(clave) = self.topic.as_deref() else {
-            return reemplazo.map(|r| capitalizar(&r));
+        let Some(key) = self.topic.as_deref() else {
+            return reemplazo.map(|r| capitalize(&r));
         };
         match (reemplazo, self.key_is_new) {
-            (Some(r), false) => Some(format!("Tema «{clave}»: {r}")),
+            (Some(r), false) => Some(format!("Tema «{key}»: {r}")),
             (Some(r), true) => Some(format!(
-                "{} Tema «{clave}»: clave nueva; la próxima memoria con esa clave reemplazará a esta.",
-                capitalizar(&r)
+                "{} Tema «{key}»: clave nueva; la próxima memoria con esa clave reemplazará a esta.",
+                capitalize(&r)
             )),
             (None, _) => {
                 let mut msg = format!(
-                    "Tema «{clave}»: no había una memoria activa con esa clave, se guardó como nueva."
+                    "Tema «{key}»: no había una memoria activa con esa clave, se guardó como nueva."
                 );
                 if self.other_keys.is_empty() {
                     msg.push_str(&format!(" No hay otras claves de tema en {}.", self.project));
@@ -382,7 +382,7 @@ impl Saved {
     }
 }
 
-fn capitalizar(s: &str) -> String {
+fn capitalize(s: &str) -> String {
     let mut c = s.chars();
     match c.next() {
         Some(p) => p.to_uppercase().collect::<String>() + c.as_str(),

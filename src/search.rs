@@ -125,32 +125,32 @@ pub struct Explained {
 /// vectors. Whoever only searches uses `de_lectura` and has nothing to write
 /// with; whoever also saves uses `de_servidor`, which receives the whole
 /// pair exactly as `packstore::LivePack::current` hands it over.
-pub struct Contexto<'a> {
+pub struct SearchContext<'a> {
     pack: Option<&'a Pack>,
-    identidad: Option<&'a crate::vecstore::PackIdentity>,
+    identity: Option<&'a crate::vecstore::PackIdentity>,
     pub bm25_weight: f64,
 }
 
-impl Contexto<'static> {
+impl SearchContext<'static> {
     /// Search with no vector layer: the long-standing behaviour.
-    pub fn solo_bm25() -> Contexto<'static> {
-        Contexto { pack: None, identidad: None, bm25_weight: 1.0 }
+    pub fn bm25_only() -> SearchContext<'static> {
+        SearchContext { pack: None, identity: None, bm25_weight: 1.0 }
     }
 }
 
-impl<'a> Contexto<'a> {
+impl<'a> SearchContext<'a> {
     /// For searching. Reading with the wrong pack gives a worse result, not
     /// a mixed index, so reads do not need the identity.
-    pub fn de_lectura(pack: Option<&'a Pack>, bm25_weight: f64) -> Contexto<'a> {
-        Contexto { pack, identidad: None, bm25_weight }
+    pub fn for_reading(pack: Option<&'a Pack>, bm25_weight: f64) -> SearchContext<'a> {
+        SearchContext { pack, identity: None, bm25_weight }
     }
 
     /// For the MCP server, which searches and also saves.
-    pub fn de_servidor(
-        activo: Option<(&'a Pack, &'a crate::vecstore::PackIdentity)>,
+    pub fn for_server(
+        active: Option<(&'a Pack, &'a crate::vecstore::PackIdentity)>,
         bm25_weight: f64,
-    ) -> Contexto<'a> {
-        Contexto { pack: activo.map(|(p, _)| p), identidad: activo.map(|(_, i)| i), bm25_weight }
+    ) -> SearchContext<'a> {
+        SearchContext { pack: active.map(|(p, _)| p), identity: active.map(|(_, i)| i), bm25_weight }
     }
 
     /// The pack to embed the query with, if there is one.
@@ -160,8 +160,8 @@ impl<'a> Contexto<'a> {
 
     /// The pair `vecstore::sync` demands. `None` in a read context even
     /// when a pack is present: there is nothing to write there.
-    pub fn para_escribir(&self) -> Option<(&Pack, &crate::vecstore::PackIdentity)> {
-        match (self.pack, self.identidad) {
+    pub fn for_writing(&self) -> Option<(&Pack, &crate::vecstore::PackIdentity)> {
+        match (self.pack, self.identity) {
             (Some(p), Some(i)) => Some((p, i)),
             _ => None,
         }
@@ -229,7 +229,7 @@ fn hit_de_chunk(conn: &Connection, chunk_id: i64) -> Result<Option<(SearchHit, i
 pub fn run_explained(
     conn: &Connection,
     q: &Query,
-    ctx: &Contexto,
+    ctx: &SearchContext,
 ) -> Result<Vec<Explained>> {
     let m = to_match(&q.text);
 
@@ -278,11 +278,11 @@ pub fn run_explained(
     }
 
     // --- vector retrieval, when there is a pack ---
-    let mut cosenos: HashMap<i64, f32> = HashMap::new();
+    let mut cosines: HashMap<i64, f32> = HashMap::new();
     let mut orden_vec: Vec<i64> = Vec::new();
     if let Some(p) = ctx.pack() {
         if !q.text.trim().is_empty() {
-            let cv = p.embeber(&q.text)?;
+            let cv = p.embed(&q.text)?;
             // A null vector (a query with no tokens the pack knows: only
             // punctuation, an emoji, a script it does not cover) has cosine
             // 0 against everything, so `vecstore::search_vectors` would
@@ -292,7 +292,7 @@ pub fn run_explained(
             let nulo = cv.iter().all(|&x| x == 0.0);
             let vec_hits = if nulo { Vec::new() } else { crate::vecstore::search_vectors(conn, &cv, q, CANDIDATES)? };
             for a in vec_hits {
-                cosenos.insert(a.memory_id, a.cosine);
+                cosines.insert(a.memory_id, a.cosine);
                 orden_vec.push(a.memory_id);
                 if !best.contains_key(&a.memory_id) {
                     if let Some(par) = hit_de_chunk(conn, a.chunk_id)? {
@@ -308,7 +308,7 @@ pub fn run_explained(
     }
 
     // --- orden final ---
-    let fusionado: Vec<i64> = if orden_vec.is_empty() {
+    let merged: Vec<i64> = if orden_vec.is_empty() {
         orden_bm25
     } else {
         crate::fusion::rrf(&orden_bm25, &orden_vec, ctx.bm25_weight)
@@ -316,20 +316,20 @@ pub fn run_explained(
 
     // Pinned ones still come first, as always: the merge orders within each
     // group, it does not cut across them.
-    let mut fijadas: Vec<i64> = Vec::new();
+    let mut pinned_ids: Vec<i64> = Vec::new();
     let mut resto: Vec<i64> = Vec::new();
-    for id in fusionado {
+    for id in merged {
         match best.get(&id) {
-            Some((_, 1)) => fijadas.push(id),
+            Some((_, 1)) => pinned_ids.push(id),
             Some(_) => resto.push(id),
             None => {}
         }
     }
-    fijadas.extend(resto);
+    pinned_ids.extend(resto);
 
     let mut out = Vec::new();
     let mut spent = 0usize;
-    for id in fijadas {
+    for id in pinned_ids {
         if out.len() >= q.limit {
             break;
         }
@@ -352,12 +352,12 @@ pub fn run_explained(
         }
         spent += cost;
         let bm25 = if hit.score < 0.0 { Some(hit.score) } else { None };
-        let cosine = cosenos.get(&id).copied();
+        let cosine = cosines.get(&id).copied();
         out.push(Explained { hit, bm25, cosine });
     }
     Ok(out)
 }
 
-pub fn run(conn: &Connection, q: &Query, ctx: &Contexto) -> Result<Vec<SearchHit>> {
+pub fn run(conn: &Connection, q: &Query, ctx: &SearchContext) -> Result<Vec<SearchHit>> {
     Ok(run_explained(conn, q, ctx)?.into_iter().map(|e| e.hit).collect())
 }

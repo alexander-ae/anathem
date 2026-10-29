@@ -66,8 +66,8 @@ fn el_presupuesto_de_la_busqueda_se_puede_subir() {
             .args(["--db", db.to_str().unwrap()]).args(args).output().unwrap()
     };
     for i in 0..8 {
-        let cuerpo = format!("memoria numero {i} sobre cacheo de propiedades y {}", "relleno ".repeat(60));
-        mem(&["save", &cuerpo, "--project", "p"]);
+        let body = format!("memoria numero {i} sobre cacheo de propiedades y {}", "relleno ".repeat(60));
+        mem(&["save", &body, "--project", "p"]);
     }
     let apretado = mem(&["search", "cacheo propiedades", "--limit", "8"]);
     let holgado = mem(&["search", "cacheo propiedades", "--limit", "8", "--budget", "100000"]);

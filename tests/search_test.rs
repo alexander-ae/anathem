@@ -27,7 +27,7 @@ fn fixture() -> (tempfile::TempDir, Connection) {
 fn encuentra_por_termino() {
     let (_d, conn) = fixture();
     let q = search::Query { text: "cache staleness".into(), ..Default::default() };
-    let hits = search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap();
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
     assert!(!hits.is_empty(), "sin resultados");
     assert_eq!(hits[0].ext_id.as_deref(), Some("a"));
 }
@@ -40,7 +40,7 @@ fn filtra_por_proyecto() {
         project: Some("acme-billing".into()),
         ..Default::default()
     };
-    assert!(search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap().is_empty(), "no debe cruzar de proyecto cuando se filtra");
+    assert!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().is_empty(), "no debe cruzar de proyecto cuando se filtra");
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn deduplica_por_memoria() {
     let largo = "cache ".repeat(400);
     seed(&conn, "x", "p", &largo);
     let q = search::Query { text: "cache".into(), ..Default::default() };
-    let hits = search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap();
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(hits.len(), 1, "una memoria debe aparecer una sola vez, hubo {}", hits.len());
 }
 
@@ -60,7 +60,7 @@ fn excluye_las_superseded() {
     let (_d, conn) = fixture();
     conn.execute("update memories set status='superseded' where ext_id='a'", []).unwrap();
     let q = search::Query { text: "cache staleness".into(), ..Default::default() };
-    let hits = search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap();
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
     assert!(hits.iter().all(|h| h.ext_id.as_deref() != Some("a")));
 }
 
@@ -72,7 +72,7 @@ fn respeta_el_presupuesto_de_tokens() {
         seed(&conn, &format!("m{i}"), "p", &format!("cache numero {i} {}", "x".repeat(2000)));
     }
     let q = search::Query { text: "cache".into(), budget_tokens: 300, ..Default::default() };
-    let hits = search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap();
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
     let tokens: usize = hits.iter().map(|h| (h.title.len() + h.snippet.len()) / 4).sum();
     assert!(tokens <= 300, "se pasó del presupuesto: {tokens} tokens");
     assert!(!hits.is_empty(), "el presupuesto no debe vaciar el resultado");
@@ -87,7 +87,7 @@ fn las_pinned_van_primero() {
         project: Some("acme-billing".into()),
         ..Default::default()
     };
-    let hits = search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap();
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(hits[0].ext_id.as_deref(), Some("b"), "la pinned debe ir primero");
 }
 
@@ -105,9 +105,9 @@ fn el_orden_es_deterministico_ante_empates_de_bm25() {
     }
     let q = search::Query { text: "faro".into(), project: Some("p".into()), limit: 40, ..Default::default() };
 
-    let primera: Vec<Option<String>> = search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap().into_iter().map(|h| h.ext_id).collect();
+    let primera: Vec<Option<String>> = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().into_iter().map(|h| h.ext_id).collect();
     for _ in 0..5 {
-        let siguiente: Vec<Option<String>> = search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap().into_iter().map(|h| h.ext_id).collect();
+        let siguiente: Vec<Option<String>> = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().into_iter().map(|h| h.ext_id).collect();
         assert_eq!(primera, siguiente, "el orden cambió entre corridas idénticas");
     }
 }
@@ -135,7 +135,7 @@ fn pinned_sobrevive_el_recorte_de_candidatos() {
         limit: 5,
         ..Default::default()
     };
-    let hits = search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap();
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(
         hits[0].ext_id.as_deref(),
         Some("pinned1"),
@@ -149,7 +149,7 @@ mod apoyo;
 fn sin_paquete_el_resultado_es_el_de_siempre() {
     let (_d, conn) = fixture();
     let q = search::Query { text: "cache staleness".into(), ..Default::default() };
-    let hits = search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap();
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(hits[0].ext_id.as_deref(), Some("a"));
 }
 
@@ -168,10 +168,10 @@ fn con_paquete_aparece_lo_que_bm25_no_encuentra() {
     apoyo::registrar_y_sincronizar(&conn, &p);
 
     let q = search::Query { text: "hola".into(), ..Default::default() };
-    let solo = search::run(&conn, &q, &search::Contexto::solo_bm25()).unwrap();
+    let solo = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(solo.len(), 1, "bm25 solo encuentra la que comparte la palabra");
 
-    let ctx = search::Contexto::de_lectura(Some(&p), 0.25);
+    let ctx = search::SearchContext::for_reading(Some(&p), 0.25);
     let con = search::run(&conn, &q, &ctx).unwrap();
     assert_eq!(con.len(), 2, "la fusión debe traer también la vectorial");
     assert_eq!(con[0].ext_id.as_deref(), Some("x"), "la exacta sigue primera");
@@ -190,7 +190,7 @@ fn las_memorias_fijadas_siguen_primero_con_fusion() {
     apoyo::registrar_y_sincronizar(&conn, &p);
 
     let q = search::Query { text: "hola".into(), ..Default::default() };
-    let ctx = search::Contexto::de_lectura(Some(&p), 0.25);
+    let ctx = search::SearchContext::for_reading(Some(&p), 0.25);
     let hits = search::run(&conn, &q, &ctx).unwrap();
     assert_eq!(hits[0].ext_id.as_deref(), Some("y"), "la fijada va primera igual");
 }
@@ -212,7 +212,7 @@ fn consulta_sin_tokens_conocidos_no_da_resultados_espurios() {
     apoyo::registrar_y_sincronizar(&conn, &p);
 
     let q = search::Query { text: "xyz".into(), ..Default::default() };
-    let ctx = search::Contexto::de_lectura(Some(&p), 0.25);
+    let ctx = search::SearchContext::for_reading(Some(&p), 0.25);
     let hits = search::run(&conn, &q, &ctx).unwrap();
     assert!(
         hits.is_empty(),
@@ -242,7 +242,7 @@ fn el_extracto_deja_entrar_mas_candidatos_en_el_mismo_presupuesto() {
     // cortado la lista al tamaño que daban los fragmentos completos y
     // devolver más candidatos breves no cambiaría nada.
     let (_d, conn) = fixture_cuerpos_largos();
-    let ctx = search::Contexto::solo_bm25();
+    let ctx = search::SearchContext::bm25_only();
 
     let sin_recorte = search::Query {
         text: "faro".into(),
@@ -269,7 +269,7 @@ fn el_extracto_deja_entrar_mas_candidatos_en_el_mismo_presupuesto() {
 #[test]
 fn el_extracto_recorta_el_fragmento_a_n_caracteres() {
     let (_d, conn) = fixture_cuerpos_largos();
-    let ctx = search::Contexto::solo_bm25();
+    let ctx = search::SearchContext::bm25_only();
     let q = search::Query {
         text: "faro".into(),
         limit: 12,
@@ -314,7 +314,7 @@ fn el_extracto_no_parte_un_caracter_multibyte() {
             excerpt: Some(n),
             ..Default::default()
         };
-        let hits = search::run_explained(&conn, &q, &search::Contexto::solo_bm25()).unwrap();
+        let hits = search::run_explained(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
         assert_eq!(hits.len(), 1, "n={n}: se esperaba 1 resultado");
         assert_eq!(
             hits[0].hit.snippet.chars().count(),
@@ -329,7 +329,7 @@ fn extracto_none_deja_el_fragmento_completo_como_antes() {
     let (_d, conn) = fixture();
     let q_viejo = search::Query { text: "cache staleness".into(), ..Default::default() };
     let q_explicito = search::Query { text: "cache staleness".into(), excerpt: None, ..Default::default() };
-    let ctx = search::Contexto::solo_bm25();
+    let ctx = search::SearchContext::bm25_only();
 
     let hits_viejo = search::run_explained(&conn, &q_viejo, &ctx).unwrap();
     let hits_explicito = search::run_explained(&conn, &q_explicito, &ctx).unwrap();

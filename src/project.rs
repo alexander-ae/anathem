@@ -7,7 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
-pub const SIN_PROYECTO: &str = "sin-proyecto";
+pub const NO_PROJECT: &str = "sin-proyecto";
 
 /// Derives the project name from the working directory.
 ///
@@ -20,9 +20,9 @@ pub const SIN_PROYECTO: &str = "sin-proyecto";
 /// It does not invoke `git`: it reads `.git` directly. That way it works
 /// even when git is not installed, costs no subprocess, and does not depend
 /// on the binary inheriting a sane PATH.
-pub fn detectar(cwd: &Path) -> Option<String> {
-    let comun = dir_git_comun(cwd)?;
-    if let Some(n) = nombre_del_remoto(&comun.join("config")) {
+pub fn detect(cwd: &Path) -> Option<String> {
+    let comun = common_git_dir(cwd)?;
+    if let Some(n) = remote_name(&comun.join("config")) {
         return Some(n);
     }
     // With no remote, the name of the folder holding the common `.git`.
@@ -34,7 +34,7 @@ pub fn detectar(cwd: &Path) -> Option<String> {
 /// worktree's. In a worktree, `.git` is a file pointing at
 /// `<main>/.git/worktrees/<name>`, and inside there is a `commondir` file
 /// with the relative path back to the real `.git`.
-fn dir_git_comun(cwd: &Path) -> Option<PathBuf> {
+fn common_git_dir(cwd: &Path) -> Option<PathBuf> {
     let mut d = cwd;
     loop {
         let punto_git = d.join(".git");
@@ -42,8 +42,8 @@ fn dir_git_comun(cwd: &Path) -> Option<PathBuf> {
             return Some(punto_git);
         }
         if punto_git.is_file() {
-            let contenido = std::fs::read_to_string(&punto_git).ok()?;
-            let pack_path = contenido.strip_prefix("gitdir:")?.trim();
+            let content = std::fs::read_to_string(&punto_git).ok()?;
+            let pack_path = content.strip_prefix("gitdir:")?.trim();
             let gitdir = if Path::new(pack_path).is_absolute() {
                 PathBuf::from(pack_path)
             } else {
@@ -57,9 +57,9 @@ fn dir_git_comun(cwd: &Path) -> Option<PathBuf> {
                 } else {
                     gitdir.join(rel)
                 };
-                return normalizar(&c);
+                return normalize(&c);
             }
-            return normalizar(&gitdir);
+            return normalize(&gitdir);
         }
         d = d.parent()?;
     }
@@ -68,7 +68,7 @@ fn dir_git_comun(cwd: &Path) -> Option<PathBuf> {
 /// Resolves a path's `..` without touching disk. `commondir` is usually
 /// `../..`, and leaving it unresolved would make `parent()` return the wrong
 /// component when looking for the folder's name.
-fn normalizar(p: &Path) -> Option<PathBuf> {
+fn normalize(p: &Path) -> Option<PathBuf> {
     let mut out = PathBuf::new();
     for c in p.components() {
         match c {
@@ -85,10 +85,10 @@ fn normalizar(p: &Path) -> Option<PathBuf> {
 /// Extracts the repository name from `origin`'s url in a git config. It
 /// supports the two usual shapes: `git@host:group/repo.git` and
 /// `https://host/group/repo.git`.
-fn nombre_del_remoto(config: &Path) -> Option<String> {
-    let texto = std::fs::read_to_string(config).ok()?;
+fn remote_name(config: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(config).ok()?;
     let mut en_origin = false;
-    for line_ in texto.lines() {
+    for line_ in text.lines() {
         let l = line_.trim();
         if l.starts_with('[') {
             en_origin = l.replace(char::is_whitespace, "") == "[remote\"origin\"]";
@@ -99,8 +99,8 @@ fn nombre_del_remoto(config: &Path) -> Option<String> {
         }
         if let Some(url) = l.strip_prefix("url") {
             let url = url.trim_start().strip_prefix('=')?.trim();
-            let ultimo = url.rsplit(['/', ':']).next()?;
-            let name = ultimo.strip_suffix(".git").unwrap_or(ultimo);
+            let last = url.rsplit(['/', ':']).next()?;
+            let name = last.strip_suffix(".git").unwrap_or(last);
             if !name.is_empty() {
                 return Some(name.to_string());
             }
@@ -112,5 +112,5 @@ fn nombre_del_remoto(config: &Path) -> Option<String> {
 /// The project to use: the caller's, or the detected one, or the generic
 /// fallback. An explicit `--project` always wins.
 pub fn resolve(pedido: Option<String>, cwd: &Path) -> String {
-    pedido.unwrap_or_else(|| detectar(cwd).unwrap_or_else(|| SIN_PROYECTO.to_string()))
+    pedido.unwrap_or_else(|| detect(cwd).unwrap_or_else(|| NO_PROJECT.to_string()))
 }

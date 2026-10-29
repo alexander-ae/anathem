@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 #[command(
     name = "mem",
     about = "anathem — memoria local para agentes",
-    version = anathem::doctor::VERSION_COMPLETA
+    version = anathem::doctor::FULL_VERSION
 )]
 struct Cli {
     /// Ruta de la base de datos
@@ -93,9 +93,9 @@ enum Cmd {
     /// Marca una memoria como reemplazada por otra: la vieja deja de salir en búsquedas
     Supersede {
         /// id de la memoria nueva que reemplaza a la vieja
-        nueva: i64,
+        newer: i64,
         /// id de la memoria vieja que queda superseded
-        vieja: i64,
+        older: i64,
     },
     /// Fija una memoria para que sobreviva el recorte de candidatos en la búsqueda
     Pin {
@@ -120,14 +120,14 @@ enum Cmd {
         #[arg(long)]
         project: Option<String>,
         /// Todos los proyectos, no solo uno
-        #[arg(long, conflicts_with = "project")]
-        todos: bool,
+        #[arg(long = "todos", conflicts_with = "project")]
+        all_projects: bool,
         /// Ventana hacia atrás: 6h, 90m, 2d. Por defecto 24h; `--desde todo` no acota
-        #[arg(long, default_value = "24h")]
-        desde: String,
+        #[arg(long = "desde", value_name = "DESDE", default_value = "24h")]
+        since: String,
         /// Cuántas memorias como máximo
-        #[arg(long = "limite", default_value_t = 15)]
-        limit_: usize,
+        #[arg(long = "limite", value_name = "LIMITE", default_value_t = 15)]
+        limit: usize,
     },
     /// Muestra la cadena de supersession de una memoria, de la más nueva a la más vieja
     History {
@@ -137,8 +137,8 @@ enum Cmd {
     /// sincronizar dos computadoras a mano
     Import {
         /// Carpeta que escribió `mem export --out`
-        #[arg(long)]
-        desde: PathBuf,
+        #[arg(long = "desde", value_name = "DESDE")]
+        from: PathBuf,
         /// Importar sobre una base que ya tiene memorias, agregando solo lo
         /// que falte
         #[arg(long = "fusionar")]
@@ -157,7 +157,7 @@ enum Cmd {
     /// Administra el paquete de vocabulario de la capa vectorial
     Model {
         #[command(subcommand)]
-        accion: ModelCmd,
+        action: ModelCmd,
     },
 }
 
@@ -166,7 +166,8 @@ enum ModelCmd {
     /// Instala un paquete desde un archivo local y reindexa
     Install {
         /// Ruta del archivo .anathem-pack
-        archivo: PathBuf,
+        #[arg(value_name = "ARCHIVO")]
+        file: PathBuf,
     },
     /// Muestra el paquete activo y la cobertura de vectores
     Status,
@@ -208,11 +209,11 @@ fn resolve(p: &str, home: Option<&Path>) -> Result<PathBuf> {
 /// Windows case, as a boolean, rather than reading them itself or asking
 /// the platform — `dirs_home` does that — so the tests can exercise both
 /// precedences without depending on which system they run on.
-fn elegir_home(home: Option<PathBuf>, userprofile: Option<PathBuf>, es_windows: bool) -> Option<PathBuf> {
+fn choose_home(home: Option<PathBuf>, userprofile: Option<PathBuf>, is_windows: bool) -> Option<PathBuf> {
     let no_vacia = |p: Option<PathBuf>| p.filter(|p| !p.as_os_str().is_empty());
     let home = no_vacia(home);
     let userprofile = no_vacia(userprofile);
-    if es_windows {
+    if is_windows {
         userprofile.or(home)
     } else {
         home.or(userprofile)
@@ -220,7 +221,7 @@ fn elegir_home(home: Option<PathBuf>, userprofile: Option<PathBuf>, es_windows: 
 }
 
 fn dirs_home() -> Option<PathBuf> {
-    elegir_home(
+    choose_home(
         std::env::var_os("HOME").map(PathBuf::from),
         std::env::var_os("USERPROFILE").map(PathBuf::from),
         cfg!(windows),
@@ -233,8 +234,8 @@ fn dirs_home() -> Option<PathBuf> {
 /// spawning the process would fail outright. `notepad` is native there. It
 /// takes the boolean rather than asking the platform so both branches can
 /// be tested on any system.
-fn editor_por_defecto(es_windows: bool) -> &'static str {
-    if es_windows {
+fn default_editor(is_windows: bool) -> &'static str {
+    if is_windows {
         "notepad"
     } else {
         "vi"
@@ -253,21 +254,21 @@ fn editor_por_defecto(es_windows: bool) -> &'static str {
 /// than losing the vector.
 fn sync_after_write(conn: &rusqlite::Connection, dir: &Path) {
     use anathem::vecstore::SyncOutcome;
-    let activo = anathem::packstore::resolve(conn, dir);
-    activo.warn();
-    let Some((p, identidad)) = activo.para_escribir() else {
+    let active = anathem::packstore::resolve(conn, dir);
+    active.warn();
+    let Some((p, identity)) = active.for_writing() else {
         return;
     };
-    match anathem::vecstore::sync(conn, p, identidad) {
-        Ok(SyncOutcome::Completa(0)) => {}
-        Ok(SyncOutcome::Completa(n)) => println!("vectores nuevos: {n}"),
+    match anathem::vecstore::sync(conn, p, identity) {
+        Ok(SyncOutcome::Complete(0)) => {}
+        Ok(SyncOutcome::Complete(n)) => println!("vectores nuevos: {n}"),
         // Another process installed or removed the pack while this one was
         // embedding. What was written before the change its `adopt_pack`
         // already deleted, and what was left was never written: some chunks
         // end up without a vector, which is the acceptable degradation.
         // Mixing them would not be. The command still exits 0: the memory
         // is saved.
-        Ok(SyncOutcome::Abandonada(_)) => eprintln!(
+        Ok(SyncOutcome::Abandoned(_)) => eprintln!(
             "aviso: la memoria se guardó, pero otro proceso cambió el paquete de \
              vocabulario mientras se calculaban los vectores; se abandonó el lote para \
              no mezclar dos paquetes. Corré `mem reindex` cuando puedas."
@@ -281,18 +282,18 @@ fn sync_after_write(conn: &rusqlite::Connection, dir: &Path) {
 
 fn main() {
     let cli = Cli::parse();
-    let es_doctor = matches!(cli.cmd, Cmd::Doctor);
-    if let Err(e) = ejecutar(cli) {
+    let is_doctor = matches!(cli.cmd, Cmd::Doctor);
+    if let Err(e) = run(cli) {
         // The same format `fn main() -> Result<()>` would print. `doctor`
         // exiting 2 and not 1 is what lets a script tell "found problems"
         // (1) from "could not run" (2); every other command keeps the usual
         // 1.
         eprintln!("Error: {e:?}");
-        std::process::exit(if es_doctor { anathem::doctor::SALIDA_ROTO } else { 1 });
+        std::process::exit(if is_doctor { anathem::doctor::EXIT_BROKEN } else { 1 });
     }
 }
 
-fn ejecutar(cli: Cli) -> Result<()> {
+fn run(cli: Cli) -> Result<()> {
     let path = resolve(&cli.db, dirs_home().as_deref())?;
     // If there is a `tags.json` next to the database, its rules replace the
     // default taxonomy in `tags::classify` outright. It has to be set before
@@ -309,7 +310,7 @@ fn ejecutar(cli: Cli) -> Result<()> {
             let rep = anathem::migrate::run(&conn, &from)?;
             println!(
                 "migradas={} archivadas={} fallidas={}",
-                rep.migradas, rep.archivadas, rep.fallidas
+                rep.migrated, rep.archived, rep.failed
             );
             if !rep.curated_failed.is_empty() {
                 println!(
@@ -324,9 +325,9 @@ fn ejecutar(cli: Cli) -> Result<()> {
         Cmd::Search { query, project, tag, limit, explain, budget } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new("."));
-            let cfg = anathem::config::cargar(dir)?;
+            let cfg = anathem::config::load(dir)?;
             let p = anathem::packstore::resolve_and_warn(&conn, dir);
-            let ctx = anathem::search::Contexto::de_lectura(p.as_ref(), cfg.bm25_weight);
+            let ctx = anathem::search::SearchContext::for_reading(p.as_ref(), cfg.bm25_weight);
             let q = anathem::search::Query {
                 text: query, project, tags: tag, limit,
                 budget_tokens: budget.unwrap_or(anathem::search::DEFAULT_BUDGET_TOKENS),
@@ -386,9 +387,9 @@ fn ejecutar(cli: Cli) -> Result<()> {
             let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
             let project = anathem::project::resolve(project, &cwd);
             let g = anathem::ingest::save_with_topic(&conn, &text, &project, tag, topic.as_deref(), None)?;
-            let etiquetas = if g.tags.is_empty() { String::new() } else { format!(" [{}]", g.tags.join(", ")) };
+            let labels = if g.tags.is_empty() { String::new() } else { format!(" [{}]", g.tags.join(", ")) };
             let como = if explicito { "" } else { " (detectado)" };
-            println!("guardada memoria {} en {project}{como}{etiquetas}", g.id);
+            println!("guardada memoria {} en {project}{como}{labels}", g.id);
             if let Some(msg) = g.describe() {
                 println!("{msg}");
             }
@@ -405,7 +406,7 @@ fn ejecutar(cli: Cli) -> Result<()> {
             let tmp = std::env::temp_dir().join(format!("anathem-edit-{id}.md"));
             std::fs::write(&tmp, &body)?;
             let editor = std::env::var("EDITOR")
-                .unwrap_or_else(|_| editor_por_defecto(cfg!(windows)).to_string());
+                .unwrap_or_else(|_| default_editor(cfg!(windows)).to_string());
             let status = std::process::Command::new(&editor).arg(&tmp).status()?;
             if !status.success() {
                 anyhow::bail!("{editor} salió con error, no se guardó nada");
@@ -442,9 +443,9 @@ fn ejecutar(cli: Cli) -> Result<()> {
             });
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new("."));
-            let cfg = anathem::config::cargar(dir)?;
+            let cfg = anathem::config::load(dir)?;
             let p = anathem::packstore::resolve_and_warn(&conn, dir);
-            let ctx = anathem::search::Contexto::de_lectura(p.as_ref(), cfg.bm25_weight);
+            let ctx = anathem::search::SearchContext::for_reading(p.as_ref(), cfg.bm25_weight);
             let r = anathem::evalrun::run(&conn, &evalset, &label, &ctx)?;
             println!(
                 "{}  recall@5={:.0}%  recall@50={:.0}%  MRR={:.3}  p50={:.1}ms  n={}",
@@ -460,13 +461,13 @@ fn ejecutar(cli: Cli) -> Result<()> {
         Cmd::Serve => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new("."));
-            let cfg = anathem::config::cargar(dir)?;
+            let cfg = anathem::config::load(dir)?;
             anathem::mcp::serve(&conn, dir, &cfg)?;
         }
-        Cmd::Supersede { nueva, vieja } => {
+        Cmd::Supersede { newer, older } => {
             let conn = anathem::db::open(&path)?;
-            anathem::supersede::link(&conn, nueva, vieja)?;
-            println!("memoria {vieja} marcada como superseded por {nueva}");
+            anathem::supersede::link(&conn, newer, older)?;
+            println!("memoria {older} marcada como superseded por {newer}");
         }
         Cmd::Pin { id } => {
             let conn = anathem::db::open(&path)?;
@@ -498,9 +499,9 @@ fn ejecutar(cli: Cli) -> Result<()> {
                 }
             }
         }
-        Cmd::Import { desde, merge } => {
+        Cmd::Import { from, merge } => {
             let conn = anathem::db::open(&path)?;
-            let r = anathem::import::import_dir(&conn, &desde, merge)?;
+            let r = anathem::import::import_dir(&conn, &from, merge)?;
             println!(
                 "importadas {} memorias, {} omitidas por estar ya, {} cadenas de supersession rearmadas",
                 r.inserted, r.skipped, r.chains
@@ -512,23 +513,23 @@ fn ejecutar(cli: Cli) -> Result<()> {
         Cmd::Update => {
             anathem::update::check_for_update()?;
         }
-        Cmd::Recent { project, todos, desde, limit_ } => {
+        Cmd::Recent { project, all_projects, since, limit } => {
             let conn = anathem::db::open(&path)?;
-            let window = if desde.trim().eq_ignore_ascii_case("todo") {
+            let window = if since.trim().eq_ignore_ascii_case("todo") {
                 None
             } else {
-                Some(anathem::recent::duration_in_seconds(&desde)?)
+                Some(anathem::recent::duration_in_seconds(&since)?)
             };
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            let project_ = if todos {
+            let project_ = if all_projects {
                 None
             } else {
                 Some(anathem::project::resolve(project, &cwd))
             };
             let dir = path.parent().unwrap_or(Path::new("."));
-            let cfg = anathem::config::cargar(dir)?;
+            let cfg = anathem::config::load(dir)?;
             let items = anathem::recent::list_recent(
-                &conn, project_.as_deref(), window, limit_, cfg.excerpt)?;
+                &conn, project_.as_deref(), window, limit, cfg.excerpt)?;
             println!("{}", anathem::recent::format_items(&items, project_.is_none()));
         }
         Cmd::History { id } => {
@@ -542,24 +543,24 @@ fn ejecutar(cli: Cli) -> Result<()> {
             // Not `db::open`: that one opens for writing and creates
             // whatever is missing, and a diagnostic cannot modify what it is
             // diagnosing.
-            let informe = anathem::doctor::diagnosticar(&path);
+            let informe = anathem::doctor::diagnose(&path);
             print!("{}", informe.render());
             std::io::Write::flush(&mut std::io::stdout())?;
-            if informe.problemas() > 0 {
-                std::process::exit(anathem::doctor::SALIDA_PROBLEMAS);
+            if informe.problems() > 0 {
+                std::process::exit(anathem::doctor::EXIT_PROBLEMS);
             }
         }
-        Cmd::Model { accion } => {
+        Cmd::Model { action } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
-            match accion {
-                ModelCmd::Install { archivo } => {
-                    let i = anathem::packstore::install(&conn, &dir, &archivo)?;
+            match action {
+                ModelCmd::Install { file } => {
+                    let i = anathem::packstore::install(&conn, &dir, &file)?;
                     println!(
                         "paquete {} instalado ({} dimensiones), {} fragmentos indexados",
-                        i.name, i.dims, i.fragmentos
+                        i.name, i.dims, i.chunks
                     );
-                    if i.desplazada {
+                    if i.displaced {
                         // The file was installed, but another process took
                         // over the registry while this one was indexing and
                         // the index was left half done. Say it: it is the
@@ -590,7 +591,7 @@ fn ejecutar(cli: Cli) -> Result<()> {
                         // saying: while it is set, what the lines above
                         // report describes the pack from before the
                         // interrupted install, not the file on disk.
-                        if anathem::vecstore::instalacion_pendiente(&conn)?.is_some() {
+                        if anathem::vecstore::pending_install(&conn)?.is_some() {
                             println!(
                                 "hay una instalación de {name} a medias: el archivo en disco \
                                  puede no ser este. La próxima búsqueda reindexa."
@@ -598,7 +599,7 @@ fn ejecutar(cli: Cli) -> Result<()> {
                         }
                     }
                 },
-                ModelCmd::Remove => match anathem::packstore::quitar(&conn, &dir)? {
+                ModelCmd::Remove => match anathem::packstore::remove_pack(&conn, &dir)? {
                     Some(name) => {
                         println!("paquete {name} quitado; la búsqueda vuelve a ser solo bm25")
                     }
@@ -636,7 +637,7 @@ mod tests {
 
     #[test]
     fn elegir_home_fuera_de_windows_prefiere_home_sobre_userprofile() {
-        let h = elegir_home(
+        let h = choose_home(
             Some(PathBuf::from("/home/alguien")),
             Some(PathBuf::from(r"C:\Users\alguien")),
             false,
@@ -650,7 +651,7 @@ mod tests {
         // (`/c/Users/...`), which a native binary does not read as a user
         // path. USERPROFILE is always the native one: it has to win, even
         // when both are defined.
-        let h = elegir_home(
+        let h = choose_home(
             Some(PathBuf::from("/c/Users/alguien")),
             Some(PathBuf::from(r"C:\Users\alguien")),
             true,
@@ -662,7 +663,7 @@ mod tests {
     fn elegir_home_usa_userprofile_si_no_hay_home() {
         // The Windows-without-Git-Bash case: HOME is not defined and we
         // have to fall back to USERPROFILE instead of failing.
-        let h = elegir_home(None, Some(PathBuf::from(r"C:\Users\alguien")), false);
+        let h = choose_home(None, Some(PathBuf::from(r"C:\Users\alguien")), false);
         assert_eq!(h, Some(PathBuf::from(r"C:\Users\alguien")));
     }
 
@@ -670,7 +671,7 @@ mod tests {
     fn elegir_home_en_windows_cae_a_home_si_no_hay_userprofile() {
         // USERPROFILE wins when both are there, but if it alone is missing
         // there is still a usable home in HOME.
-        let h = elegir_home(Some(PathBuf::from(r"C:\Users\alguien")), None, true);
+        let h = choose_home(Some(PathBuf::from(r"C:\Users\alguien")), None, true);
         assert_eq!(h, Some(PathBuf::from(r"C:\Users\alguien")));
     }
 
@@ -680,30 +681,30 @@ mod tests {
         // Without this check, `resolve` would join the rest of the path
         // against "" and the result would be relative to the current
         // directory, silently.
-        let h = elegir_home(Some(PathBuf::new()), Some(PathBuf::from(r"C:\Users\alguien")), false);
+        let h = choose_home(Some(PathBuf::new()), Some(PathBuf::from(r"C:\Users\alguien")), false);
         assert_eq!(h, Some(PathBuf::from(r"C:\Users\alguien")));
     }
 
     #[test]
     fn elegir_home_userprofile_vacia_no_cuenta_como_definida() {
-        let h = elegir_home(Some(PathBuf::from("/home/alguien")), Some(PathBuf::new()), true);
+        let h = choose_home(Some(PathBuf::from("/home/alguien")), Some(PathBuf::new()), true);
         assert_eq!(h, Some(PathBuf::from("/home/alguien")));
     }
 
     #[test]
     fn elegir_home_sin_ninguna_de_las_dos_devuelve_none() {
-        assert_eq!(elegir_home(None, None, false), None);
-        assert_eq!(elegir_home(None, None, true), None);
+        assert_eq!(choose_home(None, None, false), None);
+        assert_eq!(choose_home(None, None, true), None);
     }
 
     #[test]
     fn editor_por_defecto_en_windows_es_notepad() {
-        assert_eq!(editor_por_defecto(true), "notepad");
+        assert_eq!(default_editor(true), "notepad");
     }
 
     #[test]
     fn editor_por_defecto_fuera_de_windows_es_vi() {
-        assert_eq!(editor_por_defecto(false), "vi");
+        assert_eq!(default_editor(false), "vi");
     }
 
     #[test]

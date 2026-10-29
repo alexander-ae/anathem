@@ -99,7 +99,7 @@ fn escribir_pack_ancho(pack_path: &std::path::Path, name: &str) {
     // Mismo tokenizador, pero 8 dimensiones en vez de 4.
     let tok = apoyo::TOKENIZER_MINI.as_bytes();
     let dims = 8usize;
-    let filas: [[u8; 8]; 4] = [
+    let rows: [[u8; 8]; 4] = [
         [0, 0, 0, 0, 0, 0, 0, 0],
         [10, 0, 0, 0, 0, 0, 0, 0],
         [0, 10, 0, 0, 0, 0, 0, 0],
@@ -109,14 +109,14 @@ fn escribir_pack_ancho(pack_path: &std::path::Path, name: &str) {
     b.extend_from_slice(b"ANPK");
     b.extend_from_slice(&1u32.to_le_bytes());
     b.extend_from_slice(&(dims as u32).to_le_bytes());
-    b.extend_from_slice(&(filas.len() as u32).to_le_bytes());
+    b.extend_from_slice(&(rows.len() as u32).to_le_bytes());
     b.extend_from_slice(&(name.len() as u32).to_le_bytes());
     b.extend_from_slice(name.as_bytes());
     b.extend_from_slice(&(tok.len() as u64).to_le_bytes());
     b.extend_from_slice(tok);
     for _ in 0..dims { b.extend_from_slice(&1.0f32.to_le_bytes()); }
     for _ in 0..dims { b.extend_from_slice(&0.0f32.to_le_bytes()); }
-    for f in filas { b.extend_from_slice(&f); }
+    for f in rows { b.extend_from_slice(&f); }
     std::fs::write(pack_path, b).unwrap();
 }
 
@@ -252,12 +252,12 @@ fn reinstalar_desde_la_ruta_instalada_no_destruye_el_paquete() {
     assert!(!err.contains("aviso"), "no puede quedar avisando para siempre: {err}");
 
     // Y la instalación no deja temporales tirados en `paquetes/`.
-    let sobrantes: Vec<String> = std::fs::read_dir(d.path().join("paquetes"))
+    let extras: Vec<String> = std::fs::read_dir(d.path().join("paquetes"))
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
         .filter(|n| n != "mini-es.anathem-pack")
         .collect();
-    assert!(sobrantes.is_empty(), "quedaron archivos a medio instalar: {sobrantes:?}");
+    assert!(extras.is_empty(), "quedaron archivos a medio instalar: {extras:?}");
 }
 
 #[test]
@@ -431,9 +431,9 @@ fn una_instalacion_que_falla_antes_de_tocar_el_archivo_no_deja_la_marca() {
     apoyo::escribir_pack_mini(&r, "mini-es");
     mem(d.path(), &["save", "hola mundo"]);
 
-    let paquetes = d.path().join("paquetes");
-    std::fs::create_dir_all(&paquetes).unwrap();
-    let target = paquetes.join("mini-es.anathem-pack");
+    let packs = d.path().join("paquetes");
+    std::fs::create_dir_all(&packs).unwrap();
+    let target = packs.join("mini-es.anathem-pack");
     std::fs::create_dir(&target).unwrap();
     std::fs::write(target.join("ocupado"), b"x").unwrap();
 
@@ -442,10 +442,10 @@ fn una_instalacion_que_falla_antes_de_tocar_el_archivo_no_deja_la_marca() {
     assert_eq!(marcas_de_instalacion(&db), 0, "el archivo no se tocó: la marca no corresponde");
 
     // Y tampoco quedan temporales tirados.
-    let sobrantes: Vec<String> = std::fs::read_dir(&paquetes)
+    let extras: Vec<String> = std::fs::read_dir(&packs)
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
         .filter(|n| n != "mini-es.anathem-pack")
         .collect();
-    assert!(sobrantes.is_empty(), "quedaron archivos a medio instalar: {sobrantes:?}");
+    assert!(extras.is_empty(), "quedaron archivos a medio instalar: {extras:?}");
 }

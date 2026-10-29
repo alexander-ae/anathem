@@ -18,7 +18,7 @@ fn conn_con_datos() -> (tempfile::TempDir, rusqlite::Connection) {
 fn initialize_devuelve_capabilities() {
     let (_d, conn) = conn_con_datos();
     let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}});
-    let res = mcp::handle(&conn, &search::Contexto::solo_bm25(), &Config::default(), &req).unwrap().unwrap();
+    let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
     assert_eq!(res["jsonrpc"], "2.0");
     assert_eq!(res["id"], 1);
     assert!(res["result"]["capabilities"]["tools"].is_object(), "res: {res}");
@@ -28,7 +28,7 @@ fn initialize_devuelve_capabilities() {
 fn tools_list_expone_las_cuatro() {
     let (_d, conn) = conn_con_datos();
     let req = serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"});
-    let res = mcp::handle(&conn, &search::Contexto::solo_bm25(), &Config::default(), &req).unwrap().unwrap();
+    let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
     let names: Vec<String> = res["result"]["tools"].as_array().unwrap().iter()
         .map(|t| t["name"].as_str().unwrap().to_string()).collect();
     for n in ["search_memory", "save_memory", "get_memory", "list_tags"] {
@@ -41,7 +41,7 @@ fn search_memory_devuelve_resultados() {
     let (_d, conn) = conn_con_datos();
     let req = serde_json::json!({"jsonrpc":"2.0","id":3,"method":"tools/call",
         "params":{"name":"search_memory","arguments":{"query":"cache staleness"}}});
-    let res = mcp::handle(&conn, &search::Contexto::solo_bm25(), &Config::default(), &req).unwrap().unwrap();
+    let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
     let text = res["result"]["content"][0]["text"].as_str().unwrap();
     assert!(text.contains("cache"), "texto devuelto: {text}");
 }
@@ -52,7 +52,7 @@ fn save_memory_persiste() {
     let req = serde_json::json!({"jsonrpc":"2.0","id":4,"method":"tools/call",
         "params":{"name":"save_memory","arguments":{
             "text":"El job programado del hub sincroniza 12 servicios.","project":"acme-billing"}}});
-    mcp::handle(&conn, &search::Contexto::solo_bm25(), &Config::default(), &req).unwrap().unwrap();
+    mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
     let n: i64 = conn.query_row(
         "select count(*) from memories where source='explicit'", [], |r| r.get(0)).unwrap();
     assert_eq!(n, 1);
@@ -62,7 +62,7 @@ fn save_memory_persiste() {
 fn metodo_desconocido_devuelve_error_jsonrpc() {
     let (_d, conn) = conn_con_datos();
     let req = serde_json::json!({"jsonrpc":"2.0","id":5,"method":"no/existe"});
-    let res = mcp::handle(&conn, &search::Contexto::solo_bm25(), &Config::default(), &req).unwrap().unwrap();
+    let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
     assert_eq!(res["error"]["code"], -32601);
 }
 
@@ -70,7 +70,7 @@ fn metodo_desconocido_devuelve_error_jsonrpc() {
 fn notificacion_no_produce_respuesta() {
     let (_d, conn) = conn_con_datos();
     let req = serde_json::json!({"jsonrpc":"2.0","method":"notifications/initialized"});
-    assert!(mcp::handle(&conn, &search::Contexto::solo_bm25(), &Config::default(), &req).unwrap().is_none(), "una notificación no lleva respuesta");
+    assert!(mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().is_none(), "una notificación no lleva respuesta");
 }
 
 #[test]
@@ -78,7 +78,7 @@ fn la_busqueda_queda_en_el_log() {
     let (_d, conn) = conn_con_datos();
     let req = serde_json::json!({"jsonrpc":"2.0","id":6,"method":"tools/call",
         "params":{"name":"search_memory","arguments":{"query":"cache"}}});
-    mcp::handle(&conn, &search::Contexto::solo_bm25(), &Config::default(), &req).unwrap();
+    mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap();
     let n: i64 = conn.query_row("select count(*) from search_log", [], |r| r.get(0)).unwrap();
     assert_eq!(n, 1);
 }
@@ -89,7 +89,7 @@ fn search_memory_respeta_el_limite_pedido() {
     // diez por defecto, que es el parámetro que hace falta poder mover para
     // evaluar si conviene devolver más y más cortos.
     let (_d, conn) = fixture_con_varias();
-    let ctx = search::Contexto::solo_bm25();
+    let ctx = search::SearchContext::bm25_only();
     let pedir = |n: u64| {
         let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
             "params":{"name":"search_memory","arguments":{"query":"memoria relleno","limit":n,"budget":100000}}});
@@ -136,7 +136,7 @@ fn search_memory_devuelve_veinte_candidatos_por_defecto() {
     }
     let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
         "params":{"name":"search_memory","arguments":{"query":"memoria relleno"}}});
-    let res = mcp::handle(&conn, &search::Contexto::solo_bm25(), &Config::default(), &req).unwrap().unwrap();
+    let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
     let n = res["result"]["content"][0]["text"].as_str().unwrap()
         .lines().filter(|l| l.starts_with("[id:")).count();
     assert_eq!(n, 20, "con 25 memorias que matchean, sin limit deben volver los 20 candidatos por defecto");

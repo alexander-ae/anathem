@@ -3,14 +3,14 @@ use anathem::config;
 #[test]
 fn sin_archivo_usa_el_peso_por_defecto() {
     let d = tempfile::tempdir().unwrap();
-    assert_eq!(config::cargar(d.path()).unwrap().bm25_weight, 1.0);
+    assert_eq!(config::load(d.path()).unwrap().bm25_weight, 1.0);
 }
 
 #[test]
 fn lee_el_peso_del_archivo() {
     let d = tempfile::tempdir().unwrap();
     std::fs::write(d.path().join("config.json"), r#"{"bm25_weight": 0.25}"#).unwrap();
-    assert_eq!(config::cargar(d.path()).unwrap().bm25_weight, 0.25);
+    assert_eq!(config::load(d.path()).unwrap().bm25_weight, 0.25);
 }
 
 #[test]
@@ -20,7 +20,7 @@ fn un_archivo_roto_falla_ruidosamente() {
     // ajuste está aplicado.
     let d = tempfile::tempdir().unwrap();
     std::fs::write(d.path().join("config.json"), "{esto no es json").unwrap();
-    let e = config::cargar(d.path()).unwrap_err().to_string();
+    let e = config::load(d.path()).unwrap_err().to_string();
     assert!(e.contains("config.json"), "el error debe nombrar el archivo: {e}");
 }
 
@@ -28,7 +28,7 @@ fn un_archivo_roto_falla_ruidosamente() {
 fn un_peso_negativo_se_rechaza() {
     let d = tempfile::tempdir().unwrap();
     std::fs::write(d.path().join("config.json"), r#"{"bm25_weight": -1.0}"#).unwrap();
-    assert!(config::cargar(d.path()).is_err());
+    assert!(config::load(d.path()).is_err());
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn sin_archivo_usa_veinte_candidatos_y_ciento_veinte_de_extracto() {
     // Estos son los valores que hacen que `search_memory` devuelva muchos
     // candidatos breves en vez de pocos fragmentos completos.
     let d = tempfile::tempdir().unwrap();
-    let cfg = config::cargar(d.path()).unwrap();
+    let cfg = config::load(d.path()).unwrap();
     assert_eq!(cfg.candidates, 20);
     assert_eq!(cfg.excerpt, 120);
 }
@@ -48,7 +48,7 @@ fn lee_candidatos_y_extracto_del_archivo() {
         d.path().join("config.json"),
         r#"{"candidates": 30, "excerpt": 80}"#,
     ).unwrap();
-    let cfg = config::cargar(d.path()).unwrap();
+    let cfg = config::load(d.path()).unwrap();
     assert_eq!(cfg.candidates, 30);
     assert_eq!(cfg.excerpt, 80);
 }
@@ -59,7 +59,7 @@ fn un_candidatos_en_cero_se_rechaza_nombrando_archivo_y_campo() {
     // ruidosamente, no se degrada en silencio a los valores por defecto.
     let d = tempfile::tempdir().unwrap();
     std::fs::write(d.path().join("config.json"), r#"{"candidates": 0}"#).unwrap();
-    let e = config::cargar(d.path()).unwrap_err().to_string();
+    let e = config::load(d.path()).unwrap_err().to_string();
     assert!(e.contains("config.json"), "el error debe nombrar el archivo: {e}");
     assert!(e.contains("candidatos"), "el error debe nombrar el campo: {e}");
 }
@@ -68,7 +68,7 @@ fn un_candidatos_en_cero_se_rechaza_nombrando_archivo_y_campo() {
 fn un_extracto_en_cero_se_rechaza_nombrando_archivo_y_campo() {
     let d = tempfile::tempdir().unwrap();
     std::fs::write(d.path().join("config.json"), r#"{"excerpt": 0}"#).unwrap();
-    let e = config::cargar(d.path()).unwrap_err().to_string();
+    let e = config::load(d.path()).unwrap_err().to_string();
     assert!(e.contains("config.json"), "el error debe nombrar el archivo: {e}");
     assert!(e.contains("extracto"), "el error debe nombrar el campo: {e}");
 }

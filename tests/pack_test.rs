@@ -22,7 +22,7 @@ fn un_solo_token_da_su_eje() {
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
     let p = Pack::open_pack(&r).unwrap();
-    let v = p.embeber("hola").unwrap();
+    let v = p.embed("hola").unwrap();
     assert!((v[0] - 1.0).abs() < 1e-5, "esperaba el eje 0, salió {v:?}");
     assert!(v[1].abs() < 1e-5 && v[2].abs() < 1e-5 && v[3].abs() < 1e-5);
 }
@@ -33,10 +33,10 @@ fn dos_tokens_promedian_sus_filas() {
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
     let p = Pack::open_pack(&r).unwrap();
-    let v = p.embeber("hola mundo").unwrap();
-    let esperado = 1.0f32 / 2f32.sqrt();
-    assert!((v[0] - esperado).abs() < 1e-5, "salió {v:?}");
-    assert!((v[1] - esperado).abs() < 1e-5, "salió {v:?}");
+    let v = p.embed("hola mundo").unwrap();
+    let expected = 1.0f32 / 2f32.sqrt();
+    assert!((v[0] - expected).abs() < 1e-5, "salió {v:?}");
+    assert!((v[1] - expected).abs() < 1e-5, "salió {v:?}");
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn el_sufijo_se_resegmenta_en_vez_de_caer_en_desconocido() {
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
     let p = Pack::open_pack(&r).unwrap();
-    let v = p.embeber("mundos").unwrap();
+    let v = p.embed("mundos").unwrap();
     assert!(v[1] > 0.1 && v[2] > 0.1, "esperaba mezcla de ▁mundo y s, salió {v:?}");
 }
 
@@ -57,7 +57,7 @@ fn texto_vacio_da_un_vector_nulo_sin_fallar() {
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
     let p = Pack::open_pack(&r).unwrap();
-    let v = p.embeber("").unwrap();
+    let v = p.embed("").unwrap();
     assert_eq!(v.len(), 4);
     assert!(cos(&v, &v) < 1e-9, "esperaba el vector nulo, salió {v:?}");
 }
@@ -163,9 +163,9 @@ fn acepta_un_added_token_con_id_fuera_de_la_tabla() {
     let p = Pack::open_pack(&r).expect("un added_token fuera de rango no invalida la tabla");
     assert_eq!(p.name(), "agregados-es");
     // Y sigue embebiendo igual que el fixture de siempre.
-    let v = p.embeber("hola").unwrap();
+    let v = p.embed("hola").unwrap();
     assert!((v[0] - 1.0).abs() < 1e-5, "esperaba el eje 0, salió {v:?}");
     // El token agregado no tiene fila y no rompe nada.
-    let v = p.embeber("<mask> hola").unwrap();
+    let v = p.embed("<mask> hola").unwrap();
     assert!((v[0] - 1.0).abs() < 1e-5, "esperaba el eje 0, salió {v:?}");
 }

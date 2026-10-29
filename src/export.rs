@@ -165,26 +165,26 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
         // emitted as `null`: frontmatter without the key reads the same in
         // any parser and does not invite confusing "has none" with "has
         // null".
-        let mut opcionales = String::new();
+        let mut optional = String::new();
         if let Some(e) = &f.ext_id {
-            opcionales.push_str(&format!("ext_id: {}\n", yaml_dq(e)));
+            optional.push_str(&format!("ext_id: {}\n", yaml_dq(e)));
         }
         if let Some(s) = f.supersedes_id {
-            opcionales.push_str(&format!("supersedes: {s}\n"));
+            optional.push_str(&format!("supersedes: {s}\n"));
         }
         if let Some(t) = &f.topic {
-            opcionales.push_str(&format!("topic: {}\n", yaml_dq(t)));
+            optional.push_str(&format!("topic: {}\n", yaml_dq(t)));
         }
         if let Some(e) = &f.event_start {
-            opcionales.push_str(&format!("event_start: {}\n", yaml_dq(e)));
+            optional.push_str(&format!("event_start: {}\n", yaml_dq(e)));
         }
         if let Some(e) = &f.event_end {
-            opcionales.push_str(&format!("event_end: {}\n", yaml_dq(e)));
+            optional.push_str(&format!("event_end: {}\n", yaml_dq(e)));
         }
         if !refs.is_empty() {
-            opcionales.push_str("refs:\n");
+            optional.push_str("refs:\n");
             for (kind, value) in &refs {
-                opcionales.push_str(&format!(
+                optional.push_str(&format!(
                     "  - kind: {}\n    value: {}\n",
                     yaml_dq(kind),
                     yaml_dq(value)
@@ -202,7 +202,7 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
             yaml_dq(&f.status),
             yaml_dq(&f.source),
             if f.pinned != 0 { "true" } else { "false" },
-            opcionales,
+            optional,
             f.body
         );
         std::fs::write(&path, doc)?;

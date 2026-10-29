@@ -16,9 +16,9 @@ fn migra_solo_curadas_y_reporta() {
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let rep = migrate::run(&conn, Path::new("tests/fixtures/export-sample.jsonl")).unwrap();
 
-    assert_eq!(rep.migradas, 3, "aaa, bbb, eee");
-    assert_eq!(rep.archivadas, 2, "ccc, ddd");
-    assert_eq!(rep.fallidas, 2, "fff, ggg");
+    assert_eq!(rep.migrated, 3, "aaa, bbb, eee");
+    assert_eq!(rep.archived, 2, "ccc, ddd");
+    assert_eq!(rep.failed, 2, "fff, ggg");
 
     assert!(migrada(&conn, "aaa").is_some());
     assert!(migrada(&conn, "ccc").is_none(), "no debe migrar session_turn");

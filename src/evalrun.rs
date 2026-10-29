@@ -19,7 +19,7 @@ struct Case {
     #[serde(default)]
     parafrastica: Option<bool>,
     #[serde(default)]
-    palabras: Option<u64>,
+    words: Option<u64>,
 }
 
 #[derive(Serialize, Debug)]
@@ -30,7 +30,7 @@ pub struct CaseResult {
     pub first_rank: Option<usize>,
     pub returned: Vec<String>,
     pub parafrastica: Option<bool>,
-    pub palabras: Option<u64>,
+    pub words: Option<u64>,
 }
 
 #[derive(Serialize, Debug)]
@@ -57,7 +57,7 @@ pub fn run(
     conn: &Connection,
     evalset: &Path,
     system: &str,
-    ctx: &search::Contexto,
+    ctx: &search::SearchContext,
 ) -> Result<EvalResult> {
     let raw = std::fs::read_to_string(evalset)
         .with_context(|| format!(
@@ -115,7 +115,7 @@ pub fn run(
             first_rank: rank.map(|r| r + 1),
             returned: got.into_iter().take(10).collect(),
             parafrastica: c.parafrastica,
-            palabras: c.palabras,
+            words: c.words,
         });
     }
 

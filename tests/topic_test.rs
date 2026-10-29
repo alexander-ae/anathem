@@ -26,7 +26,7 @@ fn mem_ok(dir: &Path, args: &[&str]) -> String {
     out
 }
 
-fn estado(dir: &Path, id: i64) -> String {
+fn status_(dir: &Path, id: i64) -> String {
     let conn = rusqlite::Connection::open(dir.join("mem.db")).unwrap();
     conn.query_row("select status from memories where id = ?1", [id], |r| r.get(0)).unwrap()
 }
@@ -40,8 +40,8 @@ fn guardar_dos_veces_con_la_misma_clave_deja_la_primera_superseded_y_la_segunda_
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
     mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
 
-    assert_eq!(estado(d.path(), 1), "superseded");
-    assert_eq!(estado(d.path(), 2), "active");
+    assert_eq!(status_(d.path(), 1), "superseded");
+    assert_eq!(status_(d.path(), 2), "active");
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let sup: i64 = conn
         .query_row("select supersedes_id from memories where id = 2", [], |r| r.get(0))
@@ -68,11 +68,11 @@ fn history_sobre_la_nueva_muestra_la_cadena_hasta_la_vieja() {
     mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
 
     let out = mem_ok(d.path(), &["history", "3"]);
-    let lines_: Vec<&str> = out.lines().collect();
-    assert_eq!(lines_.len(), 3, "la cadena tiene tres eslabones: {out}");
-    assert!(lines_[0].contains("active") && lines_[0].contains("desde octubre"), "{out}");
-    assert!(lines_[1].contains("superseded") && lines_[1].contains("Adyen"), "{out}");
-    assert!(lines_[2].contains("superseded") && lines_[2].contains("Stripe"), "{out}");
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines.len(), 3, "la cadena tiene tres eslabones: {out}");
+    assert!(lines[0].contains("active") && lines[0].contains("desde octubre"), "{out}");
+    assert!(lines[1].contains("superseded") && lines[1].contains("Adyen"), "{out}");
+    assert!(lines[2].contains("superseded") && lines[2].contains("Stripe"), "{out}");
 }
 
 #[test]
@@ -81,8 +81,8 @@ fn la_misma_clave_en_dos_proyectos_no_se_pisa() {
     mem_ok(d.path(), &["save", "La base de a es Postgres", "--project", "a", "--topic", "base-de-datos"]);
     mem_ok(d.path(), &["save", "La base de b es MySQL", "--project", "b", "--topic", "base-de-datos"]);
 
-    assert_eq!(estado(d.path(), 1), "active");
-    assert_eq!(estado(d.path(), 2), "active");
+    assert_eq!(status_(d.path(), 1), "active");
+    assert_eq!(status_(d.path(), 2), "active");
 }
 
 #[test]
@@ -91,8 +91,8 @@ fn sin_clave_de_tema_guardar_dos_veces_deja_las_dos_activas() {
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p"]);
     mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p"]);
 
-    assert_eq!(estado(d.path(), 1), "active");
-    assert_eq!(estado(d.path(), 2), "active");
+    assert_eq!(status_(d.path(), 1), "active");
+    assert_eq!(status_(d.path(), 2), "active");
     // y sin clave no queda nada que listar
     assert!(mem_ok(d.path(), &["topics"]).contains("Sin claves de tema"));
 }
@@ -103,8 +103,8 @@ fn guardar_con_una_clave_nueva_simplemente_guarda() {
     mem_ok(d.path(), &["save", "Otro hecho", "--project", "p", "--topic", "otro"]);
     let out = mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
 
-    assert_eq!(estado(d.path(), 1), "active", "una clave distinta no toca a las demás");
-    assert_eq!(estado(d.path(), 2), "active");
+    assert_eq!(status_(d.path(), 1), "active", "una clave distinta no toca a las demás");
+    assert_eq!(status_(d.path(), 2), "active");
     assert!(out.contains("guardada memoria 2"), "{out}");
     assert!(out.contains("pagos") && out.contains("nueva"), "tiene que decir que la clave era nueva: {out}");
 }
@@ -129,10 +129,10 @@ fn topics_lista_proyecto_cantidad_y_vigente() {
     mem_ok(d.path(), &["save", "Sin clave, no figura", "--project", "p"]);
 
     let out = mem_ok(d.path(), &["topics"]);
-    let fila = |clave: &str| -> Vec<String> {
+    let fila = |key: &str| -> Vec<String> {
         out.lines()
-            .find(|l| l.split_whitespace().nth(1) == Some(clave))
-            .unwrap_or_else(|| panic!("falta la clave {clave} en:\n{out}"))
+            .find(|l| l.split_whitespace().nth(1) == Some(key))
+            .unwrap_or_else(|| panic!("falta la clave {key} en:\n{out}"))
             .split_whitespace()
             .map(str::to_string)
             .collect()
@@ -160,8 +160,8 @@ fn si_la_vigente_se_olvido_la_clave_vuelve_a_guardar_sin_reemplazar() {
     let out = mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
 
     assert!(!out.contains("reemplaza a"), "no había una activa que reemplazar: {out}");
-    assert_eq!(estado(d.path(), 1), "forgotten", "no se revive lo olvidado");
-    assert_eq!(estado(d.path(), 2), "active");
+    assert_eq!(status_(d.path(), 1), "forgotten", "no se revive lo olvidado");
+    assert_eq!(status_(d.path(), 2), "active");
 }
 
 #[test]
@@ -180,7 +180,7 @@ fn la_clave_se_recorta_asi_que_con_espacios_alrededor_es_el_mismo_tema() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
     mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", " pagos "]);
-    assert_eq!(estado(d.path(), 1), "superseded");
+    assert_eq!(status_(d.path(), 1), "superseded");
 }
 
 #[test]
@@ -189,7 +189,7 @@ fn mayusculas_y_espacios_internos_no_hacen_otro_tema() {
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "proveedor de pagos"]);
     let out = mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "  Proveedor   DE\tPagos "]);
 
-    assert_eq!(estado(d.path(), 1), "superseded", "{out}");
+    assert_eq!(status_(d.path(), 1), "superseded", "{out}");
     assert!(out.contains("«proveedor de pagos»"), "muestra la clave normalizada: {out}");
     let topics = mem_ok(d.path(), &["topics"]);
     assert!(topics.contains("proveedor de pagos") && !topics.contains("Proveedor"), "{topics}");
@@ -207,7 +207,7 @@ fn una_clave_nueva_lista_las_que_ya_existen_en_el_proyecto() {
 
     assert!(out.contains("stack-del-frontend") && out.contains("politica-de-ramas"), "{out}");
     assert!(!out.contains("solo-en-q"), "solo las del mismo proyecto: {out}");
-    assert_eq!(estado(d.path(), 1), "active");
+    assert_eq!(status_(d.path(), 1), "active");
 }
 
 #[test]
@@ -233,13 +233,13 @@ fn al_reemplazar_no_se_listan_otras_claves() {
 fn la_busqueda_vectorial_tampoco_devuelve_la_memoria_reemplazada() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    let vieja = ingest::save_with_topic(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
-    let nueva = ingest::save_with_topic(&conn, PAGOS_NUEVO, "p", vec![], Some("pagos"), None).unwrap();
+    let older = ingest::save_with_topic(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
+    let newer = ingest::save_with_topic(&conn, PAGOS_NUEVO, "p", vec![], Some("pagos"), None).unwrap();
 
     // El mismo vector para los fragmentos de las dos: si alguna se filtra, es
     // por el estado y no por el parecido.
     let blob: Vec<u8> = [1.0f32, 0.0].iter().flat_map(|f| f.to_le_bytes()).collect();
-    for id in [vieja.id, nueva.id] {
+    for id in [older.id, newer.id] {
         conn.execute(
             "insert into chunk_vectors (chunk_id, vec)
              select id, ?2 from chunks where memory_id = ?1",
@@ -251,7 +251,7 @@ fn la_busqueda_vectorial_tampoco_devuelve_la_memoria_reemplazada() {
     let q = search::Query { text: "pagos".into(), ..Default::default() };
     let hits = anathem::vecstore::search_vectors(&conn, &[1.0, 0.0], &q, 10).unwrap();
     let ids: Vec<i64> = hits.iter().map(|h| h.memory_id).collect();
-    assert_eq!(ids, vec![nueva.id], "solo la vigente puede salir por vector: {ids:?}");
+    assert_eq!(ids, vec![newer.id], "solo la vigente puede salir por vector: {ids:?}");
 }
 
 // -- el guardado lo hace una sola transacción --------------------------------
@@ -332,7 +332,7 @@ fn varios_save_con_la_misma_clave_a_la_vez_tienen_exito_y_dejan_una_sola_activa(
 fn llamar(conn: &rusqlite::Connection, tool: &str, args: serde_json::Value) -> String {
     let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
         "params":{"name":tool,"arguments":args}});
-    let res = mcp::handle(conn, &search::Contexto::solo_bm25(), &Config::default(), &req)
+    let res = mcp::handle(conn, &search::SearchContext::bm25_only(), &Config::default(), &req)
         .unwrap()
         .unwrap();
     res["result"]["content"][0]["text"].as_str().unwrap_or_default().to_string()
@@ -372,7 +372,7 @@ fn la_descripcion_de_save_memory_explica_cuando_usar_topic() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
     let req = serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"});
-    let res = mcp::handle(&conn, &search::Contexto::solo_bm25(), &Config::default(), &req)
+    let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req)
         .unwrap()
         .unwrap();
     let tools = res["result"]["tools"].as_array().unwrap();
@@ -380,8 +380,8 @@ fn la_descripcion_de_save_memory_explica_cuando_usar_topic() {
 
     assert!(save["inputSchema"]["properties"]["topic"].is_object(), "falta el parámetro topic");
     let desc = save["description"].as_str().unwrap().to_lowercase();
-    for clave in ["topic", "corrección", "reemplaza", "versión actualizada"] {
-        assert!(desc.contains(clave), "la descripción no menciona {clave:?}: {desc}");
+    for key in ["topic", "corrección", "reemplaza", "versión actualizada"] {
+        assert!(desc.contains(key), "la descripción no menciona {key:?}: {desc}");
     }
 }
 
@@ -394,8 +394,8 @@ fn search_y_get_memory_muestran_la_clave_para_poder_reutilizarla() {
 
     let busqueda = llamar(&conn, "search_memory", serde_json::json!({"query": "proveedor pagos"}));
     assert!(busqueda.contains("[tema: pagos]"), "{busqueda}");
-    let cuerpo = llamar(&conn, "get_memory", serde_json::json!({"id": 1}));
-    assert!(cuerpo.contains("[tema: pagos]"), "{cuerpo}");
+    let body = llamar(&conn, "get_memory", serde_json::json!({"id": 1}));
+    assert!(body.contains("[tema: pagos]"), "{body}");
 }
 
 // -- supersedes: corregir una memoria concreta ya guardada ------------------------
@@ -521,7 +521,7 @@ fn la_descripcion_distingue_cuando_usar_supersedes_y_cuando_topic() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
     let req = serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"});
-    let res = mcp::handle(&conn, &search::Contexto::solo_bm25(), &Config::default(), &req)
+    let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req)
         .unwrap()
         .unwrap();
     let save = res["result"]["tools"].as_array().unwrap().iter()
@@ -685,8 +685,8 @@ fn una_base_anterior_acepta_guardar_con_clave_y_listar_temas() {
     mem_ok(d.path(), &["save", "La base es MySQL", "--project", "p", "--topic", "base"]);
     let out = mem_ok(d.path(), &["save", "La base es Oracle", "--project", "p", "--topic", "base"]);
     assert!(out.contains("reemplaza a la memoria 2"), "{out}");
-    assert_eq!(estado(d.path(), 1), "active", "la anterior sin clave no se toca");
-    assert_eq!(estado(d.path(), 2), "superseded");
+    assert_eq!(status_(d.path(), 1), "active", "la anterior sin clave no se toca");
+    assert_eq!(status_(d.path(), 2), "superseded");
     assert!(mem_ok(d.path(), &["topics"]).contains("base"));
 }
 
@@ -745,11 +745,11 @@ fn el_indice_unico_no_molesta_a_lo_que_no_es_la_vigente() {
 fn revivir_una_olvidada_cuando_ya_hay_vigente_falla_en_vez_de_dejar_dos_activas() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    let vieja = ingest::save_with_topic(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
-    anathem::maint::forget(&conn, vieja.id).unwrap();
+    let older = ingest::save_with_topic(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
+    anathem::maint::forget(&conn, older.id).unwrap();
     ingest::save_with_topic(&conn, PAGOS_NUEVO, "p", vec![], Some("pagos"), None).unwrap();
 
-    let r = conn.execute("update memories set status = 'active' where id = ?1", [vieja.id]);
+    let r = conn.execute("update memories set status = 'active' where id = ?1", [older.id]);
     assert!(r.is_err(), "revivir la olvidada habría dejado dos activas para la clave");
 }
 

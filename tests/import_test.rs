@@ -10,7 +10,7 @@ fn mem(db: &Path, args: &[&str]) -> (bool, String, String) {
     (o.status.success(), String::from_utf8_lossy(&o.stdout).into(), String::from_utf8_lossy(&o.stderr).into())
 }
 
-fn conteos(p: &Path) -> (i64, i64, i64, i64, i64) {
+fn counts(p: &Path) -> (i64, i64, i64, i64, i64) {
     let c = rusqlite::Connection::open(p).unwrap();
     let q = |s: &str| c.query_row(s, [], |r| r.get::<_, i64>(0)).unwrap();
     (
@@ -25,9 +25,9 @@ fn conteos(p: &Path) -> (i64, i64, i64, i64, i64) {
 #[test]
 fn una_base_entera_sobrevive_la_vuelta_completa() {
     let d = tempfile::tempdir().unwrap();
-    let origen = d.path().join("origen.db");
+    let source = d.path().join("origen.db");
     {
-        let conn = db::open(&origen).unwrap();
+        let conn = db::open(&source).unwrap();
         ingest::save_explicit(&conn, "primera nota con ticket ABC-1", "uno", vec!["alfa".into()])
             .unwrap();
         ingest::save_explicit(&conn, "segunda nota del proyecto dos", "dos", vec![]).unwrap();
@@ -38,7 +38,7 @@ fn una_base_entera_sobrevive_la_vuelta_completa() {
             .unwrap();
     }
     let exp = d.path().join("exp");
-    let (ok, _, err) = mem(&origen, &["export", "--out", exp.to_str().unwrap()]);
+    let (ok, _, err) = mem(&source, &["export", "--out", exp.to_str().unwrap()]);
     assert!(ok, "export falló: {err}");
 
     let target = d.path().join("destino.db");
@@ -46,7 +46,7 @@ fn una_base_entera_sobrevive_la_vuelta_completa() {
     assert!(ok, "import falló: {err}");
     assert!(out.contains("importadas 4"), "salida: {out}");
 
-    assert_eq!(conteos(&origen), conteos(&target), "la base importada tiene que ser equivalente");
+    assert_eq!(counts(&source), counts(&target), "la base importada tiene que ser equivalente");
 
     // Y se puede buscar: los triggers del índice FTS5 corrieron.
     let (ok, out, _) = mem(&target, &["search", "segunda nota"]);
@@ -57,24 +57,24 @@ fn una_base_entera_sobrevive_la_vuelta_completa() {
 #[test]
 fn importar_sobre_una_base_con_contenido_se_rechaza_sin_fusionar() {
     let d = tempfile::tempdir().unwrap();
-    let origen = d.path().join("o.db");
+    let source = d.path().join("o.db");
     {
-        let conn = db::open(&origen).unwrap();
+        let conn = db::open(&source).unwrap();
         ingest::save_explicit(&conn, "algo", "p", vec![]).unwrap();
     }
     let exp = d.path().join("exp");
-    mem(&origen, &["export", "--out", exp.to_str().unwrap()]);
+    mem(&source, &["export", "--out", exp.to_str().unwrap()]);
 
     // La misma base, que ya tiene contenido.
-    let (ok, _, err) = mem(&origen, &["import", "--desde", exp.to_str().unwrap()]);
+    let (ok, _, err) = mem(&source, &["import", "--desde", exp.to_str().unwrap()]);
     assert!(!ok, "tenía que negarse: importar encima duplicaría todo");
     assert!(err.contains("--fusionar"), "el error tiene que decir la salida: {err}");
 
     // Con --fusionar sí, y no duplica lo que ya estaba.
-    let (ok, out, err) = mem(&origen, &["import", "--desde", exp.to_str().unwrap(), "--fusionar"]);
+    let (ok, out, err) = mem(&source, &["import", "--desde", exp.to_str().unwrap(), "--fusionar"]);
     assert!(ok, "{err}");
     assert!(out.contains("importadas 0"), "no tenía que insertar nada: {out}");
-    assert_eq!(conteos(&origen).0, 1, "seguía habiendo una sola memoria");
+    assert_eq!(counts(&source).0, 1, "seguía habiendo una sola memoria");
 }
 
 #[test]

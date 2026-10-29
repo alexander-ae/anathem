@@ -8,9 +8,9 @@ const CURADAS: &[&str] = &["project-knowledge", "project-config", "manual", "lea
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct MigrateReport {
-    pub migradas: usize,
-    pub archivadas: usize,
-    pub fallidas: usize,
+    pub migrated: usize,
+    pub archived: usize,
+    pub failed: usize,
     /// (ext_id, title) of `failed` documents whose type is curated: their
     /// content is intact in the export but they are not migrated — they have
     /// to be reimported by hand.
@@ -52,7 +52,7 @@ pub fn run(conn: &Connection, path: &Path) -> Result<MigrateReport> {
             .with_context(|| format!("JSON inválido en la línea {}", n + 1))?;
 
         if row.status.as_deref() == Some("failed") {
-            rep.fallidas += 1;
+            rep.failed += 1;
             let kind = row.metadata.as_ref().and_then(|m| m.kind.as_deref()).unwrap_or("");
             if CURADAS.contains(&kind) {
                 let raw = row.content.clone().unwrap_or_default();
@@ -64,12 +64,12 @@ pub fn run(conn: &Connection, path: &Path) -> Result<MigrateReport> {
         let meta = row.metadata.as_ref();
         let kind = meta.and_then(|m| m.kind.as_deref()).unwrap_or("");
         if !CURADAS.contains(&kind) {
-            rep.archivadas += 1;
+            rep.archived += 1;
             continue;
         }
         let raw = row.content.unwrap_or_default();
         if raw.trim().is_empty() {
-            rep.archivadas += 1;
+            rep.archived += 1;
             continue;
         }
 
@@ -99,11 +99,11 @@ pub fn run(conn: &Connection, path: &Path) -> Result<MigrateReport> {
             |r| r.get(0),
         )?;
         if ya > 0 {
-            rep.migradas += 1;
+            rep.migrated += 1;
             continue;
         }
         ingest::insert(conn, &m)?;
-        rep.migradas += 1;
+        rep.migrated += 1;
     }
     Ok(rep)
 }

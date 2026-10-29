@@ -61,24 +61,24 @@ fn inline_list(v: &str) -> Vec<String> {
 /// Parses one file from the export. Returns `None` when it has no
 /// frontmatter, so `--desde` can be pointed at a folder with other things
 /// inside without blowing up.
-pub fn parse(texto: &str) -> Option<ParsedMemory> {
-    let resto = texto.strip_prefix("---\n")?;
+pub fn parse(text: &str) -> Option<ParsedMemory> {
+    let resto = text.strip_prefix("---\n")?;
     let fin = resto.find("\n---\n")?;
-    let (cabecera, cuerpo) = (&resto[..fin], &resto[fin + 5..]);
+    let (cabecera, body) = (&resto[..fin], &resto[fin + 5..]);
 
-    let mut m = ParsedMemory { body: cuerpo.trim_start_matches('\n').trim_end().to_string(), ..Default::default() };
+    let mut m = ParsedMemory { body: body.trim_start_matches('\n').trim_end().to_string(), ..Default::default() };
     m.status = "active".into();
     m.source = "explicit".into();
 
-    let lines_: Vec<&str> = cabecera.lines().collect();
+    let lines: Vec<&str> = cabecera.lines().collect();
     let mut i = 0;
-    while i < lines_.len() {
-        let l = lines_[i];
+    while i < lines.len() {
+        let l = lines[i];
         i += 1;
         // Refs are a list of pairs on following lines, indented.
         if l.trim_start().starts_with("- kind:") {
             let kind = unquote(l.split_once("kind:").map(|x| x.1).unwrap_or(""));
-            let value = lines_
+            let value = lines
                 .get(i)
                 .and_then(|x| x.split_once("value:"))
                 .map(|x| unquote(x.1))
@@ -165,8 +165,8 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
         std::collections::HashSet::new();
     {
         let mut st = tx.prepare("select project, body from memories")?;
-        let filas = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
-        for f in filas {
+        let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+        for f in rows {
             existing.insert(f?);
         }
     }
@@ -174,7 +174,7 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
     // All the rows first, without `supersedes_id`: the id it points at may
     // belong to a memory not inserted yet, and resolving it on the fly would
     // leave chains broken depending on the order of the files.
-    let mut map_: HashMap<i64, i64> = HashMap::new();
+    let mut mapping: HashMap<i64, i64> = HashMap::new();
     let mut resumen = Summary::default();
     for m in &parsed {
         if existing.contains(&(m.project.clone(), m.body.clone())) {
@@ -193,17 +193,17 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
         )?;
         let new_id = tx.last_insert_rowid();
         if let Some(old) = m.old_id {
-            map_.insert(old, new_id);
+            mapping.insert(old, new_id);
         }
         existing.insert((m.project.clone(), m.body.clone()));
-        for (ord, cuerpo) in
+        for (ord, body) in
             crate::chunk::split(&m.body, crate::ingest::CHUNK_SIZE, crate::ingest::CHUNK_STEP)
                 .iter()
                 .enumerate()
         {
             tx.execute(
                 "insert into chunks (memory_id, ord, body) values (?1, ?2, ?3)",
-                params![new_id, ord as i64, cuerpo],
+                params![new_id, ord as i64, body],
             )?;
         }
         for t in &m.tags {
@@ -224,7 +224,7 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
     // Only now the chains, with every new id already known.
     for m in &parsed {
         let (Some(old), Some(apunta)) = (m.old_id, m.supersedes) else { continue };
-        let (Some(&new_id), Some(&target)) = (map_.get(&old), map_.get(&apunta)) else {
+        let (Some(&new_id), Some(&target)) = (mapping.get(&old), mapping.get(&apunta)) else {
             continue;
         };
         tx.execute("update memories set supersedes_id = ?2 where id = ?1", params![new_id, target])?;

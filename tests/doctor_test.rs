@@ -555,9 +555,9 @@ fn el_indice_fts5_se_compara_por_ids_y_no_solo_por_cantidad() {
     .unwrap();
     c.execute("insert into chunks_fts(rowid, body) values (99, 'fantasma')", []).unwrap();
     let chunks: i64 = c.query_row("select count(*) from chunks", [], |r| r.get(0)).unwrap();
-    let indexados: i64 =
+    let indexed: i64 =
         c.query_row("select count(*) from chunks_fts_docsize", [], |r| r.get(0)).unwrap();
-    assert_eq!(chunks, indexados, "el escenario exige igual cantidad");
+    assert_eq!(chunks, indexed, "el escenario exige igual cantidad");
     drop(c);
 
     let o = mem(&db, &["doctor"]);
