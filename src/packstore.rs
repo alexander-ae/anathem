@@ -358,9 +358,9 @@ fn replace_file(origen: &Path, target: &Path) -> std::io::Result<()> {
     std::fs::rename(target, &lateral)?;
     match std::fs::rename(origen, target) {
         Ok(()) => {
-            // Best-effort: si esto falla queda un archivo lateral sobrante
-            // tirado, no un estado inconsistente — `destino` ya tiene el
-            // contenido correcto.
+            // Best effort: if this fails a leftover sibling file is left
+            // lying around, not an inconsistent state — `target` already
+            // holds the right content.
             let _ = std::fs::remove_file(&lateral);
             Ok(())
         }
@@ -371,30 +371,32 @@ fn replace_file(origen: &Path, target: &Path) -> std::io::Result<()> {
     }
 }
 
-/// Instala un paquete desde un archivo local y reindexa.
+/// Installs a pack from a local file and reindexes.
 ///
-/// Es la única entrada que cambia el paquete de una base, y está escrita
-/// para que no exista un estado intermedio observable que importe:
+/// It is the only entry point that changes a database's pack, and it is
+/// written so that no observable intermediate state matters:
 ///
-/// 1. Se verifica el sha256 —acá y solo acá— y que el paquete abra.
-/// 2. Se descarta si no reconocería ni una palabra de esta memoria.
-/// 3. El archivo se copia a un temporal y recién ahí se renombra sobre el
-///    destino, que dentro del mismo directorio es atómico. Por eso instalar
-///    desde la ruta ya instalada —reinstalar "para forzar el reindexado"—
-///    funciona en vez de truncar el paquete a cero bytes.
-/// 4. Antes del rename se anota `pack_instalando`, porque el rename ya
-///    reemplaza el archivo y el registro se escribe recién en el paso
-///    siguiente: entre los dos, un SIGKILL dejaría el build nuevo en disco
-///    con `meta` describiendo al viejo, y con el mismo nombre y las mismas
-///    dimensiones nada lo delataría. La marca la borra `adoptar_pack` en su
-///    propia transacción, así que sobrevivir a la instalación significa
-///    exactamente "el archivo puede no ser el que `meta` describe" y
-///    `resolver` reindexa.
-/// 5. Borrar los vectores viejos y anotar el paquete nuevo es **una sola
-///    transacción**: no hay ninguna ventana con vectores de un paquete
-///    atribuidos a otro.
-/// 6. Rellenar los vectores queda afuera, por lotes y es idempotente: un
-///    Ctrl-C en el medio deja menos vectores, nunca vectores mezclados.
+/// 1. The sha256 is verified — here and only here — and the pack is checked
+///    to open.
+/// 2. It is rejected if it would not recognise a single word of this
+///    memory.
+/// 3. The file is copied to a temporary and only then renamed over the
+///    destination, which within the same directory is atomic. That is why
+///    installing from the already-installed path — reinstalling "to force a
+///    reindex" — works instead of truncating the pack to zero bytes.
+/// 4. `pack_instalando` is marked before the rename, because the rename
+///    already replaces the file while the registry is written only in the
+///    next step: between the two, a SIGKILL would leave the new build on
+///    disk with `meta` describing the old one, and with the same name and
+///    the same dimensions nothing would give it away. The mark is cleared by
+///    `adopt_pack` in its own transaction, so surviving the install means
+///    exactly "the file may not be the one `meta` describes" and `resolve`
+///    reindexes.
+/// 5. Deleting the old vectors and recording the new pack is **a single
+///    transaction**: there is no window with one pack's vectors attributed
+///    to another.
+/// 6. Filling in the vectors stays outside, in batches, and is idempotent: a
+///    Ctrl-C midway leaves fewer vectors, never mixed ones.
 pub fn install(conn: &Connection, dir: &Path, archivo: &Path) -> Result<Instalacion> {
     let sha = pack::sha256(archivo)?;
     verificar_firma(archivo, &sha)?;
@@ -419,8 +421,9 @@ pub fn install(conn: &Connection, dir: &Path, archivo: &Path) -> Result<Instalac
         std::fs::copy(archivo, &temporal).with_context(|| {
             format!("no se pudo copiar {} a {}", archivo.display(), temporal.display())
         })?;
-        // Que la copia sea la copia: si quedó corta o el disco se llenó, el
-        // sha no da y el paquete instalado no llega a existir.
+        // Make sure the copy is the copy: if it came out short or the disk
+        // filled up, the sha does not match and the installed pack never
+        // comes to exist.
         let sha_copia = pack::sha256(&temporal)?;
         if sha_copia != sha {
             bail!("la copia de {} quedó incompleta; no se instaló nada", archivo.display());
@@ -432,44 +435,45 @@ pub fn install(conn: &Connection, dir: &Path, archivo: &Path) -> Result<Instalac
         let _ = std::fs::remove_file(&temporal);
         return Err(e);
     }
-    // La marca va antes del rename, no después: si se escribiera después, el
-    // tramo sin cubrir sería justo el que se quiere cubrir. Que sobre —que
-    // quede puesta sin que el archivo haya cambiado— cuesta un reindexado;
-    // que falte cuesta un índice mezclado en silencio.
+    // The mark goes before the rename, not after: written afterwards, the
+    // uncovered stretch would be exactly the one meant to be covered. Having
+    // it to spare — left set without the file having changed — costs a
+    // reindex; having it missing costs a silently mixed index.
     vecstore::mark_install(conn, &nombre)?;
     if let Err(e) = replace_file(&temporal, &target) {
         let _ = std::fs::remove_file(&temporal);
-        // `reemplazar` restaura `destino` a lo que tenía antes cuando el
-        // segundo paso falla, así que el archivo del paquete registrado no
-        // se tocó (a menos que la restauración *también* fallara, un doble
-        // fallo improbable; ahí directamente falta, y eso ya lo detecta
-        // `resolver_interno` sin necesitar la marca —busca
-        // `ruta_registrada.exists()` antes de mirarla—). Dejarla puesta
-        // solo costaría un reindexado inútil la próxima vez que el nombre
-        // coincida con el registrado.
+        // `replace_file` restores `target` to what it held before when the
+        // second step fails, so the registered pack's file was not touched
+        // (unless the restore *also* failed, an unlikely double failure;
+        // there it is simply missing, and `resolve_inner` already detects
+        // that without needing the mark — it checks
+        // `registered_path.exists()` before looking at it). Leaving the mark
+        // set would only cost a useless reindex the next time the name
+        // matches the registered one.
         let _ = vecstore::clear_install_mark(conn);
         return Err(anyhow::Error::new(e)
             .context(format!("no se pudo instalar el paquete en {}", target.display())));
     }
 
-    // Borra la marca en la misma transacción en la que adopta.
+    // Clears the mark in the same transaction in which it adopts.
     vecstore::adoptar_pack(conn, &nombre, &sha, dims)?;
     let p = Pack::open_pack(&target)?;
-    // Indexar un corpus grande lleva minutos y otra terminal puede instalar
-    // otro paquete en el medio. Si pasa, esta instalación queda desplazada:
-    // no es un error —el paquete se instaló y el otro proceso está
-    // indexando el suyo— pero hay que decirlo, porque el índice quedó
-    // incompleto y `model status` es el único lugar donde eso se ve.
+    // Indexing a large corpus takes minutes and another terminal may
+    // install a different pack meanwhile. If that happens, this install is
+    // displaced: it is not an error — the pack was installed and the other
+    // process is indexing its own — but it has to be said, because the index
+    // was left incomplete and `model status` is the only place that shows.
     let s = vecstore::sync(conn, &p, &(nombre.clone(), sha, dims))?;
     Ok(Instalacion { nombre, dims, fragmentos: s.escritos(), desplazada: s.abandonada() })
 }
 
-/// Quita el paquete y sus vectores. Devuelve el nombre del que había, o
-/// `None` si no había ninguno.
+/// Removes the pack and its vectors. Returns the name of the one that was
+/// there, or `None` if there was none.
 ///
-/// Primero la base y después el archivo: si borrar el archivo falla, la base
-/// ya quedó sin paquete y la búsqueda vuelve a ser solo bm25, que es lo que
-/// se pidió. Al revés quedaría un registro apuntando a la nada.
+/// The database first and the file second: if deleting the file fails, the
+/// database is already pack-less and search is back to bm25 only, which is
+/// what was asked for. The other way round would leave a registry entry
+/// pointing at nothing.
 pub fn quitar(conn: &Connection, dir: &Path) -> Result<Option<String>> {
     let Some((nombre, _, _)) = vecstore::registered_pack(conn)? else {
         return Ok(None);
@@ -479,7 +483,7 @@ pub fn quitar(conn: &Connection, dir: &Path) -> Result<Option<String>> {
     Ok(Some(nombre))
 }
 
-/// Verifica el `.sha256` que viaja al lado del paquete, si viaja alguno.
+/// Verifies the `.sha256` travelling beside the pack, if one travels at all.
 fn verificar_firma(archivo: &Path, sha: &str) -> Result<()> {
     let firma = archivo.with_file_name(format!(
         "{}.sha256",
@@ -499,12 +503,12 @@ fn verificar_firma(archivo: &Path, sha: &str) -> Result<()> {
     Ok(())
 }
 
-/// ¿El paquete produce el vector nulo para todo lo que hay guardado?
+/// Does the pack produce the null vector for everything already saved?
 ///
-/// Pasa cuando la tabla del paquete no cubre el vocabulario que usa esta
-/// memoria: instala limpio, reporta cobertura completa y no encuentra nada
-/// nunca, sin ninguna señal. Con la memoria vacía no hay nada que juzgar y
-/// se deja pasar.
+/// That happens when the pack's table does not cover the vocabulary this
+/// memory uses: it installs cleanly, reports full coverage and never finds
+/// anything, with no signal at all. With an empty memory there is nothing to
+/// judge, so it is let through.
 fn solo_vectores_nulos(conn: &Connection, p: &Pack) -> Result<bool> {
     let cuerpos: Vec<String> = conn
         .prepare("select body from chunks where trim(body) <> '' limit ?1")?
@@ -521,31 +525,33 @@ fn solo_vectores_nulos(conn: &Connection, p: &Pack) -> Result<bool> {
     Ok(true)
 }
 
-/// El paquete activo, revalidado antes de cada operación.
+/// The active pack, revalidated before every operation.
 ///
-/// El servidor MCP vive horas. En ese rato otra terminal puede correr
-/// `mem model install` o `mem model remove`, y un servidor que siguiera
-/// usando el paquete que abrió al arrancar escribiría vectores del paquete
-/// viejo junto a los del nuevo. Con dimensiones distintas el blob corto
-/// quedaría muerto; con las mismas —el caso real, porque el formato fija 256
-/// para todo paquete— nada los distinguiría y la búsqueda calcularía cosenos
-/// contra dos espacios vectoriales mezclados.
+/// The MCP server lives for hours. In that time another terminal can run
+/// `mem model install` or `mem model remove`, and a server still using the
+/// pack it opened at startup would write the old pack's vectors next to the
+/// new one's. With different dimensions the short blob would be dead; with
+/// the same ones — the real case, since the format fixes 256 for every pack
+/// — nothing would tell them apart and search would compute cosines against
+/// two mixed vector spaces.
 ///
-/// Revalidar cuesta una consulta a `meta`. Reabrir —que cuesta entre 40 y
-/// 120 ms, y unos 54 MB de heap del tokenizador— pasa solo cuando la
-/// identidad cambió de verdad. `nuevo` no abre nada: arranca en blanco
-/// (`registro: None, activo: None`), a propósito, para que una sesión que
-/// nunca busca ni guarda no pague nunca ese heap. Quien quiera el paquete
-/// llama a `actual`, que abre en el momento en que de verdad hace falta —la
-/// primera búsqueda o el primer guardado— y no antes.
-/// Avisa, **sin abrir el paquete**, si el registro apunta a un archivo que no
-/// está. Existe porque abrir es caro y se difiere hasta el primer uso: una
-/// sesión que solo lista tags nunca abriría nada y por lo tanto nunca vería
-/// que su paquete desapareció. Comprobar que el archivo exista cuesta un
-/// `stat`, así que ese caso —el frecuente— se puede detectar al arrancar.
+/// Revalidating costs one query against `meta`. Reopening — which costs
+/// between 40 and 120 ms, plus some 54 MB of tokenizer heap — happens only
+/// when the identity really changed. `new` opens nothing: it starts blank
+/// (`registry: None, active: None`), on purpose, so a session that never
+/// searches or saves never pays that heap. Whoever wants the pack calls
+/// `current`, which opens at the moment it is really needed — the first
+/// search or the first save — and not before.
+/// Warns, **without opening the pack**, when the registry points at a file
+/// that is not there. It exists because opening is expensive and deferred
+/// until first use: a session that only lists tags would never open
+/// anything and would therefore never notice its pack vanished. Checking
+/// the file exists costs one `stat`, so that case — the common one — can be
+/// caught at startup.
 ///
-/// Un paquete que existe pero está corrupto sigue descubriéndose recién al
-/// usarlo: detectarlo exige parsearlo, que es justo lo que se difiere.
+/// A pack that exists but is corrupt is still discovered only on use:
+/// detecting that requires parsing it, which is precisely what is
+/// deferred.
 pub fn warn_if_file_missing(conn: &Connection, dir: &Path) {
     let Ok(Some((nombre, _, _))) = vecstore::registered_pack(conn) else {
         return;
@@ -562,48 +568,49 @@ pub fn warn_if_file_missing(conn: &Connection, dir: &Path) {
 
 pub struct LivePack {
     dir: PathBuf,
-    /// Lo que decía `meta` la última vez que se recargó, se haya podido
-    /// abrir el paquete o no, o `None` si todavía no se recargó nunca. Es la
-    /// señal de "cambió algo" (o "no se miró todavía"): guardarla también
-    /// cuando el paquete no abre evita reintentar abrirlo —entre 40 y 120
-    /// ms— en cada mensaje mientras siga roto.
+    /// What `meta` said the last time it reloaded, whether or not the pack
+    /// could be opened, or `None` if it never reloaded yet. It is the
+    /// "something changed" (or "not looked at yet") signal: storing it even
+    /// when the pack does not open avoids retrying the open — between 40 and
+    /// 120 ms — on every message for as long as it stays broken.
     registro: Option<PackIdentity>,
-    /// El paquete abierto junto con la identidad con la que se lo abrió.
-    /// Nunca se arman por separado: ese par es lo que `sincronizar`
-    /// necesita para no escribir vectores de un paquete caducado, y leer
-    /// `meta` una segunda vez para completarlo reabriría la misma ventana.
+    /// The open pack together with the identity it was opened under. They
+    /// are never built separately: that pair is what `sync` needs so it does
+    /// not write a stale pack's vectors, and reading `meta` a second time to
+    /// complete it would reopen the very window the pair closes.
     activo: Option<(Pack, PackIdentity)>,
-    /// Cuándo se usó el paquete por última vez, para poder soltarlo si pasa
-    /// mucho sin usarse. `None` mientras no haya ninguno abierto.
+    /// When the pack was last used, so it can be released after a long idle
+    /// stretch. `None` while none is open.
     last_used: Option<std::time::Instant>,
-    /// Se soltó por inactividad y hay que reabrirlo en el próximo uso.
+    /// It was released for being idle and has to be reopened on next use.
     ///
-    /// Hace falta porque `registro` no cambia al soltarlo: sin esta marca,
-    /// `actual` vería que el registro es el mismo, decidiría que no hay nada
-    /// que recargar, y la sesión se quedaría sin capa vectorial para siempre.
-    /// Y no alcanza con mirar si `activo` está vacío: eso también pasa cuando
-    /// no hay ningún paquete instalado, y ahí reintentar en cada mensaje
-    /// costaría entre 40 y 120 ms, que es justo lo que `registro` evita.
+    /// This is needed because `registry` does not change when it is
+    /// released: without this flag, `current` would see the registry is the
+    /// same, decide there is nothing to reload, and the session would be
+    /// left without a vector layer forever. And looking at whether `active`
+    /// is empty is not enough: that also happens when no pack is installed
+    /// at all, and retrying on every message there would cost between 40 and
+    /// 120 ms, which is exactly what `registry` avoids.
     released: bool,
 }
 
-/// Le pide al asignador que devuelva al sistema lo que ya no usa.
+/// Asks the allocator to return to the system what it no longer uses.
 ///
-/// Sin esto, soltar el paquete no se nota: `drop` libera los ~50 MB del
-/// tokenizador para el programa, pero glibc los retiene en su arena y el RSS
-/// no baja. Medido: 64 MB antes de soltar, 57 después; con esto, vuelve al
-/// orden de los 9 MB del arranque.
+/// Without this, releasing the pack does not show: `drop` frees the
+/// tokenizer's ~50 MB for the program, but glibc keeps them in its arena and
+/// RSS does not drop. Measured: 64 MB before releasing, 57 after; with this,
+/// it returns to the order of the 9 MB it started at.
 ///
-/// Es específico de glibc. En musl, macOS o Windows no existe y la llamada
-/// no está: ahí soltar el paquete libera el mapeo igual, y el resto queda a
-/// criterio del asignador de la plataforma.
+/// It is glibc-specific. On musl, macOS or Windows it does not exist and the
+/// call is absent: there, releasing the pack frees the mapping all the same,
+/// and the rest is up to the platform's allocator.
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 fn return_heap_to_os() {
     extern "C" {
         fn malloc_trim(pad: usize) -> std::os::raw::c_int;
     }
-    // Seguro: no toca memoria del programa, solo le dice al asignador que
-    // devuelva páginas libres de su arena.
+    // Safe: it touches none of the program's memory, it only tells the
+    // allocator to hand back free pages from its arena.
     unsafe {
         malloc_trim(0);
     }
@@ -613,9 +620,9 @@ fn return_heap_to_os() {
 fn return_heap_to_os() {}
 
 impl LivePack {
-    /// No toca la base ni el disco: abrir el paquete queda para el primer
-    /// `actual()` que de verdad lo necesite. Ver el comentario de
-    /// `PaqueteVivo` arriba.
+    /// Touches neither the database nor the disk: opening the pack is left
+    /// to the first `current()` that really needs it. See the `LivePack`
+    /// comment above.
     pub fn new_id(dir: &Path) -> LivePack {
         LivePack {
             dir: dir.to_path_buf(),
@@ -626,12 +633,11 @@ impl LivePack {
         }
     }
 
-    /// El paquete que corresponde usar ahora mismo, con la identidad bajo
-    /// la que se lo abrió.
+    /// The pack to use right now, with the identity it was opened under.
     ///
-    /// Los dos salen juntos de la misma llamada a propósito: leerlos por
-    /// separado reabriría la ventana que este par cierra, porque entre una
-    /// lectura y la otra el registro puede cambiar.
+    /// Both come out of the same call on purpose: reading them separately
+    /// would reopen the window this pair closes, because the registry can
+    /// change between one read and the other.
     pub fn actual(&mut self, conn: &Connection) -> Option<(&Pack, &PackIdentity)> {
         let ahora = vecstore::registered_pack(conn).ok().flatten();
         if ahora != self.registro || self.released {
@@ -643,17 +649,18 @@ impl LivePack {
         self.activo.as_ref().map(|(p, i)| (p, i))
     }
 
-    /// Suelta el paquete si lleva más de `limite` sin usarse. Devuelve si lo
-    /// soltó.
+    /// Releases the pack when it has gone longer than `limit` unused.
+    /// Returns whether it released it.
     ///
-    /// El tokenizador cuesta unos 60 MB de heap privado por proceso, y una
-    /// sesión que buscó una vez y después se quedó quieta los sigue pagando
-    /// hasta cerrarse. Soltarlo la devuelve a unos 7 MB; lo único que cuesta
-    /// es volver a abrirlo —del orden de 90 ms— en la próxima búsqueda, que
-    /// ya no es inmediata por definición: hubo un hueco de por medio.
+    /// The tokenizer costs some 60 MB of private heap per process, and a
+    /// session that searched once and then went quiet keeps paying for it
+    /// until it closes. Releasing it brings the session back to about 7 MB;
+    /// the only cost is reopening it — on the order of 90 ms — on the next
+    /// search, which by definition is no longer immediate: there was a gap
+    /// in between.
     ///
-    /// No se olvida el `registro`: sirve para saber si el paquete cambió, y
-    /// tirarlo obligaría a releer `meta` sin motivo.
+    /// The `registry` is not forgotten: it tells whether the pack changed,
+    /// and dropping it would force rereading `meta` for no reason.
     pub fn release_if_idle(&mut self, limit_: std::time::Duration) -> bool {
         if limit_.is_zero() || self.activo.is_none() {
             return false;
@@ -670,7 +677,7 @@ impl LivePack {
         }
     }
 
-    /// Si hay un paquete abierto ahora mismo. Para tests y diagnóstico.
+    /// Whether a pack is open right now. For tests and diagnostics.
     pub fn has_open_pack(&self) -> bool {
         self.activo.is_some()
     }
@@ -678,17 +685,16 @@ impl LivePack {
     fn recargar(&mut self, conn: &Connection) {
         let a = resolve(conn, &self.dir);
         a.warn();
-        // El par sale entero de `resolver`, que sabe con qué identidad abrió
-        // el paquete. Releer `meta` acá para completarlo podría emparejar el
-        // paquete de antes con el registro de después.
+        // The pair comes whole out of `resolve`, which knows what identity
+        // it opened the pack under. Rereading `meta` here to complete it
+        // could pair the pack from before with the registry from after.
         self.activo = match (a.pack, a.identidad) {
             (Some(p), Some(i)) => Some((p, i)),
             _ => None,
         };
-        // Para detectar el próximo cambio, en cambio, sirve lo que dice
-        // `meta` ahora: `resolver` puede haber reindexado y cambiado el
-        // registro, y si se guardara el de antes se recargaría en cada
-        // mensaje.
+        // To detect the next change, though, what `meta` says now is what
+        // serves: `resolve` may have reindexed and changed the registry, and
+        // storing the earlier one would reload on every message.
         self.registro = vecstore::registered_pack(conn).ok().flatten();
         self.last_used = self.activo.as_ref().map(|_| std::time::Instant::now());
         self.released = false;
@@ -699,9 +705,10 @@ impl LivePack {
 mod tests {
     use super::*;
 
-    /// Tokenizador Unigram de una sola pieza. Estos tests no prueban
-    /// `embeber`, solo que el paquete abre y que `reconciliar`/`reemplazar`
-    /// mueven el archivo correcto; una pieza alcanza.
+    /// A single-piece Unigram tokenizer. These tests do not exercise
+    /// embedding, only that the pack opens and that
+    /// `reconcile`/`replace_file` move the right file; one piece is
+    /// enough.
     const TOKENIZER_MINIMO: &str = r#"{
      "version":"1.0","truncation":null,"padding":null,"added_tokens":[],
      "normalizer":null,
@@ -711,11 +718,11 @@ mod tests {
        "vocab":[["<unk>",0.0]]}
     }"#;
 
-    /// Escribe un paquete ANPK mínimo válido. Duplica a mano el formato que
-    /// `tests/apoyo::escribir_pack_filas` ya sabe escribir porque ese
-    /// helper vive en el crate de integración: los tests unitarios de este
-    /// módulo, que necesitan tocar `reconciliar` por ser privada, no pueden
-    /// importarlo.
+    /// Writes a minimal valid ANPK pack. It duplicates by hand the format
+    /// that `tests/apoyo::escribir_pack_filas` already knows how to write,
+    /// because that helper lives in the integration crate: this module's
+    /// unit tests, which need to reach `reconcile` since it is private,
+    /// cannot import it.
     fn escribir_pack_de_prueba(pack_path: &Path, nombre: &str) {
         let dims = 4usize;
         let fila = [0u8, 0, 0, 0];
@@ -739,16 +746,16 @@ mod tests {
         std::fs::write(pack_path, b).unwrap();
     }
 
-    // --- bloqueo 2: reemplazar sobre un destino que ya existe -------------
+    // --- blocker 2: replacing onto a destination that already exists -----
     //
-    // `std::fs::rename` reemplaza atómicamente un destino existente en
-    // POSIX, así que el primer test de este grupo ya pasaba con un rename
-    // directo. Lo que prueba es que `reemplazar` —la función nueva,
-    // portable, que aparta el destino en vez de borrarlo— hace lo mismo: es
-    // justo la operación (rename sobre un destino ya ocupado) que hoy no
-    // sería portable a Windows si se dejara como estaba. El tercer test
-    // ejercita la parte que un rename atómico nunca necesitó: recuperarse
-    // cuando el segundo paso falla de verdad.
+    // `std::fs::rename` atomically replaces an existing destination on
+    // POSIX, so the first test in this group already passed with a direct
+    // rename. What it proves is that `replace_file` — the new, portable
+    // function that sets the destination aside instead of deleting it —
+    // does the same: it is precisely the operation (rename onto an occupied
+    // destination) that would not be portable to Windows if left as it was.
+    // The third test exercises the part an atomic rename never needed:
+    // recovering when the second step really fails.
 
     /// Ningún archivo lateral (`*.reemplazando-*`) sobrevive a un
     /// `reemplazar`, salga bien o mal.
@@ -788,13 +795,13 @@ mod tests {
 
     #[test]
     fn reemplazar_si_el_segundo_rename_falla_el_destino_viejo_sigue_sirviendo() {
-        // El origen no existe, así que el primer rename (destino -> lateral)
-        // sale bien pero el segundo (origen -> destino) falla con un error
-        // real — no un cuelgue del proceso, el mismo tipo de fallo que
-        // dejaría un antivirus reteniendo el archivo un instante. Antes de
-        // este arreglo, un `reemplazar` que llegara hasta acá ya había
-        // borrado el destino: el archivo viejo, que hasta ese momento
-        // andaba, se perdía sin necesidad. Ahora tiene que seguir estando.
+        // The source does not exist, so the first rename (target ->
+        // sibling) succeeds but the second (source -> target) fails with a
+        // real error — not a process hang, the same kind of failure an
+        // antivirus holding the file for an instant would cause. Before this
+        // fix, a `replace_file` reaching this point had already deleted the
+        // target: the old file, which had been working until then, was lost
+        // for no reason. Now it has to still be there.
         let d = tempfile::tempdir().unwrap();
         let origen = d.path().join("origen"); // deliberadamente no se crea
         let target = d.path().join("destino");
@@ -811,22 +818,22 @@ mod tests {
         assert!(no_stray_files(d.path()), "no puede quedar un archivo lateral sobrante");
     }
 
-    // --- bloqueo 3: reconciliar con el mmap todavía abierto ----------------
+    // --- blocker 3: reconciling with the mmap still open -----------------
 
     #[test]
     fn reconciliar_renombra_un_archivo_con_el_mmap_todavia_abierto() {
-        // Reproduce la forma exacta del problema de Windows: abrir el Pack
-        // —que mapea el archivo en memoria— y pasar ESE mismo `Pack`, en el
-        // mismo proceso, a `reconciliar` para que renombre el archivo que
-        // tiene mapeado. Es lo que hace `resolver_interno` en producción
-        // cuando el paquete en disco no es el registrado.
+        // Reproduces the exact shape of the Windows problem: open the Pack
+        // — which maps the file into memory — and hand THAT same `Pack`, in
+        // the same process, to `reconcile` so it renames the file it has
+        // mapped. It is what `resolve_inner` does in production when the
+        // pack on disk is not the registered one.
         let d = tempfile::tempdir().unwrap();
         let dir = d.path();
         std::fs::create_dir_all(packs_dir(dir)).unwrap();
         let ruta_vieja = pack_path(dir, "viejo-es");
-        // El archivo vive bajo el nombre "viejo-es" pero declara ser
-        // "nuevo-es": exactamente el caso que obliga a reconciliar a
-        // renombrarlo.
+        // The file lives under the name "viejo-es" but declares itself
+        // "nuevo-es": exactly the case that forces reconcile to rename
+        // it.
         escribir_pack_de_prueba(&ruta_vieja, "nuevo-es");
 
         let conn = crate::db::open(&dir.join("mem.db")).unwrap();
@@ -846,9 +853,9 @@ mod tests {
         );
     }
 
-    // --- soltar el paquete tras un rato sin usarlo -----------------------
+    // --- releasing the pack after a while unused -------------------------
 
-    /// Prepara un `PaqueteVivo` con el paquete ya abierto.
+    /// Prepares a `LivePack` with the pack already open.
     fn vivo_con_paquete(dir: &Path) -> (rusqlite::Connection, LivePack) {
         std::fs::create_dir_all(packs_dir(dir)).unwrap();
         escribir_pack_de_prueba(&pack_path(dir, "es"), "es");
@@ -865,7 +872,7 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let (conn, mut v) = vivo_con_paquete(d.path());
 
-        // Un plazo que todavía no venció no lo suelta.
+        // A deadline that has not elapsed does not release it.
         assert!(!v.release_if_idle(std::time::Duration::from_secs(3600)));
         assert!(v.has_open_pack());
 
@@ -874,10 +881,10 @@ mod tests {
         assert!(v.release_if_idle(std::time::Duration::from_millis(10)));
         assert!(!v.has_open_pack(), "tenía que quedar sin paquete");
 
-        // Soltarlo de nuevo no hace nada: no hay qué soltar.
+        // Releasing it again does nothing: there is nothing to release.
         assert!(!v.release_if_idle(std::time::Duration::from_millis(10)));
 
-        // Y la próxima búsqueda lo reabre sola.
+        // And the next search reopens it on its own.
         let mut v = v;
         assert!(v.actual(&conn).is_some(), "tenía que reabrirse al volver a usarlo");
         assert!(v.has_open_pack());
@@ -897,7 +904,8 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let (conn, mut v) = vivo_con_paquete(d.path());
         std::thread::sleep(std::time::Duration::from_millis(30));
-        // Usarlo justo antes de mirar el plazo: ya no lleva 20 ms quieto.
+        // Using it right before checking the deadline: it has no longer
+        // been idle for 20 ms.
         assert!(v.actual(&conn).is_some());
         assert!(
             !v.release_if_idle(std::time::Duration::from_millis(20)),
