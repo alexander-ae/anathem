@@ -2,31 +2,30 @@ use crate::{model::SearchHit, search};
 use anyhow::Result;
 use rusqlite::{params, Connection, OptionalExtension};
 
-/// Memorias activas del mismo proyecto más parecidas a `body`.
+/// Active memories from the same project that most resemble `body`.
 ///
-/// Se llama justo después de insertar la memoria nueva, así que ella misma
-/// aparece entre los hits y hay que excluirla. Filtrar por "cuerpo idéntico"
-/// (como sugiere el enfoque ingenuo) no alcanza en general: si el corpus
-/// tuviera duplicados legítimos activos del mismo proyecto con cuerpo
-/// idéntico entre sí, y luego se guardara un tercero con ese mismo texto,
-/// excluir por contenido descartaría *todos* los que matchean -- los
-/// duplicados preexistentes incluidos -- en vez de proponerlos, justo el
-/// caso que esta función existe para detectar.
+/// It is called right after inserting the new memory, so that memory itself
+/// shows up among the hits and has to be excluded. Filtering by "identical
+/// body" (as the naive approach suggests) is not enough in general: if the
+/// corpus held legitimate active duplicates from the same project with
+/// identical bodies, and then a third one with that same text were saved,
+/// excluding by content would discard *all* the matches — the pre-existing
+/// duplicates included — instead of proposing them, which is exactly the
+/// case this function exists to detect.
 ///
-/// (En un corpus migrado real, el único par realmente byte-idéntico
-/// resultó estar en dos proyectos distintos, así que `candidates()`, que
-/// siempre filtra por un único proyecto, nunca los vio juntos en una misma
-/// llamada. Una consulta sobre todo ese corpus por pares de cuerpo idéntico
-/// dentro del mismo proyecto con ambos activos no devolvió filas: no había
-/// un caso real que ejercitara el argumento de arriba. Es una salvaguarda
-/// contra un escenario que ese corpus no tenía todavía, no una corrección de
-/// un bug observado.)
+/// (In a real migrated corpus, the only truly byte-identical pair turned out
+/// to live in two different projects, so `candidates()`, which always
+/// filters to a single project, never saw them together in one call. A query
+/// over that whole corpus for identical-body pairs within the same project
+/// with both active returned no rows: there was no real case exercising the
+/// argument above. This is a safeguard against a scenario that corpus did
+/// not have yet, not a fix for an observed bug.)
 ///
-/// Por eso excluimos por id en vez de por contenido: entre los hits cuyo
-/// cuerpo es idéntico al que se está guardando, el de mayor id es el que se
-/// acaba de insertar (los ids son autoincrementales y esta función se llama
-/// inmediatamente después del insert), así que es el único que se descarta.
-/// Los duplicados preexistentes, si los hubiera, quedan como candidatos.
+/// That is why we exclude by id and not by content: among the hits whose
+/// body is identical to the one being saved, the highest id is the one just
+/// inserted (ids autoincrement and this function is called immediately after
+/// the insert), so it is the only one dropped. Pre-existing duplicates, if
+/// any, remain candidates.
 pub fn candidates(conn: &Connection, body: &str, project: &str, k: usize) -> Result<Vec<SearchHit>> {
     let q = search::Query {
         text: body.chars().take(400).collect(),
@@ -34,14 +33,14 @@ pub fn candidates(conn: &Connection, body: &str, project: &str, k: usize) -> Res
         tags: Vec::new(),
         limit: k + 1,
         budget_tokens: usize::MAX,
-        // Esto compara cuerpos para detectar posibles duplicados, no arma
-        // una respuesta para mostrar: sin recorte.
+        // This compares bodies to spot possible duplicates, it is not
+        // building an answer to show: no trimming.
         excerpt: None,
     };
-    // Se llama justo después de un insert, cuando el vector de la memoria
-    // recién guardada puede no estar sincronizado todavía: el índice
-    // vectorial estaría incompleto justo en el caso que le importa a esta
-    // función. Por eso busca solo con bm25, sin el paquete.
+    // Called right after an insert, when the vector for the just-saved
+    // memory may not be synced yet: the vector index would be incomplete in
+    // precisely the case this function cares about. So it searches with bm25
+    // alone, without the pack.
     let mut hits = search::run(conn, &q, &search::Contexto::solo_bm25())?;
 
     let self_id = hits
@@ -64,27 +63,28 @@ pub fn candidates(conn: &Connection, body: &str, project: &str, k: usize) -> Res
     Ok(hits)
 }
 
-/// Fija `supersedes_id` en `nueva` y marca `vieja` como `superseded`, para
-/// que deje de aparecer en `search::run` (que ya filtra por status activo).
+/// Sets `supersedes_id` on `new_id` and marks `old` as `superseded`, so it
+/// stops showing up in `search::run` (which already filters by active
+/// status).
 ///
-/// Exige que `nueva` exista y esté `active` antes de tocar nada. Lo primero
-/// evita que un `nueva` inexistente pase silencioso: el primer `update` de
-/// abajo hace `where id = nueva`, y si no matchea ninguna fila, SQLite no
-/// levanta error -- solo el segundo `update` corría, dejando `vieja`
-/// superseded y apuntando a nada. Lo segundo (exigir `active`) cierra el
-/// camino a un ciclo: si `nueva` ya está superseded, es porque alguna otra
-/// llamada a `link` ya la usó como `vieja` -- dejarla encadenar de nuevo como
-/// `nueva` es como se cierra un ciclo (A supersede a B, B supersede a A),
-/// que deja sin ninguna versión activa y sería un bucle infinito para quien
-/// recorra la cadena de `supersedes_id` más adelante. Un `vieja` inexistente
-/// ya lo atajaba la foreign key de `supersedes_id` sin necesidad de chequeo
-/// explícito.
+/// It requires `new_id` to exist and be `active` before touching anything.
+/// The first check keeps a nonexistent `new_id` from passing silently: the
+/// first `update` below does `where id = new_id`, and if no row matches,
+/// SQLite raises no error — only the second `update` would run, leaving
+/// `old` superseded and pointing at nothing. The second check (requiring
+/// `active`) closes the path to a cycle: if `new_id` is already superseded,
+/// some other call to `link` already used it as `old` — letting it chain
+/// again as `new_id` is how a cycle closes (A supersedes B, B supersedes A),
+/// which leaves no active version at all and would be an infinite loop for
+/// anyone walking the `supersedes_id` chain later. A nonexistent `old` was
+/// already caught by the foreign key on `supersedes_id`, with no explicit
+/// check needed.
 ///
-/// Si el llamador ya tenía una transacción abierta, `link` no abre otra y no
-/// hace commit: los dos `update` son parte de la de él. Si el segundo falla,
-/// el primero queda aplicado hasta que el llamador haga rollback (o suelte la
-/// transacción sin commit); `link` no lo deshace por su cuenta. Quien la
-/// llama dentro de una transacción tiene que propagar el error y no hacer
+/// If the caller already had a transaction open, `link` opens no other and
+/// does not commit: both `update`s are part of theirs. If the second fails,
+/// the first stays applied until the caller rolls back (or drops the
+/// transaction without committing); `link` does not undo it on its own.
+/// Whoever calls it inside a transaction has to propagate the error and not
 /// commit.
 pub fn link(conn: &Connection, nueva: i64, vieja: i64) -> Result<()> {
     if nueva == vieja {
@@ -101,10 +101,10 @@ pub fn link(conn: &Connection, nueva: i64, vieja: i64) -> Result<()> {
              a otra memoria -- si ya fue superseded, esto formaría un ciclo"
         ),
     }
-    // Si el llamador ya abrió una transacción (el guardado con clave de tema
-    // inserta y supersede como una sola unidad), no se abre otra: SQLite no
-    // anida `BEGIN`. Entonces los dos `update` quedan dentro de la de él, y
-    // si alguno falla se deshace todo junto con su insert.
+    // If the caller already opened a transaction (saving with a topic key
+    // inserts and supersedes as one unit), no other is opened: SQLite does
+    // not nest `BEGIN`. So both `update`s land inside theirs, and if either
+    // fails everything is undone together with their insert.
     let propia = if conn.is_autocommit() { Some(conn.unchecked_transaction()?) } else { None };
     conn.execute("update memories set supersedes_id = ?2 where id = ?1", params![nueva, vieja])?;
     conn.execute(

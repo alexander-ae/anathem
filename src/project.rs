@@ -1,39 +1,39 @@
-//! De qué proyecto es una memoria, cuando nadie lo dice.
+//! Which project a memory belongs to, when nobody says.
 //!
-//! Sin esto, todo lo que se guarda sin `--project` cae en `sin-proyecto` y el
-//! filtro por proyecto deja de servir — que es exactamente el defecto que
-//! tenía el sistema anterior, donde los 390 documentos vivían en un único
-//! contenedor de relleno.
+//! Without this, everything saved without `--project` lands in
+//! `sin-proyecto` and filtering by project stops being useful — which is
+//! exactly the flaw of the previous system, where all 390 documents lived in
+//! a single filler container.
 
 use std::path::{Path, PathBuf};
 
 pub const SIN_PROYECTO: &str = "sin-proyecto";
 
-/// Deriva el nombre del proyecto a partir del directorio de trabajo.
+/// Derives the project name from the working directory.
 ///
-/// Prioriza el **nombre del remoto** por sobre el del directorio, y no es un
-/// capricho: un repositorio suele estar clonado en una carpeta que no se
-/// llama como él —`api-monolito` vive en `API/Web`— y dentro de un
-/// worktree el directorio se llama como la rama, no como el proyecto. El
-/// remoto es el único nombre estable entre clones, worktrees y máquinas.
+/// It prefers the **remote's name** over the directory's, and that is not a
+/// whim: a repository is usually cloned into a folder that is not named
+/// after it — `api-monolito` lives in `API/Web` — and inside a worktree the
+/// directory is named after the branch, not the project. The remote is the
+/// only name stable across clones, worktrees and machines.
 ///
-/// No invoca a `git`: lee `.git` directamente. Así funciona aunque git no
-/// esté instalado, no cuesta un subproceso, y no depende de que el binario
-/// herede un PATH razonable.
+/// It does not invoke `git`: it reads `.git` directly. That way it works
+/// even when git is not installed, costs no subprocess, and does not depend
+/// on the binary inheriting a sane PATH.
 pub fn detectar(cwd: &Path) -> Option<String> {
     let comun = dir_git_comun(cwd)?;
     if let Some(n) = nombre_del_remoto(&comun.join("config")) {
         return Some(n);
     }
-    // Sin remoto, el nombre de la carpeta que contiene el `.git` común. Es el
-    // repositorio principal incluso si estamos parados en un worktree.
+    // With no remote, the name of the folder holding the common `.git`.
+    // That is the main repository even when standing in a worktree.
     comun.parent()?.file_name()?.to_str().map(str::to_string)
 }
 
-/// El directorio `.git` **común**: el del repositorio principal, no el del
-/// worktree. En un worktree, `.git` es un archivo que apunta a
-/// `<principal>/.git/worktrees/<nombre>`, y ahí adentro hay un archivo
-/// `commondir` con la ruta relativa de vuelta al `.git` de verdad.
+/// The **common** `.git` directory: the main repository's, not the
+/// worktree's. In a worktree, `.git` is a file pointing at
+/// `<main>/.git/worktrees/<name>`, and inside there is a `commondir` file
+/// with the relative path back to the real `.git`.
 fn dir_git_comun(cwd: &Path) -> Option<PathBuf> {
     let mut d = cwd;
     loop {
@@ -65,9 +65,9 @@ fn dir_git_comun(cwd: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Resuelve los `..` de una ruta sin tocar el disco. `commondir` suele ser
-/// `../..`, y dejarlo sin resolver haría que `parent()` devolviera el
-/// componente equivocado al buscar el nombre de la carpeta.
+/// Resolves a path's `..` without touching disk. `commondir` is usually
+/// `../..`, and leaving it unresolved would make `parent()` return the wrong
+/// component when looking for the folder's name.
 fn normalizar(p: &Path) -> Option<PathBuf> {
     let mut out = PathBuf::new();
     for c in p.components() {
@@ -82,9 +82,9 @@ fn normalizar(p: &Path) -> Option<PathBuf> {
     Some(out)
 }
 
-/// Extrae el nombre del repositorio de la url de `origin` en un config de
-/// git. Soporta las dos formas usuales: `git@host:grupo/repo.git` y
-/// `https://host/grupo/repo.git`.
+/// Extracts the repository name from `origin`'s url in a git config. It
+/// supports the two usual shapes: `git@host:group/repo.git` and
+/// `https://host/group/repo.git`.
 fn nombre_del_remoto(config: &Path) -> Option<String> {
     let texto = std::fs::read_to_string(config).ok()?;
     let mut en_origin = false;
@@ -109,8 +109,8 @@ fn nombre_del_remoto(config: &Path) -> Option<String> {
     None
 }
 
-/// El proyecto a usar: el que pidió quien llama, o el detectado, o el
-/// genérico. Un `--project` explícito siempre gana.
+/// The project to use: the caller's, or the detected one, or the generic
+/// fallback. An explicit `--project` always wins.
 pub fn resolve(pedido: Option<String>, cwd: &Path) -> String {
     pedido.unwrap_or_else(|| detectar(cwd).unwrap_or_else(|| SIN_PROYECTO.to_string()))
 }
