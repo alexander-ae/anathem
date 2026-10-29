@@ -90,15 +90,15 @@ pub struct Linea {
 #[derive(Debug, Clone)]
 pub struct Seccion {
     pub titulo: &'static str,
-    pub lineas: Vec<Linea>,
+    pub lines_: Vec<Linea>,
 }
 
 impl Seccion {
     fn nueva(titulo: &'static str) -> Self {
-        Seccion { titulo, lineas: Vec::new() }
+        Seccion { titulo, lines_: Vec::new() }
     }
     fn agregar(&mut self, nivel: Level, texto: impl Into<String>) {
-        self.lineas.push(Linea { nivel, texto: texto.into() });
+        self.lines_.push(Linea { nivel, texto: texto.into() });
     }
     fn bien(&mut self, texto: impl Into<String>) {
         self.agregar(Level::Bien, texto);
@@ -121,7 +121,7 @@ pub struct Informe {
 
 impl Informe {
     fn contar(&self, nivel: Level) -> usize {
-        self.secciones.iter().flat_map(|s| &s.lineas).filter(|l| l.nivel == nivel).count()
+        self.secciones.iter().flat_map(|s| &s.lines_).filter(|l| l.nivel == nivel).count()
     }
 
     /// Cuántas comprobaciones salieron mal. Es lo que decide el código de
@@ -139,7 +139,7 @@ impl Informe {
         for sec in &self.secciones {
             s.push_str(sec.titulo);
             s.push('\n');
-            for l in &sec.lineas {
+            for l in &sec.lines_ {
                 s.push_str(&format!("  {} {}\n", l.nivel.simbolo(), l.texto));
             }
             s.push('\n');
@@ -203,10 +203,10 @@ fn entero(conn: &Connection, sql: &str) -> rusqlite::Result<i64> {
     conn.query_row(sql, [], |r| r.get(0))
 }
 
-fn tiene_tabla(conn: &Connection, nombre: &str) -> rusqlite::Result<bool> {
+fn tiene_tabla(conn: &Connection, name: &str) -> rusqlite::Result<bool> {
     Ok(conn.query_row(
         "select count(*) from sqlite_master where type in ('table', 'view') and name = ?1",
-        [nombre],
+        [name],
         |r| r.get::<_, i64>(0),
     )? > 0)
 }
@@ -237,7 +237,7 @@ fn nombrar(ids: &[String]) -> String {
 }
 
 /// Devuelve la primera columna de cada fila como texto.
-fn textos(conn: &Connection, sql: &str) -> rusqlite::Result<Vec<String>> {
+fn texts(conn: &Connection, sql: &str) -> rusqlite::Result<Vec<String>> {
     conn.prepare(sql)?.query_map([], |r| r.get::<_, String>(0))?.collect()
 }
 
@@ -445,7 +445,7 @@ fn huerfanos(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
 }
 
 fn supersession(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
-    let rotas = textos(
+    let rotas = texts(
         conn,
         "select 'memoria ' || m.id || ' reemplaza a la ' || m.supersedes_id
            from memories m
@@ -481,7 +481,7 @@ fn topic_keys(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
         );
         return Ok(());
     }
-    let repetidas = textos(
+    let duplicated = texts(
         conn,
         "select '(' || project || ', ' || topic || '): memorias ' || group_concat(id, ', ')
            from memories
@@ -490,14 +490,14 @@ fn topic_keys(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
          having count(*) > 1
           order by project, topic",
     )?;
-    if repetidas.is_empty() {
+    if duplicated.is_empty() {
         s.bien("una sola memoria activa por (proyecto, clave de tema)");
     } else {
         s.mal(format!(
             "más de una memoria activa para la misma clave de tema, que el índice único \
              debería impedir: {}. Dejá una con `mem supersede <nueva> <vieja>` o \
              `mem forget <id>`",
-            nombrar(&repetidas)
+            nombrar(&duplicated)
         ));
     }
     Ok(())
@@ -518,9 +518,9 @@ fn vectorial(conn: &Connection, dir: &Path) -> Seccion {
             "sin paquete de vocabulario: la búsqueda es léxica (bm25), que es el modo \
              normal. Se instala uno con `mem model install <archivo>`",
         ),
-        Ok(Some((nombre, _sha, dims))) => {
-            s.bien(format!("paquete {nombre}, {dims} dimensiones"));
-            archivo_del_paquete(&mut s, dir, &nombre, dims);
+        Ok(Some((name, _sha, dims))) => {
+            s.bien(format!("paquete {name}, {dims} dimensiones"));
+            archivo_del_paquete(&mut s, dir, &name, dims);
             atrapar(&mut s, "la cobertura", |s| coverage(conn, s, dims));
         }
     }
@@ -538,8 +538,8 @@ fn vectorial(conn: &Connection, dir: &Path) -> Seccion {
     s
 }
 
-fn archivo_del_paquete(s: &mut Seccion, dir: &Path, nombre: &str, dims: usize) {
-    let pack_path = packstore::pack_path(dir, nombre);
+fn archivo_del_paquete(s: &mut Seccion, dir: &Path, name: &str, dims: usize) {
+    let pack_path = packstore::pack_path(dir, name);
     if !pack_path.is_file() {
         s.mal(format!(
             "falta el archivo {}: la búsqueda está degradada a bm25. Reinstalalo con \
@@ -554,11 +554,11 @@ fn archivo_del_paquete(s: &mut Seccion, dir: &Path, nombre: &str, dims: usize) {
              Reinstalalo con `mem model install <archivo>`",
             pack_path.display()
         )),
-        Ok(p) if p.nombre() != nombre || p.dims() != dims => s.aviso(format!(
-            "el archivo {} es el paquete {} ({} dimensiones) y la base indexó con {nombre} \
+        Ok(p) if p.name() != name || p.dims() != dims => s.aviso(format!(
+            "el archivo {} es el paquete {} ({} dimensiones) y la base indexó con {name} \
              ({dims} dimensiones): la próxima búsqueda reindexa",
             pack_path.display(),
-            p.nombre(),
+            p.name(),
             p.dims()
         )),
         Ok(_) => s.bien(format!("archivo presente y legible: {}", pack_path.display())),

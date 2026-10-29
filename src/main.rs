@@ -491,8 +491,8 @@ fn ejecutar(cli: Cli) -> Result<()> {
                 let ancho_t = topics.iter().map(|t| t.topic.chars().count()).max().unwrap_or(0).max("tema".len());
                 println!("{:<ancho_p$}  {:<ancho_t$}  {:>8}  vigente", "proyecto", "tema", "memorias");
                 for t in topics {
-                    let vigente = t.vigente.map_or("ninguna".to_string(), |v| v.to_string());
-                    println!("{:<ancho_p$}  {:<ancho_t$}  {:>8}  {vigente}", t.project, t.topic, t.total);
+                    let current_one = t.current_one.map_or("ninguna".to_string(), |v| v.to_string());
+                    println!("{:<ancho_p$}  {:<ancho_t$}  {:>8}  {current_one}", t.project, t.topic, t.total);
                 }
             }
         }
@@ -554,7 +554,7 @@ fn ejecutar(cli: Cli) -> Result<()> {
                     let i = anathem::packstore::install(&conn, &dir, &archivo)?;
                     println!(
                         "paquete {} instalado ({} dimensiones), {} fragmentos indexados",
-                        i.nombre, i.dims, i.fragmentos
+                        i.name, i.dims, i.fragmentos
                     );
                     if i.desplazada {
                         // El archivo quedó instalado, pero otro proceso se
@@ -571,10 +571,10 @@ fn ejecutar(cli: Cli) -> Result<()> {
                 }
                 ModelCmd::Status => match anathem::vecstore::registered_pack(&conn)? {
                     None => println!("sin paquete: la búsqueda usa solo bm25"),
-                    Some((nombre, sha, dims)) => {
+                    Some((name, sha, dims)) => {
                         let (con, tot) = anathem::vecstore::coverage(&conn, dims)?;
-                        let pack_path = anathem::packstore::pack_path(&dir, &nombre);
-                        println!("paquete {nombre} ({dims} dimensiones, sha {})", &sha[..16.min(sha.len())]);
+                        let pack_path = anathem::packstore::pack_path(&dir, &name);
+                        println!("paquete {name} ({dims} dimensiones, sha {})", &sha[..16.min(sha.len())]);
                         println!("cobertura: {con}/{tot} fragmentos");
                         if !pack_path.exists() {
                             println!("FALTA el archivo {}: la búsqueda está degradada a bm25", pack_path.display());
@@ -589,15 +589,15 @@ fn ejecutar(cli: Cli) -> Result<()> {
                         // interrumpida, no al archivo que está en disco.
                         if anathem::vecstore::instalacion_pendiente(&conn)?.is_some() {
                             println!(
-                                "hay una instalación de {nombre} a medias: el archivo en disco \
+                                "hay una instalación de {name} a medias: el archivo en disco \
                                  puede no ser este. La próxima búsqueda reindexa."
                             );
                         }
                     }
                 },
                 ModelCmd::Remove => match anathem::packstore::quitar(&conn, &dir)? {
-                    Some(nombre) => {
-                        println!("paquete {nombre} quitado; la búsqueda vuelve a ser solo bm25")
+                    Some(name) => {
+                        println!("paquete {name} quitado; la búsqueda vuelve a ser solo bm25")
                     }
                     None => println!("no había ningún paquete instalado"),
                 },

@@ -42,14 +42,14 @@ fn el_servidor_no_mezcla_vectores_si_cambia_el_paquete_debajo() {
         .spawn()
         .unwrap();
     let mut entrada = hijo.stdin.take().unwrap();
-    let mut salida = BufReader::new(hijo.stdout.take().unwrap());
+    let mut out_text = BufReader::new(hijo.stdout.take().unwrap());
 
     // Un mensaje cualquiera primero, para que el servidor esté arriba y ya
     // haya resuelto el paquete A.
     writeln!(entrada, r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#).unwrap();
-    let mut linea = String::new();
-    salida.read_line(&mut linea).unwrap();
-    assert!(linea.contains("protocolVersion"), "el servidor no arrancó: {linea}");
+    let mut line_ = String::new();
+    out_text.read_line(&mut line_).unwrap();
+    assert!(line_.contains("protocolVersion"), "el servidor no arrancó: {line_}");
 
     // Y ahora, desde otra terminal, alguien cambia el paquete.
     let o = mem(&db, &["model", "install", b.to_str().unwrap()]);
@@ -61,9 +61,9 @@ fn el_servidor_no_mezcla_vectores_si_cambia_el_paquete_debajo() {
         r#"{{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{{"name":"save_memory","arguments":{{"text":"mundo"}}}}}}"#
     )
     .unwrap();
-    linea.clear();
-    salida.read_line(&mut linea).unwrap();
-    assert!(linea.contains("Guardada"), "el guardado por MCP falló: {linea}");
+    line_.clear();
+    out_text.read_line(&mut line_).unwrap();
+    assert!(line_.contains("Guardada"), "el guardado por MCP falló: {line_}");
 
     drop(entrada);
     hijo.wait().unwrap();
@@ -104,10 +104,10 @@ fn el_servidor_deja_de_usar_el_paquete_cuando_lo_quitan() {
         .spawn()
         .unwrap();
     let mut entrada = hijo.stdin.take().unwrap();
-    let mut salida = BufReader::new(hijo.stdout.take().unwrap());
+    let mut out_text = BufReader::new(hijo.stdout.take().unwrap());
     writeln!(entrada, r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#).unwrap();
-    let mut linea = String::new();
-    salida.read_line(&mut linea).unwrap();
+    let mut line_ = String::new();
+    out_text.read_line(&mut line_).unwrap();
 
     assert!(mem(&db, &["model", "remove"]).status.success());
 
@@ -116,9 +116,9 @@ fn el_servidor_deja_de_usar_el_paquete_cuando_lo_quitan() {
         r#"{{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{{"name":"save_memory","arguments":{{"text":"mundo"}}}}}}"#
     )
     .unwrap();
-    linea.clear();
-    salida.read_line(&mut linea).unwrap();
-    assert!(linea.contains("Guardada"), "el guardado por MCP falló: {linea}");
+    line_.clear();
+    out_text.read_line(&mut line_).unwrap();
+    assert!(line_.contains("Guardada"), "el guardado por MCP falló: {line_}");
     drop(entrada);
     hijo.wait().unwrap();
 

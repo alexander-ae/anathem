@@ -278,11 +278,11 @@ fn el_export_preserva_todo_lo_necesario_para_migrar() {
     anathem::maint::pin(&conn, vieja, true).unwrap();
     anathem::supersede::link(&conn, nueva, vieja).unwrap();
 
-    let salida = dir.path().join("out");
-    anathem::export::to_markdown(&conn, &salida).unwrap();
+    let out_text = dir.path().join("out");
+    anathem::export::to_markdown(&conn, &out_text).unwrap();
     let parse = |id: i64| -> String {
         let mut encontrado = None;
-        for e in walk(&salida) {
+        for e in walk(&out_text) {
             let s = std::fs::read_to_string(&e).unwrap();
             if s.contains(&format!("\nid: {id}\n")) { encontrado = Some(s); }
         }
@@ -312,10 +312,10 @@ fn el_export_incluye_las_memorias_olvidadas() {
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let id = seed(&conn, "algo que después se olvida");
     anathem::maint::forget(&conn, id).unwrap();
-    let salida = dir.path().join("out");
-    let n = anathem::export::to_markdown(&conn, &salida).unwrap();
+    let out_text = dir.path().join("out");
+    let n = anathem::export::to_markdown(&conn, &out_text).unwrap();
     assert_eq!(n, 1, "la olvidada tiene que exportarse igual");
-    let s = walk(&salida).into_iter().map(|p| std::fs::read_to_string(p).unwrap()).collect::<String>();
+    let s = walk(&out_text).into_iter().map(|p| std::fs::read_to_string(p).unwrap()).collect::<String>();
     assert!(s.contains("status: \"forgotten\""), "y marcada como olvidada:\n{s}");
 }
 

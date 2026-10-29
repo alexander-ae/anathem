@@ -335,8 +335,8 @@ fn base_inexistente_no_afirma_que_todo_esta_en_orden() {
     assert!(o.ok(), "{}", o.todo());
     assert!(!o.stdout.contains("Todo en orden"), "{}", o.stdout);
     assert!(o.stdout.contains("Sin problemas ("), "tiene que contar el aviso: {}", o.stdout);
-    let linea = o.stdout.lines().find(|l| l.contains("no existe")).unwrap();
-    assert!(linea.trim_start().starts_with('!'), "es un aviso, no información: {linea}");
+    let line_ = o.stdout.lines().find(|l| l.contains("no existe")).unwrap();
+    assert!(line_.trim_start().starts_with('!'), "es un aviso, no información: {line_}");
 }
 
 #[test]

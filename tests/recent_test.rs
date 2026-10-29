@@ -106,7 +106,7 @@ fn lo_reemplazado_y_lo_olvidado_no_aparecen() {
     let conn = db::open(&d.path().join("mem.db")).unwrap();
     // Una clave de tema deja superseded a la anterior.
     ingest::save_with_topic(&conn, "primera version", "p", vec![], Some("estado"), None).unwrap();
-    let vigente =
+    let current_one =
         ingest::save_with_topic(&conn, "segunda version", "p", vec![], Some("estado"), None)
             .unwrap()
             .id;
@@ -115,7 +115,7 @@ fn lo_reemplazado_y_lo_olvidado_no_aparecen() {
 
     let r = recent::list_recent(&conn, Some("p"), None, 10, 120).unwrap();
     let ids: Vec<i64> = r.iter().map(|x| x.id).collect();
-    assert_eq!(ids, vec![vigente], "solo lo activo: {r:?}");
+    assert_eq!(ids, vec![current_one], "solo lo activo: {r:?}");
     assert_eq!(r[0].topic.as_deref(), Some("estado"), "la clave de tema tiene que viajar");
 }
 
@@ -417,8 +417,8 @@ fn el_traspaso_se_limita_a_lo_pedido() {
     }
     let cfg = Config { traspaso_items: 3, ..Config::default() };
     let txt = instrucciones_de(&conn, &cfg, "claude-code").unwrap();
-    let lineas = txt.lines().filter(|l| l.starts_with("- ")).count();
-    assert_eq!(lineas, 3, "tenía que listar 3 y listó {lineas}:\n{txt}");
+    let lines_ = txt.lines().filter(|l| l.starts_with("- ")).count();
+    assert_eq!(lines_, 3, "tenía que listar 3 y listó {lines_}:\n{txt}");
 }
 
 #[test]

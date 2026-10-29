@@ -52,12 +52,12 @@ fn de_blob(b: &[u8]) -> Vec<f32> {
 
 fn record_identity(
     conn: &Connection,
-    nombre: &str,
+    name: &str,
     sha: &str,
     dims: usize,
 ) -> rusqlite::Result<()> {
     for (k, v) in [
-        ("pack_nombre", nombre.to_string()),
+        ("pack_nombre", name.to_string()),
         ("pack_sha256", sha.to_string()),
         ("pack_dims", dims.to_string()),
     ] {
@@ -70,8 +70,8 @@ fn record_identity(
     Ok(())
 }
 
-pub fn register_pack(conn: &Connection, nombre: &str, sha: &str, dims: usize) -> Result<()> {
-    record_identity(conn, nombre, sha, dims)?;
+pub fn register_pack(conn: &Connection, name: &str, sha: &str, dims: usize) -> Result<()> {
+    record_identity(conn, name, sha, dims)?;
     Ok(())
 }
 
@@ -87,10 +87,10 @@ pub fn register_pack(conn: &Connection, nombre: &str, sha: &str, dims: usize) ->
 /// It also clears the in-progress install mark, in that same transaction:
 /// the mark exists to cover the stretch that ends right here, and leaving it
 /// alive an instant longer would cost an unnecessary reindex.
-pub fn adoptar_pack(conn: &Connection, nombre: &str, sha: &str, dims: usize) -> Result<()> {
+pub fn adoptar_pack(conn: &Connection, name: &str, sha: &str, dims: usize) -> Result<()> {
     let tx = escritura(conn)?;
     tx.execute("delete from chunk_vectors", [])?;
-    record_identity(&tx, nombre, sha, dims)?;
+    record_identity(&tx, name, sha, dims)?;
     tx.execute("delete from meta where key = ?1", [INSTALANDO])?;
     tx.commit()?;
     Ok(())
@@ -116,12 +116,12 @@ pub fn adoptar_pack(conn: &Connection, nombre: &str, sha: &str, dims: usize) -> 
 const INSTALANDO: &str = "pack_instalando";
 
 /// Records that the file for pack `name` is about to be replaced.
-pub fn mark_install(conn: &Connection, nombre: &str) -> Result<()> {
+pub fn mark_install(conn: &Connection, name: &str) -> Result<()> {
     let tx = escritura(conn)?;
     tx.execute(
         "insert into meta (key, value) values (?1, ?2)
          on conflict(key) do update set value = ?2",
-        params![INSTALANDO, nombre],
+        params![INSTALANDO, name],
     )?;
     tx.commit()?;
     Ok(())

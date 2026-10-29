@@ -46,8 +46,8 @@ pub fn packs_dir(dir: &Path) -> PathBuf {
 }
 
 /// The canonical path of the pack called `name`.
-pub fn pack_path(dir: &Path, nombre: &str) -> PathBuf {
-    packs_dir(dir).join(format!("{nombre}.{EXTENSION}"))
+pub fn pack_path(dir: &Path, name: &str) -> PathBuf {
+    packs_dir(dir).join(format!("{name}.{EXTENSION}"))
 }
 
 /// The result of resolving the active pack. **It is not a `Result`**: the
@@ -132,7 +132,7 @@ pub fn resolve_and_warn(conn: &Connection, dir: &Path) -> Option<Pack> {
 }
 
 fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
-    let Some((nombre, sha, dims)) = vecstore::registered_pack(conn)? else {
+    let Some((name, sha, dims)) = vecstore::registered_pack(conn)? else {
         // The path for whoever installed nothing: one query and out.
         return Ok(Resolved::sin_paquete());
     };
@@ -151,7 +151,7 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     // registered we already returned above.
     let sospechoso = match vecstore::instalacion_pendiente(conn)? {
         None => false,
-        Some(instalando) if instalando == nombre => true,
+        Some(instalando) if instalando == name => true,
         Some(_) => {
             let _ = vecstore::clear_install_mark(conn);
             false
@@ -160,10 +160,10 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     // The sha is not verified here: hashing 22 MB on every startup would
     // penalise whoever did install the pack. It is verified once, on
     // install.
-    let ruta_registrada = pack_path(dir, &nombre);
+    let ruta_registrada = pack_path(dir, &name);
     if !ruta_registrada.exists() {
         return Ok(Resolved::degradado(format!(
-            "aviso: el paquete {nombre} está registrado pero falta {}; \
+            "aviso: el paquete {name} está registrado pero falta {}; \
              se busca solo con bm25. Reinstalalo con `mem model install`.",
             ruta_registrada.display()
         )));
@@ -172,14 +172,14 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
         Ok(p) => p,
         Err(e) => {
             return Ok(Resolved::degradado(format!(
-                "aviso: el paquete {nombre} en {} no se pudo open_pack ({e}); \
+                "aviso: el paquete {name} en {} no se pudo abrir ({e}); \
                  se busca solo con bm25. Reinstalalo con `mem model install`.",
                 ruta_registrada.display()
             )))
         }
     };
-    if !sospechoso && p.nombre() == nombre && p.dims() == dims {
-        return Ok(Resolved::resuelto(p, (nombre, sha, dims), None));
+    if !sospechoso && p.name() == name && p.dims() == dims {
+        return Ok(Resolved::resuelto(p, (name, sha, dims), None));
     }
     // Reconciling recomputes the sha, adopts again — which deletes the old
     // vectors and the mark in one transaction — and reindexes. For an
@@ -188,14 +188,14 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     // tell apart the case where the file did change.
     let aviso = if sospechoso {
         format!(
-            "aviso: una instalación de {nombre} quedó a medias y el archivo en disco puede \
+            "aviso: una instalación de {name} quedó a medias y el archivo en disco puede \
              no ser el que indexó esta base; reindexando para no mezclar vectores."
         )
     } else {
         format!(
             "aviso: el paquete en disco ({}, {} dimensiones) no es el que indexó esta base \
-             ({nombre}, {dims} dimensiones); reindexando para no mezclar vectores.",
-            p.nombre(),
+             ({name}, {dims} dimensiones); reindexando para no mezclar vectores.",
+            p.name(),
             p.dims()
         )
     };
@@ -230,9 +230,9 @@ fn reconcile(
     // with an open memory mapping. That is why `p` is dropped before the
     // rename and reopened afterwards from `target`: on no platform is an
     // mmap left pointing at the old name while the file moves.
-    let nombre = p.nombre().to_string();
+    let name = p.name().to_string();
     let dims = p.dims();
-    let target = pack_path(dir, &nombre);
+    let target = pack_path(dir, &name);
     let hubo_rename = target != ruta_actual;
     let p = if hubo_rename {
         drop(p);
@@ -259,8 +259,8 @@ fn reconcile(
         p
     };
     let adopcion = pack::sha256(&target).and_then(|sha| {
-        vecstore::adoptar_pack(conn, &nombre, &sha, dims)?;
-        Ok((nombre.clone(), sha, dims))
+        vecstore::adoptar_pack(conn, &name, &sha, dims)?;
+        Ok((name.clone(), sha, dims))
     });
     let identidad = match adopcion {
         Ok(i) => i,
@@ -288,7 +288,7 @@ fn reconcile(
     if vecstore::sync(conn, &p, &identidad)?.abandonada() {
         bail!(
             "otro proceso cambió el paquete de vocabulario mientras se reindexaba con {}",
-            nombre
+            name
         );
     }
     Ok((p, identidad))
@@ -296,7 +296,7 @@ fn reconcile(
 
 /// What `install` reports back to whoever ran it.
 pub struct Instalacion {
-    pub nombre: String,
+    pub name: String,
     pub dims: usize,
     pub fragmentos: usize,
     /// `true` if another process changed the registered pack while this
@@ -401,13 +401,13 @@ pub fn install(conn: &Connection, dir: &Path, archivo: &Path) -> Result<Instalac
     let sha = pack::sha256(archivo)?;
     verificar_firma(archivo, &sha)?;
 
-    let (nombre, dims, sirve) = {
+    let (name, dims, sirve) = {
         let p = Pack::open_pack(archivo)?;
-        (p.nombre().to_string(), p.dims(), !solo_vectores_nulos(conn, &p)?)
+        (p.name().to_string(), p.dims(), !solo_vectores_nulos(conn, &p)?)
     };
     if !sirve {
         bail!(
-            "el paquete {nombre} no reconoce ni una palabra de esta memoria: todos los \
+            "el paquete {name} no reconoce ni una palabra de esta memoria: todos los \
              vectores saldrían nulos y la búsqueda vectorial no aportaría nada. No se \
              instaló nada; revisá que sea el paquete del idioma correcto."
         );
@@ -415,7 +415,7 @@ pub fn install(conn: &Connection, dir: &Path, archivo: &Path) -> Result<Instalac
 
     let destino_dir = packs_dir(dir);
     std::fs::create_dir_all(&destino_dir)?;
-    let target = pack_path(dir, &nombre);
+    let target = pack_path(dir, &name);
     let temporal = destino_dir.join(format!(".instalando-{}.{EXTENSION}", std::process::id()));
     let copia = (|| -> Result<()> {
         std::fs::copy(archivo, &temporal).with_context(|| {
@@ -439,7 +439,7 @@ pub fn install(conn: &Connection, dir: &Path, archivo: &Path) -> Result<Instalac
     // uncovered stretch would be exactly the one meant to be covered. Having
     // it to spare — left set without the file having changed — costs a
     // reindex; having it missing costs a silently mixed index.
-    vecstore::mark_install(conn, &nombre)?;
+    vecstore::mark_install(conn, &name)?;
     if let Err(e) = replace_file(&temporal, &target) {
         let _ = std::fs::remove_file(&temporal);
         // `replace_file` restores `target` to what it held before when the
@@ -456,15 +456,15 @@ pub fn install(conn: &Connection, dir: &Path, archivo: &Path) -> Result<Instalac
     }
 
     // Clears the mark in the same transaction in which it adopts.
-    vecstore::adoptar_pack(conn, &nombre, &sha, dims)?;
+    vecstore::adoptar_pack(conn, &name, &sha, dims)?;
     let p = Pack::open_pack(&target)?;
     // Indexing a large corpus takes minutes and another terminal may
     // install a different pack meanwhile. If that happens, this install is
     // displaced: it is not an error — the pack was installed and the other
     // process is indexing its own — but it has to be said, because the index
     // was left incomplete and `model status` is the only place that shows.
-    let s = vecstore::sync(conn, &p, &(nombre.clone(), sha, dims))?;
-    Ok(Instalacion { nombre, dims, fragmentos: s.escritos(), desplazada: s.abandonada() })
+    let s = vecstore::sync(conn, &p, &(name.clone(), sha, dims))?;
+    Ok(Instalacion { name, dims, fragmentos: s.escritos(), desplazada: s.abandonada() })
 }
 
 /// Removes the pack and its vectors. Returns the name of the one that was
@@ -475,12 +475,12 @@ pub fn install(conn: &Connection, dir: &Path, archivo: &Path) -> Result<Instalac
 /// what was asked for. The other way round would leave a registry entry
 /// pointing at nothing.
 pub fn quitar(conn: &Connection, dir: &Path) -> Result<Option<String>> {
-    let Some((nombre, _, _)) = vecstore::registered_pack(conn)? else {
+    let Some((name, _, _)) = vecstore::registered_pack(conn)? else {
         return Ok(None);
     };
     vecstore::forget_pack(conn)?;
-    let _ = std::fs::remove_file(pack_path(dir, &nombre));
-    Ok(Some(nombre))
+    let _ = std::fs::remove_file(pack_path(dir, &name));
+    Ok(Some(name))
 }
 
 /// Verifies the `.sha256` travelling beside the pack, if one travels at all.
@@ -492,8 +492,8 @@ fn verificar_firma(archivo: &Path, sha: &str) -> Result<()> {
     if !firma.exists() {
         return Ok(());
     }
-    let crudo = std::fs::read_to_string(&firma)?;
-    let esperado = crudo.split_whitespace().next().unwrap_or("");
+    let raw = std::fs::read_to_string(&firma)?;
+    let esperado = raw.split_whitespace().next().unwrap_or("");
     if esperado != sha {
         bail!(
             "el sha256 no coincide: el archivo da {sha} y {} dice {esperado}",
@@ -553,13 +553,13 @@ fn solo_vectores_nulos(conn: &Connection, p: &Pack) -> Result<bool> {
 /// detecting that requires parsing it, which is precisely what is
 /// deferred.
 pub fn warn_if_file_missing(conn: &Connection, dir: &Path) {
-    let Ok(Some((nombre, _, _))) = vecstore::registered_pack(conn) else {
+    let Ok(Some((name, _, _))) = vecstore::registered_pack(conn) else {
         return;
     };
-    let r = pack_path(dir, &nombre);
+    let r = pack_path(dir, &name);
     if !r.exists() {
         eprintln!(
-            "aviso: el paquete {nombre} está registrado pero falta {}; \
+            "aviso: el paquete {name} está registrado pero falta {}; \
              se busca solo con bm25. Reinstalalo con `mem model install`.",
             r.display()
         );
@@ -723,7 +723,7 @@ mod tests {
     /// because that helper lives in the integration crate: this module's
     /// unit tests, which need to reach `reconcile` since it is private,
     /// cannot import it.
-    fn escribir_pack_de_prueba(pack_path: &Path, nombre: &str) {
+    fn escribir_pack_de_prueba(pack_path: &Path, name: &str) {
         let dims = 4usize;
         let fila = [0u8, 0, 0, 0];
         let tok = TOKENIZER_MINIMO.as_bytes();
@@ -732,12 +732,12 @@ mod tests {
         b.extend_from_slice(&1u32.to_le_bytes());
         b.extend_from_slice(&(dims as u32).to_le_bytes());
         b.extend_from_slice(&1u32.to_le_bytes()); // n_tokens
-        b.extend_from_slice(&(nombre.len() as u32).to_le_bytes());
-        b.extend_from_slice(nombre.as_bytes());
+        b.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        b.extend_from_slice(name.as_bytes());
         b.extend_from_slice(&(tok.len() as u64).to_le_bytes());
         b.extend_from_slice(tok);
         for _ in 0..dims {
-            b.extend_from_slice(&1.0f32.to_le_bytes()); // escalas
+            b.extend_from_slice(&1.0f32.to_le_bytes()); // scales
         }
         for _ in 0..dims {
             b.extend_from_slice(&0.0f32.to_le_bytes()); // mínimos
@@ -845,7 +845,7 @@ mod tests {
             .expect("reconciliar tiene que poder renombrar el archivo que tiene mapeado");
 
         assert_eq!(identidad.0, "nuevo-es");
-        assert_eq!(p2.nombre(), "nuevo-es");
+        assert_eq!(p2.name(), "nuevo-es");
         assert!(!ruta_vieja.exists(), "el archivo con el nombre viejo tiene que haberse ido");
         assert!(
             pack_path(dir, "nuevo-es").exists(),

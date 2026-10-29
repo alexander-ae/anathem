@@ -12,7 +12,7 @@ fn abre_y_reporta_sus_metadatos() {
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
     let p = Pack::open_pack(&r).unwrap();
-    assert_eq!(p.nombre(), "mini-es");
+    assert_eq!(p.name(), "mini-es");
     assert_eq!(p.dims(), 4);
 }
 
@@ -104,7 +104,7 @@ fn rechaza_un_largo_de_tokenizador_corrupto_sin_paniquear() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
-    let base = 20 + "mini-es".len(); // desplazamiento del campo largo_tok (u64 LE)
+    let base = 20 + "mini-es".len(); // desplazamiento del campo tok_len (u64 LE)
     for i in 0..8 {
         apoyo::corromper(&r, base + i, 0xFF);
     }
@@ -161,7 +161,7 @@ fn acepta_un_added_token_con_id_fuera_de_la_tabla() {
         apoyo::TOKENIZER_CON_AGREGADO_FUERA_DE_RANGO,
     );
     let p = Pack::open_pack(&r).expect("un added_token fuera de rango no invalida la tabla");
-    assert_eq!(p.nombre(), "agregados-es");
+    assert_eq!(p.name(), "agregados-es");
     // Y sigue embebiendo igual que el fixture de siempre.
     let v = p.embeber("hola").unwrap();
     assert!((v[0] - 1.0).abs() < 1e-5, "esperaba el eje 0, salió {v:?}");

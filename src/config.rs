@@ -117,9 +117,9 @@ pub fn cargar(dir: &Path) -> Result<Config> {
     if !pack_path.exists() {
         return Ok(Config::default());
     }
-    let crudo = std::fs::read_to_string(&pack_path)
+    let raw = std::fs::read_to_string(&pack_path)
         .with_context(|| format!("no se pudo leer {}", pack_path.display()))?;
-    let c: Config = serde_json::from_str(&crudo)
+    let c: Config = serde_json::from_str(&raw)
         .with_context(|| format!("{} no es un config.json válido", pack_path.display()))?;
     if !(c.bm25_weight.is_finite() && c.bm25_weight >= 0.0) {
         bail!(

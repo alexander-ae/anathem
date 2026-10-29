@@ -22,14 +22,14 @@ fn mem(db: &Path, args: &[&str]) -> std::process::Output {
 fn vmrss_kb(pid: u32) -> u64 {
     let contenido = std::fs::read_to_string(format!("/proc/{pid}/status"))
         .unwrap_or_else(|e| panic!("no se pudo leer /proc/{pid}/status: {e}"));
-    for linea in contenido.lines() {
-        if let Some(resto) = linea.strip_prefix("VmRSS:") {
+    for line_ in contenido.lines() {
+        if let Some(resto) = line_.strip_prefix("VmRSS:") {
             return resto
                 .split_whitespace()
                 .next()
-                .unwrap_or_else(|| panic!("línea VmRSS sin valor: {linea:?}"))
+                .unwrap_or_else(|| panic!("línea VmRSS sin valor: {line_:?}"))
                 .parse()
-                .unwrap_or_else(|e| panic!("VmRSS no numérico ({linea:?}): {e}"));
+                .unwrap_or_else(|e| panic!("VmRSS no numérico ({line_:?}): {e}"));
         }
     }
     panic!("/proc/{pid}/status no tiene línea VmRSS");
@@ -41,10 +41,10 @@ fn enviar(entrada: &mut impl Write, json: &str) {
 }
 
 #[cfg(target_os = "linux")]
-fn leer_linea(salida: &mut impl BufRead) -> String {
-    let mut linea = String::new();
-    salida.read_line(&mut linea).unwrap();
-    linea
+fn leer_linea(out_text: &mut impl BufRead) -> String {
+    let mut line_ = String::new();
+    out_text.read_line(&mut line_).unwrap();
+    line_
 }
 
 #[cfg(target_os = "linux")]
@@ -80,14 +80,14 @@ fn el_servidor_abre_el_paquete_recien_en_la_primera_busqueda() {
         .unwrap();
     let pid = hijo.id();
     let mut entrada = hijo.stdin.take().unwrap();
-    let mut salida = BufReader::new(hijo.stdout.take().unwrap());
+    let mut out_text = BufReader::new(hijo.stdout.take().unwrap());
 
     enviar(&mut entrada, r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
-    let resp = leer_linea(&mut salida);
+    let resp = leer_linea(&mut out_text);
     assert!(resp.contains("protocolVersion"), "el servidor no arrancó: {resp}");
 
     enviar(&mut entrada, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#);
-    let resp = leer_linea(&mut salida);
+    let resp = leer_linea(&mut out_text);
     assert!(resp.contains("search_memory"), "tools/list no respondió bien: {resp}");
 
     // Con un paquete instalado, `initialize` y `tools/list` no lo necesitan:
@@ -107,7 +107,7 @@ fn el_servidor_abre_el_paquete_recien_en_la_primera_busqueda() {
         &mut entrada,
         r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search_memory","arguments":{"query":"hola"}}}"#,
     );
-    let resp = leer_linea(&mut salida);
+    let resp = leer_linea(&mut out_text);
     assert!(resp.contains("\"content\""), "la búsqueda no respondió bien: {resp}");
 
     let rss_despues = vmrss_kb(pid);
@@ -163,8 +163,8 @@ fn avisa_al_arrancar_si_el_paquete_registrado_desaparecio() {
         let _ = o.lines().next();
     }
     let _ = s.kill();
-    let salida = s.wait_with_output().unwrap();
-    let err = String::from_utf8_lossy(&salida.stderr);
+    let out_text = s.wait_with_output().unwrap();
+    let err = String::from_utf8_lossy(&out_text.stderr);
     assert!(err.contains("fantasma") && err.contains("falta"),
         "el arranque tiene que avisar que el paquete registrado no está:\n{err}");
 }

@@ -352,8 +352,8 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
     let (tx, rx) = std::sync::mpsc::channel::<std::io::Result<String>>();
     std::thread::spawn(move || {
         let entrada = std::io::stdin();
-        for linea in entrada.lock().lines() {
-            if tx.send(linea).is_err() {
+        for line_ in entrada.lock().lines() {
+            if tx.send(line_).is_err() {
                 break; // el otro lado cerró: nadie va a parse más
             }
         }

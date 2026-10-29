@@ -113,10 +113,10 @@ pub fn open(path: &Path) -> Result<Connection> {
     Ok(conn)
 }
 
-fn has_column(conn: &Connection, nombre: &str) -> Result<bool> {
+fn has_column(conn: &Connection, name: &str) -> Result<bool> {
     let n: i64 = conn.query_row(
         "select count(*) from pragma_table_info('memories') where name = ?1",
-        [nombre],
+        [name],
         |r| r.get(0),
     )?;
     Ok(n > 0)
@@ -132,13 +132,13 @@ fn has_topic_column(conn: &Connection) -> Result<bool> {
 /// the column missing, and the second `alter` fails with "duplicate column
 /// name". If the column is there after the failure, the result is the one
 /// we wanted.
-fn add_column(conn: &Connection, nombre: &str, tipo: &str) -> Result<()> {
-    if has_column(conn, nombre)? {
+fn add_column(conn: &Connection, name: &str, tipo: &str) -> Result<()> {
+    if has_column(conn, name)? {
         return Ok(());
     }
-    let sql = format!("alter table memories add column {nombre} {tipo}");
+    let sql = format!("alter table memories add column {name} {tipo}");
     if let Err(e) = conn.execute(&sql, []) {
-        if !has_column(conn, nombre)? {
+        if !has_column(conn, name)? {
             return Err(e.into());
         }
     }

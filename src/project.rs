@@ -88,8 +88,8 @@ fn normalizar(p: &Path) -> Option<PathBuf> {
 fn nombre_del_remoto(config: &Path) -> Option<String> {
     let texto = std::fs::read_to_string(config).ok()?;
     let mut en_origin = false;
-    for linea in texto.lines() {
-        let l = linea.trim();
+    for line_ in texto.lines() {
+        let l = line_.trim();
         if l.starts_with('[') {
             en_origin = l.replace(char::is_whitespace, "") == "[remote\"origin\"]";
             continue;
@@ -100,9 +100,9 @@ fn nombre_del_remoto(config: &Path) -> Option<String> {
         if let Some(url) = l.strip_prefix("url") {
             let url = url.trim_start().strip_prefix('=')?.trim();
             let ultimo = url.rsplit(['/', ':']).next()?;
-            let nombre = ultimo.strip_suffix(".git").unwrap_or(ultimo);
-            if !nombre.is_empty() {
-                return Some(nombre.to_string());
+            let name = ultimo.strip_suffix(".git").unwrap_or(ultimo);
+            if !name.is_empty() {
+                return Some(name.to_string());
             }
         }
     }

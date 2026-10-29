@@ -68,11 +68,11 @@ fn history_sobre_la_nueva_muestra_la_cadena_hasta_la_vieja() {
     mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
 
     let out = mem_ok(d.path(), &["history", "3"]);
-    let lineas: Vec<&str> = out.lines().collect();
-    assert_eq!(lineas.len(), 3, "la cadena tiene tres eslabones: {out}");
-    assert!(lineas[0].contains("active") && lineas[0].contains("desde octubre"), "{out}");
-    assert!(lineas[1].contains("superseded") && lineas[1].contains("Adyen"), "{out}");
-    assert!(lineas[2].contains("superseded") && lineas[2].contains("Stripe"), "{out}");
+    let lines_: Vec<&str> = out.lines().collect();
+    assert_eq!(lines_.len(), 3, "la cadena tiene tres eslabones: {out}");
+    assert!(lines_[0].contains("active") && lines_[0].contains("desde octubre"), "{out}");
+    assert!(lines_[1].contains("superseded") && lines_[1].contains("Adyen"), "{out}");
+    assert!(lines_[2].contains("superseded") && lines_[2].contains("Stripe"), "{out}");
 }
 
 #[test]
@@ -541,11 +541,11 @@ fn el_export_conserva_la_clave_de_tema() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
     mem_ok(d.path(), &["save", "Sin clave", "--project", "p"]);
-    let salida = d.path().join("out");
-    mem_ok(d.path(), &["export", "--out", salida.to_str().unwrap()]);
+    let out_text = d.path().join("out");
+    mem_ok(d.path(), &["export", "--out", out_text.to_str().unwrap()]);
 
     let mut con_tema = 0;
-    for f in std::fs::read_dir(salida.join("p")).unwrap() {
+    for f in std::fs::read_dir(out_text.join("p")).unwrap() {
         let txt = std::fs::read_to_string(f.unwrap().path()).unwrap();
         if txt.contains("topic: \"pagos\"") {
             con_tema += 1;

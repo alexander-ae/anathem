@@ -95,7 +95,7 @@ fn si_falta_el_archivo_del_paquete_la_busqueda_degrada_a_bm25() {
 
 /// Variante del fixture con otro nombre y otras dimensiones, para forzar la
 /// incompatibilidad.
-fn escribir_pack_ancho(pack_path: &std::path::Path, nombre: &str) {
+fn escribir_pack_ancho(pack_path: &std::path::Path, name: &str) {
     // Mismo tokenizador, pero 8 dimensiones en vez de 4.
     let tok = apoyo::TOKENIZER_MINI.as_bytes();
     let dims = 8usize;
@@ -110,8 +110,8 @@ fn escribir_pack_ancho(pack_path: &std::path::Path, nombre: &str) {
     b.extend_from_slice(&1u32.to_le_bytes());
     b.extend_from_slice(&(dims as u32).to_le_bytes());
     b.extend_from_slice(&(filas.len() as u32).to_le_bytes());
-    b.extend_from_slice(&(nombre.len() as u32).to_le_bytes());
-    b.extend_from_slice(nombre.as_bytes());
+    b.extend_from_slice(&(name.len() as u32).to_le_bytes());
+    b.extend_from_slice(name.as_bytes());
     b.extend_from_slice(&(tok.len() as u64).to_le_bytes());
     b.extend_from_slice(tok);
     for _ in 0..dims { b.extend_from_slice(&1.0f32.to_le_bytes()); }
@@ -156,7 +156,7 @@ fn un_paquete_sustituido_a_mano_dispara_el_reindexado() {
     mem(d.path(), &["model", "install", a.to_str().unwrap()]);
 
     let instalado = d.path().join("paquetes").join("mini-es.anathem-pack");
-    escribir_pack_ancho(&instalado, "mini-es"); // mismo nombre, otras dimensiones
+    escribir_pack_ancho(&instalado, "mini-es"); // mismo name, otras dimensiones
 
     let o = mem(d.path(), &["search", "hola"]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
@@ -181,7 +181,7 @@ fn incompatibilidad_por_nombre_deja_el_registro_consistente_con_el_disco() {
     mem(d.path(), &["model", "install", a.to_str().unwrap()]);
 
     let instalado = d.path().join("paquetes").join("mini-es.anathem-pack");
-    apoyo::escribir_pack_mini(&instalado, "otro-es"); // mismas dims, otro nombre
+    apoyo::escribir_pack_mini(&instalado, "otro-es"); // mismas dims, otro name
 
     let o1 = mem(d.path(), &["search", "hola"]);
     assert!(o1.status.success(), "{}", String::from_utf8_lossy(&o1.stderr));
@@ -190,9 +190,9 @@ fn incompatibilidad_por_nombre_deja_el_registro_consistente_con_el_disco() {
     // verdad: el nombre registrado y el nombre del archivo en disco tienen
     // que coincidir.
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
-    let (nombre, _sha, _dims) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
-    assert_eq!(nombre, "otro-es", "el registro debe reflejar el nombre real del paquete");
-    let ruta_registrada = d.path().join("paquetes").join(format!("{nombre}.anathem-pack"));
+    let (name, _sha, _dims) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
+    assert_eq!(name, "otro-es", "el registro debe reflejar el nombre real del paquete");
+    let ruta_registrada = d.path().join("paquetes").join(format!("{name}.anathem-pack"));
     assert!(
         ruta_registrada.exists(),
         "el archivo tiene que vivir donde dice el registro: {}",
@@ -345,7 +345,7 @@ fn una_instalacion_cortada_despues_del_rename_no_deja_consultando_el_build_viejo
     let old = d.path().join("viejo.anathem-pack");
     let new_id = d.path().join("nuevo.anathem-pack");
     apoyo::escribir_pack_mini(&old, "mini-es"); // ▁hola -> eje 0
-    apoyo::escribir_pack_permutado(&new_id, "mini-es"); // mismo nombre y dims, ▁hola -> eje 3
+    apoyo::escribir_pack_permutado(&new_id, "mini-es"); // mismo name y dims, ▁hola -> eje 3
 
     mem(d.path(), &["save", "hola mundo"]);
     assert!(mem(d.path(), &["model", "install", old.to_str().unwrap()]).status.success());

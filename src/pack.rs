@@ -17,12 +17,12 @@ const VERSION: u32 = 1;
 pub struct Pack {
     map_: Mmap,
     tok: Tokenizer,
-    nombre: String,
+    name: String,
     dims: usize,
     n_tokens: usize,
-    escalas: Vec<f32>,
-    minimos: Vec<f32>,
-    inicio_tabla: usize,
+    scales: Vec<f32>,
+    mins: Vec<f32>,
+    table_start: usize,
 }
 
 /// Recorta `n` bytes a partir de `*o`, avanza `*o` y devuelve el recorte.
@@ -85,17 +85,17 @@ impl Pack {
         }
         let dims = u32_en(&map_, &mut o, pack_path, "dimensiones")? as usize;
         let n_tokens = u32_en(&map_, &mut o, pack_path, "cantidad de tokens")? as usize;
-        let largo_nombre = u32_en(&map_, &mut o, pack_path, "largo del nombre")? as usize;
+        let name_len = u32_en(&map_, &mut o, pack_path, "largo del nombre")? as usize;
         if dims == 0 || n_tokens == 0 {
             bail!("el paquete {} declara 0 dimensiones o 0 tokens", pack_path.display());
         }
-        let nombre_bytes = take_bytes(&map_, &mut o, largo_nombre, pack_path, "nombre")?;
-        let nombre = std::str::from_utf8(nombre_bytes)
+        let name_bytes = take_bytes(&map_, &mut o, name_len, pack_path, "nombre")?;
+        let name = std::str::from_utf8(name_bytes)
             .with_context(|| format!("el nombre del paquete {} no es UTF-8 válido", pack_path.display()))?
             .to_string();
-        let largo_tok = u64_en(&map_, &mut o, pack_path, "largo del tokenizador")? as usize;
-        let crudo = take_bytes(&map_, &mut o, largo_tok, pack_path, "tokenizador")?;
-        let tok = Tokenizer::from_bytes(crudo).map_err(|e| {
+        let tok_len = u64_en(&map_, &mut o, pack_path, "largo del tokenizador")? as usize;
+        let raw = take_bytes(&map_, &mut o, tok_len, pack_path, "tokenizador")?;
+        let tok = Tokenizer::from_bytes(raw).map_err(|e| {
             anyhow::anyhow!("el tokenizador del paquete {} no se pudo leer: {e}", pack_path.display())
         })?;
         // Un paquete cuya tabla es más chica que el vocabulario del
@@ -115,31 +115,31 @@ impl Pack {
         // rechazaría paquetes perfectamente sanos. Un `added_token` sin fila
         // lo cubre el `continue` de `embeber`, que es donde corresponde: un
         // token especial sin fila es normal; una tabla incompleta no.
-        let piezas = tok.get_vocab_size(false);
-        if n_tokens < piezas {
+        let pieces = tok.get_vocab_size(false);
+        if n_tokens < pieces {
             bail!(
-                "el paquete {} declara {n_tokens} filas pero su tokenizador tiene {piezas} \
-                 piezas: la tabla está incompleta y el paquete produciría vectores nulos",
+                "el paquete {} declara {n_tokens} filas pero su tokenizador tiene {pieces} \
+                 pieces: la tabla está incompleta y el paquete produciría vectores nulos",
                 pack_path.display()
             );
         }
-        let escalas = f32s_en(&map_, &mut o, dims, pack_path, "escalas")?;
-        let minimos = f32s_en(&map_, &mut o, dims, pack_path, "mínimos")?;
-        let tam_tabla = n_tokens.checked_mul(dims).with_context(|| {
+        let scales = f32s_en(&map_, &mut o, dims, pack_path, "escalas")?;
+        let mins = f32s_en(&map_, &mut o, dims, pack_path, "mínimos")?;
+        let table_size = n_tokens.checked_mul(dims).with_context(|| {
             format!("el paquete {} declara una tabla demasiado grande", pack_path.display())
         })?;
-        let inicio_tabla = o;
-        let fin_tabla = o.checked_add(tam_tabla).with_context(|| {
+        let table_start = o;
+        let fin_tabla = o.checked_add(table_size).with_context(|| {
             format!("el paquete {} declara una tabla demasiado grande", pack_path.display())
         })?;
         if map_.len() < fin_tabla {
             bail!("la tabla del paquete {} está truncada", pack_path.display());
         }
-        Ok(Pack { map_, tok, nombre, dims, n_tokens, escalas, minimos, inicio_tabla })
+        Ok(Pack { map_, tok, name, dims, n_tokens, scales, mins, table_start })
     }
 
-    pub fn nombre(&self) -> &str {
-        &self.nombre
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     pub fn dims(&self) -> usize {
@@ -161,10 +161,10 @@ impl Pack {
             if i >= self.n_tokens {
                 continue;
             }
-            let a = self.inicio_tabla + i * self.dims;
+            let a = self.table_start + i * self.dims;
             let fila = &self.map_[a..a + self.dims];
             for d in 0..self.dims {
-                v[d] += fila[d] as f32 * self.escalas[d] + self.minimos[d];
+                v[d] += fila[d] as f32 * self.scales[d] + self.mins[d];
             }
             usados += 1;
         }

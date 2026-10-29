@@ -134,7 +134,7 @@ pub fn registrar_y_sincronizar(
     conn: &rusqlite::Connection,
     p: &anathem::pack::Pack,
 ) -> anathem::vecstore::SyncOutcome {
-    let id = (p.nombre().to_string(), "sha-de-prueba".to_string(), p.dims());
+    let id = (p.name().to_string(), "sha-de-prueba".to_string(), p.dims());
     anathem::vecstore::register_pack(conn, &id.0, &id.1, id.2).unwrap();
     anathem::vecstore::sync(conn, p, &id).unwrap()
 }

@@ -4,12 +4,12 @@
 use std::process::Command;
 
 fn mem(db: &std::path::Path, args: &[&str]) -> (String, String, bool) {
-    let salida = Command::new(env!("CARGO_BIN_EXE_mem"))
+    let out_text = Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--db").arg(db).args(args).output().unwrap();
     (
-        String::from_utf8_lossy(&salida.stdout).to_string(),
-        String::from_utf8_lossy(&salida.stderr).to_string(),
-        salida.status.success(),
+        String::from_utf8_lossy(&out_text.stdout).to_string(),
+        String::from_utf8_lossy(&out_text.stderr).to_string(),
+        out_text.status.success(),
     )
 }
 

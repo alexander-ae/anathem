@@ -32,9 +32,9 @@ fn fetch(url: &str) -> Result<String> {
     let intento = |programa: &str, args: &[&str]| -> Option<std::process::Output> {
         Command::new(programa).args(args).output().ok().filter(|o| o.status.success())
     };
-    let salida = intento("curl", &["-fsSL", "--max-time", "20", url])
+    let out_text = intento("curl", &["-fsSL", "--max-time", "20", url])
         .or_else(|| intento("wget", &["-q", "-O", "-", "--timeout=20", url]));
-    match salida {
+    match out_text {
         Some(o) => String::from_utf8(o.stdout).context("la respuesta no es UTF-8"),
         None => bail!(
             "no pude consultar {url}.\n   \

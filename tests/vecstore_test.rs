@@ -154,16 +154,16 @@ fn editar_una_memoria_invalida_sus_vectores() {
     // camino que estaba roto. Ahora corre el binario de verdad.
     let (dir, _conn, p) = fixture();
     let db = dir.path().join("t.db");
-    let salida = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
+    let out_text = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--db").arg(&db).args(["save", "hola"]).output().unwrap();
-    assert!(salida.status.success());
+    assert!(out_text.status.success());
 
     // Instalar el paquete deja la memoria con su vector de "hola".
-    let salida = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
+    let out_text = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--db").arg(&db)
         .args(["model", "install", dir.path().join("mini.anathem-pack").to_str().unwrap()])
         .output().unwrap();
-    assert!(salida.status.success(), "{}", String::from_utf8_lossy(&salida.stderr));
+    assert!(out_text.status.success(), "{}", String::from_utf8_lossy(&out_text.stderr));
 
     // Un $EDITOR de mentira que reemplaza el cuerpo por otro texto.
     let editor = dir.path().join("editor.sh");
@@ -178,10 +178,10 @@ fn editar_una_memoria_invalida_sus_vectores() {
         let conn = rusqlite::Connection::open(&db).unwrap();
         conn.query_row("select id from memories", [], |r| r.get(0)).unwrap()
     };
-    let salida = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
+    let out_text = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--db").arg(&db).args(["edit", &id.to_string()])
         .env("EDITOR", &editor).output().unwrap();
-    assert!(salida.status.success(), "{}", String::from_utf8_lossy(&salida.stderr));
+    assert!(out_text.status.success(), "{}", String::from_utf8_lossy(&out_text.stderr));
 
     let conn = rusqlite::Connection::open(&db).unwrap();
     assert_eq!(
@@ -209,8 +209,8 @@ fn buscar_colapsa_varios_fragmentos_de_la_misma_memoria() {
     // cualquiera de los dos.
     let (_d, conn, p) = fixture();
     let relleno = "mundo ".repeat(100); // 600 caracteres, puro "mundo"
-    let objetivo = "hola ".repeat(50); // 250 caracteres, puro "hola"
-    let cuerpo = format!("{relleno}{objetivo}");
+    let goal = "hola ".repeat(50); // 250 caracteres, puro "hola"
+    let cuerpo = format!("{relleno}{goal}");
     let id = sembrar(&conn, &cuerpo);
 
     let n_fragmentos: i64 = conn

@@ -71,7 +71,7 @@ pub struct Tema {
     pub total: i64,
     /// La memoria activa que hoy responde por la clave. `None` si todas
     /// quedaron olvidadas: la clave existe pero no hay versión vigente.
-    pub vigente: Option<i64>,
+    pub current_one: Option<i64>,
 }
 
 /// Las claves de tema que existen, ordenadas por proyecto y clave. La misma
@@ -91,7 +91,7 @@ pub fn topics(conn: &Connection) -> Result<Vec<Tema>> {
                 project: r.get(0)?,
                 topic: r.get(1)?,
                 total: r.get(2)?,
-                vigente: r.get(3)?,
+                current_one: r.get(3)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;

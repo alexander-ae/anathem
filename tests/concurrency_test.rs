@@ -158,10 +158,10 @@ fn buscar_no_falla_aunque_no_pueda_reindexar() {
     // Y no puede haber quedado nada a medias: el registro sigue nombrando al
     // archivo que existe.
     let conn = rusqlite::Connection::open(&db).unwrap();
-    let (nombre, _, _) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
+    let (name, _, _) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
     assert!(
-        paquetes.join(format!("{nombre}.anathem-pack")).exists(),
-        "el registro quedó apuntando a un archivo que no existe: {nombre}"
+        paquetes.join(format!("{name}.anathem-pack")).exists(),
+        "el registro quedó apuntando a un archivo que no existe: {name}"
     );
 }
 
@@ -253,8 +253,8 @@ fn un_install_concurrente_no_deja_vectores_de_dos_paquetes() {
     );
 
     let conn = rusqlite::Connection::open(&db).unwrap();
-    let (nombre, _, dims) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
-    assert_eq!(nombre, "otro-es", "el último que adoptó fue el install de B");
+    let (name, _, dims) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
+    assert_eq!(name, "otro-es", "el último que adoptó fue el install de B");
 
     // Ningún texto de este test contiene la pieza "s", así que con `otro-es`
     // los ejes 0 y 1 son exactamente cero y con `mini-es` son justo los dos

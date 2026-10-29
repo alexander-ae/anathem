@@ -70,15 +70,15 @@ pub fn parse(texto: &str) -> Option<ParsedMemory> {
     m.status = "active".into();
     m.source = "explicit".into();
 
-    let lineas: Vec<&str> = cabecera.lines().collect();
+    let lines_: Vec<&str> = cabecera.lines().collect();
     let mut i = 0;
-    while i < lineas.len() {
-        let l = lineas[i];
+    while i < lines_.len() {
+        let l = lines_[i];
         i += 1;
         // Refs are a list of pairs on following lines, indented.
         if l.trim_start().starts_with("- kind:") {
             let kind = unquote(l.split_once("kind:").map(|x| x.1).unwrap_or(""));
-            let value = lineas
+            let value = lines_
                 .get(i)
                 .and_then(|x| x.split_once("value:"))
                 .map(|x| unquote(x.1))

@@ -119,12 +119,12 @@ pub struct Saved {
     pub topic: Option<String>,
     /// The memory left superseded, whether by the topic key or by an
     /// explicit `supersedes`.
-    pub reemplazada: Option<Replaced>,
+    pub replaced: Option<Replaced>,
     /// The key had no active memory before this save.
-    pub clave_nueva: bool,
+    pub key_is_new: bool,
     /// Only when the key turned out to be new: the other keys that do have
     /// an active memory in the project, so a typo shows.
-    pub otras_claves: Vec<String>,
+    pub other_keys: Vec<String>,
 }
 
 /// Validates and normalizes a topic key: lowercase, trimmed at the edges
@@ -145,7 +145,7 @@ pub fn normalize_topic(clave: &str) -> Result<String> {
 }
 
 /// Cap on how many keys are listed when reporting that a key is new.
-const MAX_CLAVES_LISTADAS: usize = 30;
+const MAX_KEYS_LISTED: usize = 30;
 
 /// An error for a request that cannot be fulfilled (a `supersedes` that does
 /// not exist, is not active, or clashes with the key). Unlike a database
@@ -242,12 +242,12 @@ pub fn save_with_topic_by(
         tx.commit()?;
         return Ok(Saved {
             id, project: project.to_string(), tags, topic: None,
-            reemplazada: None, clave_nueva: false, otras_claves: Vec::new(),
+            replaced: None, key_is_new: false, other_keys: Vec::new(),
         });
     }
 
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
-    let vigente: Option<(i64, String)> = match &topic {
+    let current_one: Option<(i64, String)> = match &topic {
         Some(t) => tx
             .query_row(
                 "select id, title from memories
@@ -259,7 +259,7 @@ pub fn save_with_topic_by(
             .optional()?,
         None => None,
     };
-    let explicita: Option<(i64, String)> = match supersedes {
+    let explicit_one: Option<(i64, String)> = match supersedes {
         Some(sid) => {
             let fila: Option<(String, String)> = tx
                 .query_row("select status, title from memories where id = ?1", [sid], |r| {
@@ -279,28 +279,28 @@ pub fn save_with_topic_by(
         }
         None => None,
     };
-    if let (Some((v, _)), Some((e, _))) = (&vigente, &explicita) {
+    if let (Some((v, _)), Some((e, _))) = (&current_one, &explicit_one) {
         if v != e {
             return Err(BadRequest(format!(
                 "la clave «{}» ya tiene la memoria activa id:{v} y supersedes apunta a id:{e}: \
                  una memoria nueva reemplaza a una sola. Dejá solo `topic` para actualizar la \
-                 vigente, o solo `supersedes` para corregir esa otra.",
+                 current_one, o solo `supersedes` para corregir esa otra.",
                 topic.as_deref().unwrap_or_default()
             ))
             .into());
         }
     }
 
-    let clave_nueva = topic.is_some() && vigente.is_none();
-    let objetivo = explicita.or(vigente);
+    let key_is_new = topic.is_some() && current_one.is_none();
+    let goal = explicit_one.or(current_one);
     let id = insert_row(&tx, &m, agent)?;
-    if let Some((vieja, _)) = &objetivo {
+    if let Some((vieja, _)) = &goal {
         crate::supersede::link(&tx, id, *vieja)?;
     }
     if let Some(t) = &topic {
         tx.execute("update memories set topic = ?2 where id = ?1", params![id, t])?;
     }
-    let otras_claves = match (&topic, &objetivo) {
+    let other_keys = match (&topic, &goal) {
         (Some(t), None) => active_topic_keys(&tx, project, t)?,
         _ => Vec::new(),
     };
@@ -310,9 +310,9 @@ pub fn save_with_topic_by(
         project: project.to_string(),
         tags,
         topic,
-        reemplazada: objetivo.map(|(id, title)| Replaced { id, title }),
-        clave_nueva,
-        otras_claves,
+        replaced: goal.map(|(id, title)| Replaced { id, title }),
+        key_is_new,
+        other_keys,
     })
 }
 
@@ -325,7 +325,7 @@ fn active_topic_keys(conn: &Connection, project: &str, excepto: &str) -> Result<
           order by topic limit ?3",
     )?;
     let claves = stmt
-        .query_map(params![project, excepto, MAX_CLAVES_LISTADAS as i64 + 1], |r| r.get(0))?
+        .query_map(params![project, excepto, MAX_KEYS_LISTED as i64 + 1], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     Ok(claves)
 }
@@ -342,7 +342,7 @@ impl Saved {
     /// legitimately new key, and without the list nobody can tell them apart.
     /// It costs text only in that case.
     pub fn describe(&self) -> Option<String> {
-        let reemplazo = self.reemplazada.as_ref().map(|r| {
+        let reemplazo = self.replaced.as_ref().map(|r| {
             format!(
                 "reemplaza a la memoria {} («{}»), que queda superseded. `mem history {}` \
                  muestra la cadena.",
@@ -352,7 +352,7 @@ impl Saved {
         let Some(clave) = self.topic.as_deref() else {
             return reemplazo.map(|r| capitalizar(&r));
         };
-        match (reemplazo, self.clave_nueva) {
+        match (reemplazo, self.key_is_new) {
             (Some(r), false) => Some(format!("Tema «{clave}»: {r}")),
             (Some(r), true) => Some(format!(
                 "{} Tema «{clave}»: clave nueva; la próxima memoria con esa clave reemplazará a esta.",
@@ -362,12 +362,12 @@ impl Saved {
                 let mut msg = format!(
                     "Tema «{clave}»: no había una memoria activa con esa clave, se guardó como nueva."
                 );
-                if self.otras_claves.is_empty() {
+                if self.other_keys.is_empty() {
                     msg.push_str(&format!(" No hay otras claves de tema en {}.", self.project));
                 } else {
-                    let hay_mas = self.otras_claves.len() > MAX_CLAVES_LISTADAS;
-                    let lista: Vec<&str> = self.otras_claves.iter()
-                        .take(MAX_CLAVES_LISTADAS).map(String::as_str).collect();
+                    let hay_mas = self.other_keys.len() > MAX_KEYS_LISTED;
+                    let lista: Vec<&str> = self.other_keys.iter()
+                        .take(MAX_KEYS_LISTED).map(String::as_str).collect();
                     msg.push_str(&format!(
                         " Claves que ya existen en {}: {}{}. Si querías actualizar una de ellas, \
                          la clave no coincidió: guardá de nuevo con la exacta.",
