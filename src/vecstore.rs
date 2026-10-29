@@ -1,31 +1,32 @@
-//! Persistencia de los vectores y búsqueda por coseno.
+//! Persisting vectors and searching by cosine.
 //!
-//! La búsqueda es por fuerza bruta, sin índice aproximado y sin extensiones de
-//! SQLite. Un producto punto contra 100.000 fragmentos son 25 millones de
-//! operaciones, unos pocos milisegundos, y evita una extensión compilada que
-//! rompería la promesa de un solo binario. Conviene revisarlo por encima del
-//! medio millón de fragmentos.
+//! The search is brute force, with no approximate index and no SQLite
+//! extensions. A dot product against 100,000 chunks is 25 million
+//! operations, a few milliseconds, and it avoids a compiled extension that
+//! would break the single-binary promise. Worth revisiting past half a
+//! million chunks.
 
 use crate::{pack::Pack, search::Query};
 use anyhow::Result;
 use rusqlite::{params, types::Value, Connection, Transaction, TransactionBehavior};
 use std::collections::HashMap;
 
-/// Cuántos fragmentos embebe y escribe `sincronizar` por vuelta.
+/// How many chunks `sync` embeds and writes per round.
 ///
-/// Embeber es lo caro —cien mil fragmentos son minutos— y no toca la base,
-/// así que va afuera de la transacción. Lo que queda adentro son lotes
-/// cortos: un escritor concurrente espera decenas de milisegundos en vez de
-/// minutos. Doscientos cincuenta y seis es el compromiso entre pagar el
-/// arranque de la transacción seguido y quedarse con el lock mucho rato.
+/// Embedding is the expensive part — a hundred thousand chunks is minutes —
+/// and it does not touch the database, so it stays outside the transaction.
+/// What remains inside are short batches: a concurrent writer waits tens of
+/// milliseconds instead of minutes. Two hundred and fifty-six is the
+/// compromise between paying the transaction's startup over and over and
+/// holding the lock for a long time.
 const LOTE: usize = 256;
 
-/// Abre una transacción de escritura tomando el lock de entrada.
+/// Opens a write transaction, taking the lock up front.
 ///
-/// `begin immediate` en vez del `begin deferred` que da
-/// `unchecked_transaction`: con deferred, dos procesos pueden empezar a la
-/// vez y descubrir el conflicto recién al escribir, cuando ya es tarde para
-/// que `busy_timeout` los haga esperar por turnos.
+/// `begin immediate` instead of the `begin deferred` that
+/// `unchecked_transaction` gives: with deferred, two processes can start at
+/// once and only discover the conflict on write, when it is already too late
+/// for `busy_timeout` to make them wait their turn.
 fn escritura(conn: &Connection) -> rusqlite::Result<Transaction<'_>> {
     Transaction::new_unchecked(conn, TransactionBehavior::Immediate)
 }
@@ -74,18 +75,18 @@ pub fn register_pack(conn: &Connection, nombre: &str, sha: &str, dims: usize) ->
     Ok(())
 }
 
-/// Deja la base lista para indexar con `nombre`: se lleva los vectores del
-/// paquete anterior y anota la identidad del nuevo **en la misma
-/// transacción**.
+/// Leaves the database ready to index with `name`: it takes away the
+/// previous pack's vectors and records the new one's identity **in the same
+/// transaction**.
 ///
-/// Separarlo en dos pasos —como estaba— abre una ventana en la que los
-/// vectores son de un paquete y el registro nombra a otro. Si el proceso
-/// muere ahí, la base queda describiendo un índice que no tiene, y nada en
-/// los blobs lo delata cuando las dimensiones coinciden. O pasan las dos
-/// cosas o no pasa ninguna.
-/// Borra además la marca de instalación en curso, en esa misma transacción:
-/// la marca existe para cubrir el tramo que termina justo acá, y dejarla
-/// viva un instante más costaría un reindexado innecesario.
+/// Splitting that in two steps — as it used to be — opens a window where the
+/// vectors belong to one pack and the registry names another. If the process
+/// dies there, the database is left describing an index it does not have,
+/// and nothing in the blobs gives it away when the dimensions match. Either
+/// both happen or neither does.
+/// It also clears the in-progress install mark, in that same transaction:
+/// the mark exists to cover the stretch that ends right here, and leaving it
+/// alive an instant longer would cost an unnecessary reindex.
 pub fn adoptar_pack(conn: &Connection, nombre: &str, sha: &str, dims: usize) -> Result<()> {
     let tx = escritura(conn)?;
     tx.execute("delete from chunk_vectors", [])?;
@@ -95,27 +96,26 @@ pub fn adoptar_pack(conn: &Connection, nombre: &str, sha: &str, dims: usize) -> 
     Ok(())
 }
 
-/// La clave de `meta` que dice "hay una instalación a mitad de camino".
+/// The `meta` key that says "there is an install halfway through".
 ///
-/// El archivo del paquete se pone en su lugar con un `rename`, que es
-/// atómico, pero el registro que lo describe se escribe después: entre las
-/// dos cosas hay una ventana en la que `paquetes/{nombre}.anathem-pack` es
-/// el build nuevo y `meta` todavía describe al viejo. Un corte de luz o un
-/// SIGKILL ahí deja esa mentira en disco para siempre, y cuando el nombre y
-/// las dimensiones no cambian —actualizar el build de `en-es`, el caso más
-/// común de reinstalar— la guarda de identidad no la ve, porque el sha
-/// registrado se descarta a propósito para no hashear 22 MB en cada
-/// arranque. Resultado: consultas embebidas con el paquete nuevo contra
-/// vectores del viejo, indefinidamente, con `model status` informando
-/// cobertura completa.
+/// The pack file is put in place with a `rename`, which is atomic, but the
+/// registry describing it is written afterwards: between the two there is a
+/// window where `paquetes/{name}.anathem-pack` is the new build and `meta`
+/// still describes the old one. A power cut or a SIGKILL there leaves that
+/// lie on disk forever, and when neither name nor dimensions change —
+/// updating the `en-es` build, the most common reinstall — the identity
+/// guard does not see it, because the registered sha is discarded on purpose
+/// so 22 MB are not hashed on every startup. Result: queries embedded with
+/// the new pack against the old one's vectors, indefinitely, with `model
+/// status` reporting full coverage.
 ///
-/// La marca se escribe **antes** del rename y se borra en la misma
-/// transacción que adopta el paquete, así que existir es exactamente
-/// equivalente a "el archivo puede no ser el que `meta` describe". No
-/// acorta la ventana: la hace declarada.
+/// The mark is written **before** the rename and cleared in the same
+/// transaction that adopts the pack, so its existence is exactly equivalent
+/// to "the file may not be the one `meta` describes". It does not shorten
+/// the window: it makes it declared.
 const INSTALANDO: &str = "pack_instalando";
 
-/// Anota que se está por reemplazar el archivo del paquete `nombre`.
+/// Records that the file for pack `name` is about to be replaced.
 pub fn mark_install(conn: &Connection, nombre: &str) -> Result<()> {
     let tx = escritura(conn)?;
     tx.execute(
@@ -138,9 +138,9 @@ pub fn instalacion_pendiente(conn: &Connection) -> Result<Option<String>> {
     }
 }
 
-/// Saca la marca. Para cuando la instalación falló antes de tocar el archivo
-/// —el rename no llegó a pasar— o para una marca huérfana que ya se sabe que
-/// no describe ningún riesgo.
+/// Clears the mark. For when the install failed before touching the file —
+/// the rename never happened — or for an orphaned mark already known to
+/// describe no risk.
 pub fn clear_install_mark(conn: &Connection) -> Result<()> {
     let tx = escritura(conn)?;
     tx.execute("delete from meta where key = ?1", [INSTALANDO])?;
@@ -148,17 +148,18 @@ pub fn clear_install_mark(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Cómo identifica la base al paquete con el que indexó: nombre, sha256 y
-/// dimensiones. Dos paquetes distintos no coinciden en las tres cosas, y el
-/// sha es la única de las tres que distingue dos builds del mismo nombre y
-/// las mismas dimensiones —el caso de actualizar `en-es`—, así que las tres
-/// van juntas siempre.
+/// How the database identifies the pack it indexed with: name, sha256 and
+/// dimensions. Two different packs do not agree on all three, and the sha is
+/// the only one of the three that tells apart two builds with the same name
+/// and the same dimensions — the case of updating `en-es` — so the three
+/// always travel together.
 pub type PackIdentity = (String, String, usize);
 
 pub fn registered_pack(conn: &Connection) -> Result<Option<PackIdentity>> {
-    // No usar `.ok()`: eso convertiría cualquier error real de sqlite (tabla
-    // ausente, base corrupta) en `None`, indistinguible de "no hay paquete
-    // registrado". Degradar a bm25 está bien; callarse un error real no.
+    // Do not use `.ok()`: that would turn any real sqlite error (missing
+    // table, corrupt database) into `None`, indistinguishable from "no pack
+    // registered". Degrading to bm25 is fine; swallowing a real error is
+    // not.
     let parse = |k: &str| -> Result<Option<String>> {
         match conn.query_row("select value from meta where key = ?1", [k], |r| {
             r.get::<_, String>(0)
@@ -186,25 +187,26 @@ pub fn forget_pack(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Cómo terminó una corrida de `sincronizar`.
+/// How a run of `sync` ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncOutcome {
-    /// No quedó ningún fragmento sin vector. Se escribieron `n` nuevos.
+    /// No chunk was left without a vector. `n` new ones were written.
     Completa(usize),
-    /// Otro proceso cambió el paquete registrado mientras este embebía. El
-    /// lote en curso se descartó sin escribirlo y quedan fragmentos sin
-    /// vector; `n` son los que sí se escribieron mientras la identidad
-    /// todavía era la esperada, y que el `adoptar_pack` del otro proceso ya
-    /// borró.
+    /// Another process changed the registered pack while this one was
+    /// embedding. The batch in flight was discarded without writing it and
+    /// chunks are left without a vector; `n` are the ones that did get
+    /// written while the identity was still the expected one, and that the
+    /// other process's `adopt_pack` has already deleted.
     ///
-    /// **No es un error.** Quien guardó una memoria la guardó igual, y
-    /// quedarse con menos vectores de los debidos es exactamente la
-    /// degradación aceptable; la que no lo es sería haber escrito ese lote.
+    /// **This is not an error.** Whoever saved a memory saved it all the
+    /// same, and ending up with fewer vectors than there should be is
+    /// exactly the acceptable degradation; the unacceptable one would have
+    /// been writing that batch.
     Abandonada(usize),
 }
 
 impl SyncOutcome {
-    /// Cuántos vectores se escribieron, haya terminado como haya terminado.
+    /// How many vectors were written, however it ended.
     pub fn escritos(self) -> usize {
         match self {
             SyncOutcome::Completa(n) | SyncOutcome::Abandonada(n) => n,
@@ -216,41 +218,41 @@ impl SyncOutcome {
     }
 }
 
-/// Embebe los fragmentos que todavía no tienen vector y devuelve cuántos.
+/// Embeds the chunks that still have no vector and returns how many.
 ///
-/// Es idempotente a propósito: los caminos de escritura (guardar, editar,
-/// migrar, reindexar) la llaman al terminar en vez de embeber cada uno por su
-/// cuenta, para que no puedan divergir entre sí.
+/// It is idempotent on purpose: the write paths (save, edit, migrate,
+/// reindex) call it when they finish instead of each embedding on its own,
+/// so they cannot drift apart.
 ///
-/// `esperada` es la identidad con la que la base tenía registrado a `pack`
-/// cuando quien llama lo abrió, y es obligatoria: sin ella esta función
-/// escribe vectores de un paquete que puede haber dejado de ser el
-/// registrado hace rato.
+/// `expected` is the identity the database had `pack` registered under when
+/// the caller opened it, and it is mandatory: without it this function
+/// writes vectors for a pack that may have stopped being the registered one
+/// a while ago.
 ///
-/// Es el caso real, no uno rebuscado: embeber un backlog grande —memorias
-/// guardadas sin paquete, o un `install` interrumpido— lleva minutos, y en
-/// ese rato otra terminal puede correr `mem model install`. `adoptar_pack`
-/// borra los vectores y anota el paquete nuevo en una transacción, pero eso
-/// no detiene al proceso que ya estaba embebiendo con el viejo: sus lotes
-/// siguientes se escribían igual, y el `on conflict do nothing` los grababa
-/// en silencio al lado de los del paquete nuevo. Con las dimensiones
-/// iguales —el caso real, porque el formato fija 256 para todo paquete— ni
-/// `buscar` ni `cobertura` distinguen unos de otros, y como `sincronizar`
-/// saltea los fragmentos que ya tienen vector, ningún `mem reindex`
-/// posterior los corrige: la mezcla es permanente.
+/// That is the real case, not a contrived one: embedding a large backlog —
+/// memories saved without a pack, or an interrupted `install` — takes
+/// minutes, and in that time another terminal can run `mem model install`.
+/// `adopt_pack` deletes the vectors and records the new pack in one
+/// transaction, but that does not stop the process already embedding with
+/// the old one: its later batches were written all the same, and the `on
+/// conflict do nothing` stored them silently beside the new pack's. With
+/// equal dimensions — the real case, since the format fixes 256 for every
+/// pack — neither `search_vectors` nor `coverage` tells them apart, and
+/// since `sync` skips chunks that already have a vector, no later `mem
+/// reindex` corrects them: the mixture is permanent.
 ///
-/// Por eso la comprobación va **dentro** de la transacción `immediate` de
-/// cada lote, que ya tiene el lock de escritura tomado: releer `meta` ahí es
-/// un `select` por lote, y garantiza que ningún vector se escribe sin que la
-/// identidad con la que se lo calculó sea, en ese mismo instante y bajo ese
-/// mismo lock, la registrada. Los lotes ya escritos no hacen falta
-/// deshacerlos: quien cambie la identidad pasa por `adoptar_pack`, que borra
-/// `chunk_vectors` entero.
+/// That is why the check goes **inside** each batch's `immediate`
+/// transaction, which already holds the write lock: rereading `meta` there
+/// is one `select` per batch, and it guarantees that no vector is written
+/// unless the identity it was computed with is, at that very instant and
+/// under that very lock, the registered one. Batches already written need no
+/// undoing: whoever changes the identity goes through `adopt_pack`, which
+/// deletes `chunk_vectors` entirely.
 pub fn sync(conn: &Connection, pack: &Pack, esperada: &PackIdentity) -> Result<SyncOutcome> {
     let mut total = 0usize;
     loop {
-        // Los pendientes se recalculan en cada vuelta: entre lote y lote,
-        // otro proceso pudo haber embebido parte de lo que faltaba.
+        // The pending set is recomputed each round: between batches,
+        // another process may have embedded part of what was missing.
         let pendientes: Vec<(i64, String)> = conn
             .prepare(
                 "select c.id, c.body from chunks c
@@ -269,25 +271,25 @@ pub fn sync(conn: &Connection, pack: &Pack, esperada: &PackIdentity) -> Result<S
             vectores.push((*id, a_blob(&pack.embeber(cuerpo)?)));
         }
         let tx = escritura(conn)?;
-        // Con el lock de escritura ya tomado: ¿el paquete con el que se
-        // embebió este lote sigue siendo el registrado? Si no, se abandona
-        // sin escribir nada. La transacción muere sin `commit` y no deja
-        // rastro.
+        // With the write lock already held: is the pack this batch was
+        // embedded with still the registered one? If not, it is abandoned
+        // without writing anything. The transaction dies without `commit`
+        // and leaves no trace.
         if registered_pack(&tx)?.as_ref() != Some(esperada) {
             return Ok(SyncOutcome::Abandonada(total));
         }
         for (id, blob) in &vectores {
-            // Dos cosas pueden haber pasado desde el `select` de arriba, y
-            // ninguna es un error de quien guardó una memoria:
+            // Two things may have happened since the `select` above, and
+            // neither is a fault of whoever saved a memory:
             //
-            // - Otro proceso embebió el mismo fragmento. `do nothing`: gana
-            //   el primero. Sin esto, tres `mem save` simultáneos dejaban a
-            //   dos saliendo con código 1 y `UNIQUE constraint failed`
-            //   aunque la memoria sí se había guardado, y por MCP el agente
-            //   veía `-32603 error interno` por un guardado exitoso.
-            // - Un `mem edit` rechunkeó y el fragmento ya no existe. El
-            //   `where exists` evita que la clave foránea haga fallar el
-            //   insert de un fragmento que nadie va a buscar.
+            // - Another process embedded the same chunk. `do nothing`: the
+            //   first one wins. Without this, three simultaneous `mem save`
+            //   left two exiting with code 1 and `UNIQUE constraint failed`
+            //   even though the memory had been saved, and over MCP the
+            //   agent saw `-32603 internal error` for a successful save.
+            // - A `mem edit` rechunked and the chunk no longer exists. The
+            //   `where exists` keeps the foreign key from failing the insert
+            //   of a chunk nobody is going to look for.
             total += tx.execute(
                 "insert into chunk_vectors (chunk_id, vec)
                  select ?1, ?2 where exists (select 1 from chunks where id = ?1)
@@ -303,15 +305,15 @@ pub fn sync(conn: &Connection, pack: &Pack, esperada: &PackIdentity) -> Result<S
     Ok(SyncOutcome::Completa(total))
 }
 
-/// (fragmentos con vector **usable**, fragmentos totales). Un hueco significa
-/// que hay memorias que la capa vectorial no ve todavía.
+/// (chunks with a **usable** vector, total chunks). A gap means there are
+/// memories the vector layer cannot see yet.
 ///
-/// "Usable" es literal, y por eso hay que pasarle las dimensiones del
-/// paquete activo: `buscar` descarta por incompatible todo vector que no
-/// mida `dims` flotantes, así que contarlo sería reportar salud perfecta
-/// justo cuando el agujero es total. Con `count(*)` a secas, el único
-/// diagnóstico que existe para hacer visible el hueco decía 2/2 mientras la
-/// búsqueda vectorial no devolvía absolutamente nada.
+/// "Usable" is literal, and that is why the active pack's dimensions have to
+/// be passed in: `search_vectors` discards as incompatible every vector that
+/// is not `dims` floats long, so counting it would report perfect health
+/// exactly when the hole is total. With a bare `count(*)`, the only
+/// diagnostic that exists to make the gap visible said 2/2 while vector
+/// search returned absolutely nothing.
 pub fn coverage(conn: &Connection, dims: usize) -> Result<(usize, usize)> {
     let con: i64 = conn.query_row(
         "select count(*) from chunk_vectors where length(vec) = ?1",
@@ -322,9 +324,9 @@ pub fn coverage(conn: &Connection, dims: usize) -> Result<(usize, usize)> {
     Ok((con as usize, tot as usize))
 }
 
-/// Las `limite` memorias más parecidas a `consulta`, con los mismos filtros
-/// que aplica la búsqueda léxica. Cada memoria aparece una sola vez, con su
-/// fragmento más parecido.
+/// The `limit` memories most similar to `query`, under the same filters the
+/// lexical search applies. Each memory appears once, with its closest
+/// chunk.
 pub fn search_vectors(
     conn: &Connection,
     consulta: &[f32],
@@ -339,9 +341,9 @@ pub fn search_vectors(
           where m.status = 'active'",
     );
     let mut ps: Vec<Value> = Vec::new();
-    // El mismo filtro que usa la búsqueda léxica, de una sola fuente: si los
-    // dos lados filtraran distinto, el vector devolvería memorias que bm25
-    // descarta y la fusión las mezclaría sin que nada lo note.
+    // The same filter the lexical search uses, from a single source: if the
+    // two sides filtered differently, the vector side would return memories
+    // bm25 discards and the merge would mix them in with nothing noticing.
     sql.push_str(&crate::search::filters_for(q, &mut ps));
     let mut stmt = conn.prepare(&sql)?;
     let filas = stmt.query_map(rusqlite::params_from_iter(ps.iter()), |r| {
@@ -365,8 +367,8 @@ pub fn search_vectors(
         .into_iter()
         .map(|(memory_id, (chunk_id, cosine))| VectorHit { memory_id, chunk_id, cosine })
         .collect();
-    // Mayor coseno primero; a igual coseno, menor id, por la misma razón de
-    // determinismo que en `fusion::rrf` y en `search::run_explained`.
+    // Highest cosine first; on a tie, lowest id, for the same determinism
+    // reason as in `fusion::rrf` and `search::run_explained`.
     out.sort_by(|a, b| {
         b.cosine
             .partial_cmp(&a.cosine)
