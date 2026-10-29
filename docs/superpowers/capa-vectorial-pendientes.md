@@ -25,11 +25,11 @@ conviene guardarlos en int8, como ya hace la tabla del paquete.
 
 ## Duplicación que va a costar un bug
 
-**Los filtros de la consulta están escritos dos veces.** `src/search.rs` y
-`src/vecstore.rs` construyen por separado el mismo WHERE de proyecto y tags,
-cada uno con su numeración `?N` hecha a mano. Hoy coinciden. El día que se
-agregue un filtro a `Query` y se actualice uno solo, el lado vectorial va a
-devolver memorias que el léxico filtra, y ningún test lo va a ver.
+~~**Los filtros de la consulta están escritos dos veces.**~~ Hecho: viven en
+`search::filtros_de`, que los dos lados llaman. Hay además un test que fija el
+comportamiento (`el_lado_vectorial_respeta_los_mismos_filtros_que_el_lexico`),
+con vectores idénticos para que lo único capaz de dejar algo afuera sea el
+filtro.
 
 ## Diagnóstico y mensajes
 

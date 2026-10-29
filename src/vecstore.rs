@@ -339,17 +339,10 @@ pub fn buscar(
           where m.status = 'active'",
     );
     let mut ps: Vec<Value> = Vec::new();
-    if let Some(p) = &q.project {
-        ps.push(Value::Text(p.clone()));
-        sql.push_str(&format!(" and m.project = ?{}", ps.len()));
-    }
-    for t in &q.tags {
-        ps.push(Value::Text(t.clone()));
-        sql.push_str(&format!(
-            " and exists (select 1 from memory_tags mt where mt.memory_id = m.id and mt.tag = ?{})",
-            ps.len()
-        ));
-    }
+    // El mismo filtro que usa la búsqueda léxica, de una sola fuente: si los
+    // dos lados filtraran distinto, el vector devolvería memorias que bm25
+    // descarta y la fusión las mezclaría sin que nada lo note.
+    sql.push_str(&crate::search::filtros_de(q, &mut ps));
     let mut stmt = conn.prepare(&sql)?;
     let filas = stmt.query_map(rusqlite::params_from_iter(ps.iter()), |r| {
         Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, Vec<u8>>(2)?))

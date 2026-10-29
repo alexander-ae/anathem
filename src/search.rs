@@ -80,17 +80,7 @@ fn candidate_rows(
     );
     let mut params: Vec<Value> = vec![Value::Text(match_expr.to_string())];
 
-    if let Some(p) = &q.project {
-        params.push(Value::Text(p.clone()));
-        sql.push_str(&format!(" and m.project = ?{}", params.len()));
-    }
-    for t in &q.tags {
-        params.push(Value::Text(t.clone()));
-        sql.push_str(&format!(
-            " and exists (select 1 from memory_tags mt where mt.memory_id = m.id and mt.tag = ?{})",
-            params.len()
-        ));
-    }
+    sql.push_str(&filtros_de(q, &mut params));
     sql.push_str(extra_where);
     sql.push_str(" order by score");
     if let Some(l) = limit {
@@ -177,6 +167,34 @@ impl<'a> Contexto<'a> {
             _ => None,
         }
     }
+}
+
+/// El `WHERE` de proyecto y tags, compartido por la búsqueda léxica y la
+/// vectorial. Asume que la consulta tiene `memories` con alias `m`.
+///
+/// Agrega sus parámetros a `params` y devuelve el fragmento de SQL con la
+/// numeración `?N` ya resuelta, para que quien llama pueda traer parámetros
+/// de antes (la búsqueda léxica llega con el `match` en `?1`).
+///
+/// Existe porque esto estaba escrito dos veces, en `search` y en `vecstore`,
+/// cada una con su numeración hecha a mano. Mientras coincidieran no se
+/// notaba. El día que alguien agregara un filtro a `Query` y actualizara uno
+/// solo, el lado vectorial habría devuelto memorias que el léxico filtra, y
+/// ningún test lo habría visto.
+pub(crate) fn filtros_de(q: &Query, params: &mut Vec<Value>) -> String {
+    let mut sql = String::new();
+    if let Some(p) = &q.project {
+        params.push(Value::Text(p.clone()));
+        sql.push_str(&format!(" and m.project = ?{}", params.len()));
+    }
+    for t in &q.tags {
+        params.push(Value::Text(t.clone()));
+        sql.push_str(&format!(
+            " and exists (select 1 from memory_tags mt where mt.memory_id = m.id and mt.tag = ?{})",
+            params.len()
+        ));
+    }
+    sql
 }
 
 /// Trae un `SearchHit` armado alrededor de un fragmento concreto. Lo usa la

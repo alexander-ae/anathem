@@ -343,3 +343,71 @@ fn sincronizar_abandona_a_mitad_de_camino_si_el_paquete_cambia_entre_lotes() {
         "se escribieron los {total} fragmentos con un paquete que ya no era el registrado"
     );
 }
+
+/// Los filtros de proyecto y tags tienen que valer igual del lado vectorial
+/// que del léxico. Estaban escritos dos veces; este test fija que el vector
+/// no devuelva lo que bm25 descarta, que es lo que esa duplicación iba a
+/// costar el día que los dos lados se separaran.
+#[test]
+fn el_lado_vectorial_respeta_los_mismos_filtros_que_el_lexico() {
+    let d = tempfile::tempdir().unwrap();
+    let db = d.path().join("mem.db");
+    let conn = anathem::db::open(&db).unwrap();
+
+    anathem::ingest::guardar_explicito(&conn, "nota del proyecto uno", "uno", vec!["alfa".into()])
+        .unwrap();
+    anathem::ingest::guardar_explicito(&conn, "nota del proyecto dos", "dos", vec!["beta".into()])
+        .unwrap();
+
+    // Vectores iguales para todos: así el coseno no desempata y lo único que
+    // puede dejar algo afuera es el filtro.
+    let dims = 4usize;
+    let v: Vec<u8> = [1.0f32, 0.0, 0.0, 0.0].iter().flat_map(|x| x.to_le_bytes()).collect();
+    for id in conn
+        .prepare("select id from chunks")
+        .unwrap()
+        .query_map([], |r| r.get::<_, i64>(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect::<Vec<_>>()
+    {
+        conn.execute("insert into chunk_vectors (chunk_id, vec) values (?1, ?2)", rusqlite::params![id, v])
+            .unwrap();
+    }
+    let consulta = vec![1.0f32, 0.0, 0.0, 0.0];
+    assert_eq!(consulta.len(), dims);
+
+    let con_proyecto = anathem::search::Query {
+        text: "nota".into(),
+        project: Some("uno".into()),
+        tags: vec![],
+        limit: 10,
+        budget_tokens: 10_000,
+        extracto: None,
+    };
+    let r = anathem::vecstore::buscar(&conn, &consulta, &con_proyecto, 50).unwrap();
+    assert_eq!(r.len(), 1, "el filtro de proyecto tiene que valer también acá: {r:?}");
+
+    let con_tag = anathem::search::Query {
+        text: "nota".into(),
+        project: None,
+        tags: vec!["beta".into()],
+        limit: 10,
+        budget_tokens: 10_000,
+        extracto: None,
+    };
+    let r = anathem::vecstore::buscar(&conn, &consulta, &con_tag, 50).unwrap();
+    assert_eq!(r.len(), 1, "el filtro de tags tiene que valer también acá: {r:?}");
+
+    // Y sin filtros, los dos.
+    let sin = anathem::search::Query {
+        text: "nota".into(),
+        project: None,
+        tags: vec![],
+        limit: 10,
+        budget_tokens: 10_000,
+        extracto: None,
+    };
+    let r = anathem::vecstore::buscar(&conn, &consulta, &sin, 50).unwrap();
+    assert_eq!(r.len(), 2, "sin filtros tienen que venir las dos: {r:?}");
+}
