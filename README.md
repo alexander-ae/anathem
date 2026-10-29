@@ -289,14 +289,16 @@ hay código específico para cada agente que después haya que mantener.
 | | la tool `recent_memories` | el resumen automático al conectar |
 |---|---|---|
 | Claude Code | sí | sí, comprobado |
-| opencode, Cursor, Codex y demás | sí | depende de si el cliente honra `instructions`; el protocolo dice *puede*, no *debe* |
+| opencode | sí | sí, comprobado (lo envuelve en un bloque `<mcp_instructions>`) |
+| Cursor, Codex y demás | sí | sin verificar; el protocolo dice que el cliente *puede*, no que deba |
 
 La tool anda en cualquier cliente MCP, porque las tools son el terreno común.
-El resumen automático depende del cliente, y no encontré documentación de
-Cursor, Codex ni opencode que diga si lo usan. Para comprobarlo en el tuyo,
-abrí una sesión en un proyecto con memorias recientes y preguntale al agente
-qué sabe de este proyecto **antes** de que busque nada: si menciona lo último
-guardado, tu cliente lo honra.
+El resumen automático depende de que el cliente honre `instructions`: Claude
+Code y opencode lo hacen, comprobado poniendo un código inventado en una
+memoria y preguntándole al agente si lo tenía en contexto antes de que buscara
+nada. De Cursor y Codex no encontré ni documentación ni forma de probarlo acá.
+Para comprobarlo en el tuyo, hacé lo mismo: guardá algo con una palabra que no
+pueda adivinar y preguntale si la ve **antes** de que use ninguna tool.
 
 Cuesta tokens en cada sesión, así que es corto, y se apaga o se achica desde
 `config.json`:

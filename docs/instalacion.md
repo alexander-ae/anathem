@@ -349,11 +349,13 @@ mem recent --todos         # todos
 
 Eso viaja en el campo `instructions` del `initialize`, que el protocolo define
 como una pista que el cliente **puede** sumar al prompt del sistema. Claude
-Code la usa; de otros clientes no hay documentación que lo confirme. Para
-comprobarlo en el tuyo, en un proyecto con memorias recientes preguntale al
-agente qué sabe del proyecto **antes** de que busque nada: si menciona lo
-último guardado, tu cliente lo honra. La tool `recent_memories`, en cambio,
-anda en cualquier cliente MCP.
+Code y opencode la usan —comprobado con un código inventado en una memoria,
+preguntándole al agente si lo tenía en contexto antes de que buscara nada; en
+opencode llega dentro de un bloque `<mcp_instructions>`—. De Cursor y Codex no
+hay confirmación. Para comprobarlo en el tuyo, hacé lo mismo: guardá algo con
+una palabra que no pueda adivinar y preguntale si la ve **antes** de que use
+ninguna tool. La tool `recent_memories`, en cambio, anda en cualquier cliente
+MCP.
 
 Cuesta tokens en cada sesión, así que se ajusta en `config.json`:
 
