@@ -1,22 +1,22 @@
-//! Política de identidad del paquete activo.
+//! Identity policy for the active pack.
 //!
-//! Todo lo que decide *qué* paquete usa una base —dónde vive su archivo, si
-//! el que está en disco es el mismo con el que se indexó, y qué hacer cuando
-//! no lo es— vive acá y solo acá. Antes estaba repartido entre `main.rs` y
-//! `mcp.rs`: la ruta `dir/paquetes/{nombre}.anathem-pack` reconstruida a mano
-//! en cinco lugares, el bloque de sincronización copiado tres veces, y la
-//! política entera escondida dentro de una función que se llamaba
-//! `paquete_activo` pero escribía en la base y podía abortar el comando.
+//! Everything deciding *which* pack a database uses — where its file lives,
+//! whether the one on disk is the same one it indexed with, and what to do
+//! when it is not — lives here and only here. It used to be spread across
+//! `main.rs` and `mcp.rs`: the path `dir/paquetes/{name}.anathem-pack`
+//! rebuilt by hand in five places, the sync block copied three times, and
+//! the whole policy hidden inside a function called `paquete_activo` that
+//! wrote to the database and could abort the command.
 //!
-//! Las dos reglas que ordenan este módulo:
+//! The two rules that order this module:
 //!
-//! 1. **Sin paquete instalado no pasa absolutamente nada.** Ninguna función
-//!    de acá cuesta más que una consulta a `meta` cuando no hay paquete.
-//! 2. **Degradar a bm25 es aceptable; mezclar vectores de dos paquetes no lo
-//!    es nunca.** Un índice mezclado devuelve resultados plausibles y
-//!    equivocados, el peor desenlace para una herramienta de memoria. Ante
-//!    cualquier duda —un rename que falla, una transacción que no cierra— se
-//!    degrada a bm25, que es un resultado peor pero honesto.
+//! 1. **With no pack installed, absolutely nothing happens.** No function
+//!    here costs more than one query against `meta` when there is no pack.
+//! 2. **Degrading to bm25 is acceptable; mixing vectors from two packs never
+//!    is.** A mixed index returns plausible, wrong results, the worst
+//!    outcome for a memory tool. On any doubt — a rename that fails, a
+//!    transaction that does not close — it degrades to bm25, which is a
+//!    worse result but an honest one.
 
 use crate::pack::{self, Pack};
 use crate::vecstore;
@@ -24,49 +24,50 @@ use anyhow::{bail, Context, Result};
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 
-/// Extensión de los archivos de paquete. La convención ruta↔nombre —el
-/// paquete llamado `N` vive en `paquetes/N.anathem-pack`— es lo que permite
-/// encontrar el archivo sabiendo solo lo que dice `meta`.
+/// Extension of pack files. The path↔name convention — the pack called `N`
+/// lives in `paquetes/N.anathem-pack` — is what makes it possible to find
+/// the file knowing only what `meta` says.
 pub const EXTENSION: &str = "anathem-pack";
 
-/// Cuántos fragmentos mira `instalar` para decidir si el paquete le sirve a
-/// esta memoria. Doscientos alcanzan: si ninguno de doscientos fragmentos
-/// tiene una sola palabra que el paquete reconozca, no la va a tener el
-/// doscientos uno.
+/// How many chunks `install` looks at to decide whether the pack is any use
+/// for this memory. Two hundred is enough: if not one of two hundred chunks
+/// holds a single word the pack recognises, the two hundred and first will
+/// not either.
 const MUESTRA: usize = 200;
 
-/// Cómo identifica la base al paquete con el que indexó: nombre, sha256 y
-/// dimensiones. Vive en `vecstore`, que es quien la lee y la escribe; se
-/// reexporta acá porque esta es la capa que la hace cumplir.
+/// How the database identifies the pack it indexed with: name, sha256 and
+/// dimensions. It lives in `vecstore`, which reads and writes it; it is
+/// re-exported here because this is the layer that enforces it.
 pub use crate::vecstore::PackIdentity;
 
-/// El directorio donde viven los paquetes de una base.
+/// The directory where a database's packs live.
 pub fn packs_dir(dir: &Path) -> PathBuf {
     dir.join("paquetes")
 }
 
-/// La ruta canónica del paquete llamado `nombre`.
+/// The canonical path of the pack called `name`.
 pub fn pack_path(dir: &Path, nombre: &str) -> PathBuf {
     packs_dir(dir).join(format!("{nombre}.{EXTENSION}"))
 }
 
-/// El resultado de resolver el paquete activo. **No es un `Result`**: la
-/// capa vectorial no tiene permitido hacer fallar a quien busca. Todo lo que
-/// sale mal se convierte en `pack: None` más un aviso por stderr.
+/// The result of resolving the active pack. **It is not a `Result`**: the
+/// vector layer is not allowed to make a search fail. Everything that goes
+/// wrong turns into `pack: None` plus a warning on stderr.
 pub struct Resolved {
     pub pack: Option<Pack>,
-    /// La identidad con la que la base tenía registrado a `pack` cuando se
-    /// lo abrió. Es `Some` exactamente cuando `pack` lo es.
+    /// The identity the database had `pack` registered under when it was
+    /// opened. It is `Some` exactly when `pack` is.
     ///
-    /// Viaja al lado del paquete porque escribir vectores la exige:
-    /// `vecstore::sincronizar` tiene que poder comprobar, dentro de la
-    /// transacción en la que escribe, que sigue siendo la registrada.
-    /// Buscar no la necesita —leer con el paquete equivocado da un mal
-    /// resultado, no un índice mezclado—, así que `resolver_y_avisar` la
-    /// descarta y los caminos de lectura ni la ven.
+    /// It travels alongside the pack because writing vectors demands it:
+    /// `vecstore::sync` has to be able to check, inside the very
+    /// transaction it writes in, that it is still the registered one.
+    /// Searching does not need it — reading with the wrong pack gives a bad
+    /// result, not a mixed index — so `resolve_and_warn` drops it and the
+    /// read paths never see it.
     pub identidad: Option<PackIdentity>,
-    /// Qué contarle al usuario, si hay algo que contarle. Sin paquete
-    /// instalado es siempre `None`: quien no usa la capa no lee avisos.
+    /// What to tell the user, if there is anything to tell. With no pack
+    /// installed it is always `None`: whoever does not use the layer reads
+    /// no warnings.
     pub aviso: Option<String>,
 }
 
@@ -83,15 +84,16 @@ impl Resolved {
         Resolved { pack: Some(pack), identidad: Some(identidad), aviso }
     }
 
-    /// Deja el aviso en stderr, si lo hay.
+    /// Prints the warning on stderr, if there is one.
     pub fn warn(&self) {
         if let Some(a) = &self.aviso {
             eprintln!("{a}");
         }
     }
 
-    /// El par que necesita quien va a **escribir** vectores. `None` si no
-    /// hay paquete utilizable, que es cuando no hay nada que escribir.
+    /// The pair needed by whoever is about to **write** vectors. `None`
+    /// when there is no usable pack, which is when there is nothing to
+    /// write.
     pub fn para_escribir(&self) -> Option<(&Pack, &PackIdentity)> {
         match (&self.pack, &self.identidad) {
             (Some(p), Some(i)) => Some((p, i)),
@@ -100,16 +102,17 @@ impl Resolved {
     }
 }
 
-/// Abre el paquete registrado, si lo hay, dejando la base consistente.
+/// Opens the registered pack, if any, leaving the database consistent.
 ///
-/// Devuelve `None` —degradando a bm25— cuando no hay paquete registrado, el
-/// archivo desapareció, está corrupto, o la reconciliación no se pudo hacer:
-/// buscar nunca puede fallar por culpa de la capa vectorial.
+/// Returns `None` — degrading to bm25 — when no pack is registered, the file
+/// is gone, it is corrupt, or reconciliation could not be done: searching
+/// can never fail because of the vector layer.
 ///
-/// Si el paquete que hay en disco no es el que registró el índice (otro
-/// nombre, u otras dimensiones), reindexa antes de devolverlo. Y si no puede
-/// reindexar, no devuelve el paquete: buscar con los vectores viejos y el
-/// paquete nuevo sería exactamente la mezcla que no puede pasar.
+/// If the pack on disk is not the one the index registered (a different
+/// name, or different dimensions), it reindexes before handing it back. And
+/// if it cannot reindex, it does not hand the pack back: searching with the
+/// old vectors and the new pack would be exactly the mixture that must
+/// never happen.
 pub fn resolve(conn: &Connection, dir: &Path) -> Resolved {
     match resolve_inner(conn, dir) {
         Ok(a) => a,
@@ -120,8 +123,8 @@ pub fn resolve(conn: &Connection, dir: &Path) -> Resolved {
     }
 }
 
-/// `resolver` más el aviso ya impreso, que es lo que quiere casi todo el
-/// mundo que la llama.
+/// `resolve` plus the warning already printed, which is what almost every
+/// caller wants.
 pub fn resolve_and_warn(conn: &Connection, dir: &Path) -> Option<Pack> {
     let a = resolve(conn, dir);
     a.warn();
@@ -130,21 +133,22 @@ pub fn resolve_and_warn(conn: &Connection, dir: &Path) -> Option<Pack> {
 
 fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     let Some((nombre, sha, dims)) = vecstore::registered_pack(conn)? else {
-        // El camino de quien no instaló nada: una consulta y afuera.
+        // The path for whoever installed nothing: one query and out.
         return Ok(Resolved::sin_paquete());
     };
-    // Una instalación pudo haber muerto entre el rename —que ya reemplazó el
-    // archivo— y el `adoptar_pack` que iba a describirlo. La marca es la
-    // única señal de eso: el sha registrado se descarta a propósito, así que
-    // si el build nuevo se llama igual y mide igual que el viejo —actualizar
-    // `en-es`, el caso más común— la guarda de identidad no lo ve.
+    // An install may have died between the rename — which already replaced
+    // the file — and the `adopt_pack` that was going to describe it. The
+    // mark is the only sign of that: the registered sha is discarded on
+    // purpose, so if the new build has the same name and the same
+    // dimensions as the old one — updating `en-es`, the most common case —
+    // the identity guard does not see it.
     //
-    // Solo es peligrosa cuando nombra al paquete **registrado**: el rename
-    // escribe en `paquetes/{nombre_nuevo}`, de modo que si el nombre es otro,
-    // el archivo del registrado no lo tocó nadie y la marca quedó huérfana.
+    // It is only dangerous when it names the **registered** pack: the rename
+    // writes to `paquetes/{new_name}`, so if the name is a different one,
+    // nobody touched the registered pack's file and the mark was orphaned.
     //
-    // Esta consulta no la paga quien no instaló nada: sin paquete registrado
-    // ya salimos arriba.
+    // Whoever installed nothing does not pay for this query: with no pack
+    // registered we already returned above.
     let sospechoso = match vecstore::instalacion_pendiente(conn)? {
         None => false,
         Some(instalando) if instalando == nombre => true,
@@ -153,8 +157,9 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
             false
         }
     };
-    // El sha no se verifica acá: hashear 22 MB en cada arranque penalizaría
-    // a quien sí instaló el paquete. Se verifica una sola vez, al instalar.
+    // The sha is not verified here: hashing 22 MB on every startup would
+    // penalise whoever did install the pack. It is verified once, on
+    // install.
     let ruta_registrada = pack_path(dir, &nombre);
     if !ruta_registrada.exists() {
         return Ok(Resolved::degradado(format!(
@@ -176,11 +181,11 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     if !sospechoso && p.nombre() == nombre && p.dims() == dims {
         return Ok(Resolved::resuelto(p, (nombre, sha, dims), None));
     }
-    // Reconciliar recalcula el sha, vuelve a adoptar —lo que borra los
-    // vectores viejos y la marca en una transacción— y reindexa. Para una
-    // instalación interrumpida antes del rename es trabajo de más, pero es
-    // trabajo de una sola vez y del lado seguro: la alternativa es no poder
-    // distinguir el caso en el que el archivo sí cambió.
+    // Reconciling recomputes the sha, adopts again — which deletes the old
+    // vectors and the mark in one transaction — and reindexes. For an
+    // install interrupted before the rename that is extra work, but it is
+    // one-time work on the safe side: the alternative is being unable to
+    // tell apart the case where the file did change.
     let aviso = if sospechoso {
         format!(
             "aviso: una instalación de {nombre} quedó a medias y el archivo en disco puede \
@@ -203,29 +208,28 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     }
 }
 
-/// Hace que la base vuelva a describir al paquete que está en disco.
+/// Makes the database describe the pack that is actually on disk again.
 ///
-/// Lo delicado es el orden. El rename va **primero**, a propósito: si
-/// `paquetes/` es de solo lectura —el caso que de verdad pasa— falla antes
-/// de tocar la base y no queda nada a medias; la búsqueda degrada a bm25 y
-/// se recupera sola cuando el directorio vuelva a ser escribible. Si el
-/// rename sale bien pero la base no acompaña, se deshace: el registro no
-/// cambió, así que la convención ruta↔nombre tiene que seguir valiendo para
-/// el nombre viejo o la próxima corrida no encontraría el archivo nunca más.
+/// The delicate part is the order. The rename goes **first**, on purpose:
+/// if `paquetes/` is read-only — the case that really happens — it fails
+/// before touching the database and nothing is left halfway; search degrades
+/// to bm25 and recovers on its own once the directory is writable again. If
+/// the rename succeeds but the database does not follow, it is undone: the
+/// registry did not change, so the path↔name convention has to keep holding
+/// for the old name or the next run would never find the file again.
 fn reconcile(
     conn: &Connection,
     dir: &Path,
     ruta_actual: &Path,
     p: Pack,
 ) -> Result<(Pack, PackIdentity)> {
-    // El resto del código asume la convención ruta↔nombre. Si el nombre real
-    // (leído del archivo) es otro, hay que renombrarlo como parte del
-    // reindexado. En POSIX alcanzaría con mover el mmap abierto sin más
-    // —el inodo es el mismo—, pero Windows no deja renombrar un archivo que
-    // tenga un mapeo de memoria abierto. Por eso `p` se suelta antes del
-    // rename y se reabre después desde `destino`: ninguna plataforma se
-    // queda con un mmap apuntando al nombre viejo mientras el archivo se
-    // mueve.
+    // The rest of the code assumes the path↔name convention. If the real
+    // name (read from the file) is a different one, it has to be renamed as
+    // part of reindexing. On POSIX moving the open mmap would be enough —
+    // the inode is the same — but Windows does not allow renaming a file
+    // with an open memory mapping. That is why `p` is dropped before the
+    // rename and reopened afterwards from `target`: on no platform is an
+    // mmap left pointing at the old name while the file moves.
     let nombre = p.nombre().to_string();
     let dims = p.dims();
     let target = pack_path(dir, &nombre);
@@ -262,24 +266,25 @@ fn reconcile(
         Ok(i) => i,
         Err(e) => {
             if hubo_rename {
-                // `p` tiene mapeado `destino`: hay que soltarlo antes de
-                // deshacer el rename, por la misma razón de Windows que
-                // obligó a reabrirlo más arriba.
+                // `p` has `target` mapped: it has to be dropped before
+                // undoing the rename, for the same Windows reason that
+                // forced reopening it above.
                 drop(p);
                 let _ = std::fs::rename(&target, ruta_actual);
             }
             return Err(e);
         }
     };
-    // Rellenar los vectores es idempotente y va fuera de la parte atómica: si
-    // el proceso muere acá quedan menos vectores de los debidos —que la
-    // próxima escritura completa— pero nunca vectores de dos paquetes.
+    // Filling in the vectors is idempotent and sits outside the atomic
+    // part: if the process dies here there are fewer vectors than there
+    // should be — which the next write completes — but never vectors from
+    // two packs.
     //
-    // Si otro proceso se adueñó del paquete en el medio, este reindexado ya
-    // no vale y devolver `p` sería entregarle a quien busca un paquete que
-    // no es el registrado. Se falla, que en `resolver_interno` se traduce en
-    // degradar a bm25 esta vez; la próxima resolución encuentra el paquete
-    // nuevo y arranca limpia.
+    // If another process took ownership of the pack in the meantime, this
+    // reindex is no longer valid and returning `p` would hand the searcher a
+    // pack that is not the registered one. It fails, which in `resolve_inner`
+    // means degrading to bm25 this once; the next resolution finds the new
+    // pack and starts clean.
     if vecstore::sync(conn, &p, &identidad)?.abandonada() {
         bail!(
             "otro proceso cambió el paquete de vocabulario mientras se reindexaba con {}",
@@ -289,57 +294,58 @@ fn reconcile(
     Ok((p, identidad))
 }
 
-/// Lo que `install` le cuenta a quien lo corrió.
+/// What `install` reports back to whoever ran it.
 pub struct Instalacion {
     pub nombre: String,
     pub dims: usize,
     pub fragmentos: usize,
-    /// `true` si otro proceso cambió el paquete registrado mientras esta
-    /// instalación indexaba: el paquete quedó instalado en disco pero ya no
-    /// es el que la base usa, y el índice quedó a medias.
+    /// `true` if another process changed the registered pack while this
+    /// install was indexing: the pack is installed on disk but is no longer
+    /// the one the database uses, and the index was left halfway.
     pub desplazada: bool,
 }
 
-/// Reemplaza `destino` con el contenido de `origen`, incluso si `destino`
-/// ya existe.
+/// Replaces `target` with the contents of `source`, even when `target`
+/// already exists.
 ///
-/// `std::fs::rename` reemplaza atómicamente sobre POSIX cuando el destino
-/// ya existe, pero en Windows falla en ese caso. Acá se hace en dos pasos,
-/// sin depender de que el motivo del fallo en Windows sea reconocible desde
-/// otra plataforma:
+/// `std::fs::rename` replaces atomically on POSIX when the destination
+/// exists, but on Windows it fails in that case. Here it is done in two
+/// steps, without relying on the Windows failure reason being recognisable
+/// from another platform:
 ///
-/// 1. Si `destino` es un archivo, se lo aparta a un nombre lateral en el
-///    mismo directorio (mismo filesystem: el rename que lo aparta y el que
-///    lo restaura, si hace falta, son igual de baratos que el original).
-/// 2. Se renombra `origen` a `destino`.
-/// 3. Si el paso 2 sale bien, se borra el lateral. Si sale mal —el
-///    antivirus reteniendo el archivo un instante, por ejemplo: un error
-///    real, no un cuelgue— se **restaura** el lateral a `destino` antes de
-///    devolver el error, así que quien llame encuentra exactamente el
-///    archivo que ya funcionaba, no un destino borrado y sin reemplazo.
+/// 1. If `target` is a file, it is set aside under a sibling name in the
+///    same directory (same filesystem: the rename that sets it aside and
+///    the one that restores it, if needed, are as cheap as the original).
+/// 2. `source` is renamed to `target`.
+/// 3. If step 2 succeeds, the sibling is deleted. If it fails — antivirus
+///    holding the file for an instant, say: a real error, not a hang — the
+///    sibling is **restored** to `target` before returning the error, so
+///    the caller finds exactly the file that already worked, not a deleted
+///    destination with no replacement.
 ///
-/// Un primer intento de este helper borraba `destino` antes de renombrar
-/// en vez de apartarlo: si el segundo paso fallaba, el archivo viejo —que
-/// hasta ese momento andaba— quedaba perdido sin necesidad. Detectable
-/// (`resolver_interno` ve que falta y degrada a bm25), pero una regresión
-/// de resiliencia real frente al rename atómico que hacía POSIX y que este
-/// helper reemplaza: nunca hacía falta perder un archivo que servía.
+/// A first attempt at this helper deleted `target` before renaming instead
+/// of setting it aside: if the second step failed, the old file — which had
+/// been working until then — was lost for no reason. Detectable
+/// (`resolve_inner` sees it missing and degrades to bm25), but a real
+/// resilience regression against the atomic rename POSIX used to do and
+/// that this helper replaces: losing a file that worked was never
+/// necessary.
 ///
-/// Cuando `destino` existe pero no es un archivo (un directorio, un estado
-/// ya corrupto que ninguna instalación produce) no hay nada bueno que
-/// resguardar, así que se renombra directo y el error —si lo hay— se
-/// propaga tal cual, sin abrir la ventana del paso 1.
+/// When `target` exists but is not a file (a directory, an already corrupt
+/// state no install produces) there is nothing worth safeguarding, so it is
+/// renamed directly and the error — if any — propagates as is, without
+/// opening step 1's window.
 ///
-/// Sigue quedando una ventana breve, entre el paso 1 y el paso 2, en la que
-/// `destino` no existe. Es degradación aceptable y no silenciosa: una
-/// búsqueda concurrente que mire justo ahí ve que falta el archivo
-/// (`resolver_interno` lo comprueba con `ruta_registrada.exists()`) y cae a
-/// bm25, que es el resultado seguro; y si el proceso muere en esa ventana,
-/// la marca `pack_instalando` ya cubre que la base pueda describir un
-/// paquete que el disco no tiene. Lo que nunca puede pasar —que la base
-/// describa un paquete y el disco tenga otro sin que nada lo note— no
-/// depende de esta ventana: lo cubre que `destino` sea, en todo momento,
-/// "el archivo de `nombre`" o directamente no exista.
+/// A brief window remains, between step 1 and step 2, in which `target`
+/// does not exist. That is acceptable, non-silent degradation: a concurrent
+/// search looking right then sees the file is missing (`resolve_inner`
+/// checks with `registered_path.exists()`) and falls back to bm25, which is
+/// the safe result; and if the process dies in that window, the
+/// `pack_instalando` mark already covers the database describing a pack the
+/// disk does not have. What can never happen — the database describing one
+/// pack while the disk holds another with nothing noticing — does not depend
+/// on this window: it is covered by `target` being, at every moment, "the
+/// file for `name`" or simply not existing.
 fn replace_file(origen: &Path, target: &Path) -> std::io::Result<()> {
     if !target.is_file() {
         return std::fs::rename(origen, target);
