@@ -174,8 +174,8 @@ enum ModelCmd {
     Remove,
 }
 
-/// Resuelve un prefijo `~/` contra `home`, sin tocar el entorno — así es testeable
-/// sin depender de variables de proceso globales.
+/// Resolves a `~/` prefix against `home`, without touching the environment —
+/// which makes it testable without depending on global process variables.
 fn resolve(p: &str, home: Option<&Path>) -> Result<PathBuf> {
     match p.strip_prefix("~/") {
         Some(rest) => {
@@ -187,26 +187,27 @@ fn resolve(p: &str, home: Option<&Path>) -> Result<PathBuf> {
     }
 }
 
-/// Elige cuál de las dos variables hace de home del usuario.
+/// Picks which of the two variables acts as the user's home.
 ///
-/// La precedencia depende de la plataforma, y va al revés de lo que parece
-/// intuitivo: en Windows gana `USERPROFILE`, no `HOME`. Git Bash y MSYS
-/// definen `HOME` también en Windows, pero en formato posix
-/// (`/c/Users/alguien`); para un binario nativo de Windows eso no es una
-/// ruta de usuario válida — un `/` inicial sin letra de unidad se resuelve
-/// contra la raíz de la unidad actual, no contra el home— y la misma
-/// persona correría `mem` desde `cmd.exe` y desde Git Bash con dos bases
-/// distintas y ningún aviso. Fuera de Windows, `USERPROFILE` no existe
-/// nunca, así que ahí siempre gana `HOME` y esta rama no cambia nada.
+/// Precedence depends on the platform, and runs the opposite way to what
+/// seems intuitive: on Windows `USERPROFILE` wins, not `HOME`. Git Bash and
+/// MSYS define `HOME` on Windows too, but in posix form
+/// (`/c/Users/someone`); for a native Windows binary that is not a valid
+/// user path — a leading `/` with no drive letter resolves against the root
+/// of the current drive, not against the home — and the same person would
+/// run `mem` from `cmd.exe` and from Git Bash against two different
+/// databases, with no warning. Outside Windows `USERPROFILE` never exists,
+/// so there `HOME` always wins and this branch changes nothing.
 ///
-/// Una variable definida pero **vacía** cuenta como no definida: de otro
-/// modo `resolve()` la uniría igual al resto de la ruta y produciría una
-/// ruta relativa al directorio actual, sin ningún error ni aviso.
+/// A variable that is defined but **empty** counts as undefined: otherwise
+/// `resolve()` would join it to the rest of the path all the same and
+/// produce a path relative to the current directory, with no error and no
+/// warning.
 ///
-/// Recibe los valores ya leídos y si hay que tratar el caso Windows como
-/// un booleano, en vez de leerlos ella misma o preguntarle a la plataforma
-/// —eso lo hace `dirs_home`—, para que los tests puedan ejercitar las dos
-/// precedencias sin depender de en qué sistema corren.
+/// It takes the values already read, and whether to treat this as the
+/// Windows case, as a boolean, rather than reading them itself or asking
+/// the platform — `dirs_home` does that — so the tests can exercise both
+/// precedences without depending on which system they run on.
 fn elegir_home(home: Option<PathBuf>, userprofile: Option<PathBuf>, es_windows: bool) -> Option<PathBuf> {
     let no_vacia = |p: Option<PathBuf>| p.filter(|p| !p.as_os_str().is_empty());
     let home = no_vacia(home);
@@ -226,12 +227,12 @@ fn dirs_home() -> Option<PathBuf> {
     )
 }
 
-/// El editor a usar para `mem edit` cuando `$EDITOR` no está definida.
+/// The editor `mem edit` uses when `$EDITOR` is not defined.
 ///
-/// `vi` no existe en una instalación de Windows: sin `$EDITOR`, lanzar el
-/// proceso fallaría directamente. `notepad` sí es nativo ahí. Recibe el
-/// booleano en vez de preguntarle a la plataforma para poder probar las
-/// dos ramas en cualquier sistema.
+/// `vi` does not exist in a Windows installation: with no `$EDITOR`,
+/// spawning the process would fail outright. `notepad` is native there. It
+/// takes the boolean rather than asking the platform so both branches can
+/// be tested on any system.
 fn editor_por_defecto(es_windows: bool) -> &'static str {
     if es_windows {
         "notepad"
@@ -240,16 +241,16 @@ fn editor_por_defecto(es_windows: bool) -> &'static str {
     }
 }
 
-/// Rellena los vectores que falten después de un camino de escritura.
+/// Fills in whatever vectors are missing after a write path.
 ///
-/// Los cuatro caminos que escriben (migrar, guardar, editar, reindexar)
-/// llaman a esto y no a `vecstore::sincronizar` directo, para que no puedan
-/// divergir entre sí: antes `Cmd::Edit` era el único que se lo olvidaba, y
-/// una memoria editada quedaba sin vectores hasta el próximo `mem reindex`.
+/// The four paths that write (migrate, save, edit, reindex) call this and
+/// not `vecstore::sync` directly, so they cannot drift apart: `Cmd::Edit`
+/// used to be the one that forgot, and an edited memory went without
+/// vectors until the next `mem reindex`.
 ///
-/// Un problema de la capa vectorial se avisa, no tumba el comando: la
-/// memoria ya está guardada y perder el aviso sería peor que perder el
-/// vector.
+/// Trouble in the vector layer is reported, it does not bring the command
+/// down: the memory is already saved, and losing the warning would be worse
+/// than losing the vector.
 fn sync_after_write(conn: &rusqlite::Connection, dir: &Path) {
     use anathem::vecstore::SyncOutcome;
     let activo = anathem::packstore::resolve(conn, dir);
@@ -260,11 +261,12 @@ fn sync_after_write(conn: &rusqlite::Connection, dir: &Path) {
     match anathem::vecstore::sync(conn, p, identidad) {
         Ok(SyncOutcome::Completa(0)) => {}
         Ok(SyncOutcome::Completa(n)) => println!("vectores nuevos: {n}"),
-        // Otro proceso instaló o quitó el paquete mientras este embebía. Lo
-        // que se escribió antes del cambio ya lo borró su `adoptar_pack`, y
-        // lo que faltaba no se escribió: quedan fragmentos sin vector, que
-        // es la degradación aceptable. Mezclarlos no lo sería. El comando
-        // sale con 0 igual: la memoria está guardada.
+        // Another process installed or removed the pack while this one was
+        // embedding. What was written before the change its `adopt_pack`
+        // already deleted, and what was left was never written: some chunks
+        // end up without a vector, which is the acceptable degradation.
+        // Mixing them would not be. The command still exits 0: the memory
+        // is saved.
         Ok(SyncOutcome::Abandonada(_)) => eprintln!(
             "aviso: la memoria se guardó, pero otro proceso cambió el paquete de \
              vocabulario mientras se calculaban los vectores; se abandonó el lote para \
@@ -272,7 +274,7 @@ fn sync_after_write(conn: &rusqlite::Connection, dir: &Path) {
         ),
         Err(e) => eprintln!(
             "aviso: la memoria se guardó pero no se pudieron actualizar los vectores ({e}); \
-             corré `mem reindex` when puedas."
+             corré `mem reindex` cuando puedas."
         ),
     }
 }
@@ -281,10 +283,10 @@ fn main() {
     let cli = Cli::parse();
     let es_doctor = matches!(cli.cmd, Cmd::Doctor);
     if let Err(e) = ejecutar(cli) {
-        // Mismo formato que imprimiría `fn main() -> Result<()>`. Que `doctor`
-        // salga con 2 y no con 1 es lo que permite a un script distinguir
-        // "encontró problemas" (1) de "no pudo correr" (2); el resto de los
-        // comandos conservan el 1 de siempre.
+        // The same format `fn main() -> Result<()>` would print. `doctor`
+        // exiting 2 and not 1 is what lets a script tell "found problems"
+        // (1) from "could not run" (2); every other command keeps the usual
+        // 1.
         eprintln!("Error: {e:?}");
         std::process::exit(if es_doctor { anathem::doctor::SALIDA_ROTO } else { 1 });
     }
@@ -292,10 +294,9 @@ fn main() {
 
 fn ejecutar(cli: Cli) -> Result<()> {
     let path = resolve(&cli.db, dirs_home().as_deref())?;
-    // Si hay un `tags.json` junto a la base de datos, sus reglas reemplazan
-    // por completo a la taxonomía por defecto de `tags::classify`. Debe
-    // fijarse antes de cualquier operación que clasifique memorias (migrate,
-    // save, serve).
+    // If there is a `tags.json` next to the database, its rules replace the
+    // default taxonomy in `tags::classify` outright. It has to be set before
+    // any operation that classifies memories (migrate, save, serve).
     anathem::tags::init(&path);
     match cli.cmd {
         Cmd::Init => {
@@ -329,14 +330,14 @@ fn ejecutar(cli: Cli) -> Result<()> {
             let q = anathem::search::Query {
                 text: query, project, tags: tag, limit,
                 budget_tokens: budget.unwrap_or(anathem::search::DEFAULT_BUDGET_TOKENS),
-                // La CLI no recorta: `mem search` sigue mostrando el fragmento
-                // completo, como siempre.
+                // The CLI does not trim: `mem search` still shows the whole
+                // chunk, as it always has.
                 excerpt: None,
             };
             let hits = anathem::search::run_explained(&conn, &q, &ctx)?;
             if hits.is_empty() {
-                // Sin esto la búsqueda vacía no imprime nada y el usuario no
-                // puede distinguir "no hay nada" de "el binario está roto".
+                // Without this an empty search prints nothing and the user
+                // cannot tell "there is nothing" from "the binary is broken".
                 let total: i64 = conn.query_row(
                     "select count(*) from memories where status = 'active'", [], |r| r.get(0))?;
                 if total == 0 {
@@ -345,10 +346,10 @@ fn ejecutar(cli: Cli) -> Result<()> {
                     let plural = if total == 1 { "memoria activa" } else { "memorias activas" };
                     println!("Sin resultados entre {total} {plural}.");
                     if p.is_some() {
-                        // Con capa vectorial activa la búsqueda ya no es puramente
-                        // léxica: el consejo de antes ("usá los sustantivos
-                        // exactos") dejaría de ser cierto y confundiría más de lo
-                        // que ayuda.
+                        // With the vector layer active, search is no longer
+                        // purely lexical: the old advice ("use the exact
+                        // nouns") would stop being true and would confuse
+                        // more than it helps.
                         println!("La búsqueda combina bm25 con similitud vectorial. Probá con otros términos o revisá `mem model status` si esperabas más cobertura.");
                     } else {
                         println!("La búsqueda es léxica: probá con sustantivos que estén escritos en la memoria, no con la forma en que lo preguntarías en voz alta.");
@@ -358,9 +359,10 @@ fn ejecutar(cli: Cli) -> Result<()> {
             }
             for (i, e) in hits.iter().enumerate() {
                 if explain {
-                    // Un resultado puede haber entrado por bm25, por el vector, o
-                    // por los dos: mostramos cada señal que exista para que se
-                    // entienda por qué recuperador llegó, no solo el que ganó.
+                    // A result may have come in through bm25, through the
+                    // vector, or through both: we show every signal there is,
+                    // so it is clear which retriever brought it in, not only
+                    // the one that won.
                     let señales = match (e.bm25, e.cosine) {
                         (Some(b), Some(c)) => format!("bm25={b:.3} coseno={c:.3}"),
                         (Some(b), None) => format!("bm25={b:.3}"),
@@ -377,9 +379,9 @@ fn ejecutar(cli: Cli) -> Result<()> {
         Cmd::Save { text, project, tag, topic } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
-            // Cuando el proyecto se deriva en vez de pedirse, se informa: un
-            // valor implícito que no se ve es el que después nadie entiende
-            // por qué quedó mal.
+            // When the project is derived instead of given, say so: an
+            // implicit value nobody sees is the one nobody can later explain
+            // the wrongness of.
             let explicito = project.is_some();
             let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
             let project = anathem::project::resolve(project, &cwd);
@@ -411,10 +413,10 @@ fn ejecutar(cli: Cli) -> Result<()> {
             let new_id = std::fs::read_to_string(&tmp)?;
             std::fs::remove_file(&tmp).ok();
             if new_id != body {
-                // `replace_body` rechunkea, y el cascade se lleva los
-                // vectores del texto viejo. Sin esto, los nuevos no los
-                // reconstruía nadie: la memoria editada quedaba invisible
-                // para la búsqueda vectorial hasta el próximo `mem reindex`.
+                // `replace_body` re-chunks, and the cascade takes the old
+                // text's vectors with it. Without this, nobody rebuilt the
+                // new ones: the edited memory stayed invisible to vector
+                // search until the next `mem reindex`.
                 anathem::edit::replace_body(&conn, id, &new_id)?;
                 println!("memoria {id} actualizada");
                 sync_after_write(&conn, &dir);
@@ -537,8 +539,9 @@ fn ejecutar(cli: Cli) -> Result<()> {
             }
         }
         Cmd::Doctor => {
-            // Sin `db::open`: ese abre para escribir y crea lo que falte, y un
-            // diagnóstico no puede modificar lo que diagnostica.
+            // Not `db::open`: that one opens for writing and creates
+            // whatever is missing, and a diagnostic cannot modify what it is
+            // diagnosing.
             let informe = anathem::doctor::diagnosticar(&path);
             print!("{}", informe.render());
             std::io::Write::flush(&mut std::io::stdout())?;
@@ -557,11 +560,11 @@ fn ejecutar(cli: Cli) -> Result<()> {
                         i.name, i.dims, i.fragmentos
                     );
                     if i.desplazada {
-                        // El archivo quedó instalado, pero otro proceso se
-                        // adueñó del registro mientras este indexaba y el
-                        // índice quedó a medias. Decirlo: es lo único que
-                        // distingue "instalé y funciona" de "instalé y el
-                        // que manda es otro".
+                        // The file was installed, but another process took
+                        // over the registry while this one was indexing and
+                        // the index was left half done. Say it: it is the
+                        // only thing separating "installed and working" from
+                        // "installed, and someone else is in charge".
                         eprintln!(
                             "aviso: otro proceso cambió el paquete de vocabulario mientras se \
                              indexaba; esta instalación quedó desplazada y el índice a medias. \
@@ -581,12 +584,12 @@ fn ejecutar(cli: Cli) -> Result<()> {
                         } else if con < tot {
                             println!("hay {} fragmentos sin vector usable; corré `mem reindex`", tot - con);
                         }
-                        // `status` lee `meta` directo, sin pasar por
-                        // `resolver`, así que es el único comando que puede
-                        // ver la marca sin borrarla. Vale decirlo: mientras
-                        // esté puesta, lo que informan las líneas de arriba
-                        // describe al paquete de antes de la instalación
-                        // interrumpida, no al archivo que está en disco.
+                        // `status` reads `meta` directly, without going
+                        // through `resolve`, so it is the only command that
+                        // can see the mark without clearing it. Worth
+                        // saying: while it is set, what the lines above
+                        // report describes the pack from before the
+                        // interrupted install, not the file on disk.
                         if anathem::vecstore::instalacion_pendiente(&conn)?.is_some() {
                             println!(
                                 "hay una instalación de {name} a medias: el archivo en disco \
@@ -643,10 +646,10 @@ mod tests {
 
     #[test]
     fn elegir_home_en_windows_prefiere_userprofile_sobre_home() {
-        // Git Bash y MSYS definen HOME también en Windows, pero en formato
-        // posix (`/c/Users/...`), que un binario nativo no entiende como
-        // ruta de usuario. USERPROFILE es siempre la nativa: tiene que
-        // ganar ella, aunque las dos estén definidas.
+        // Git Bash and MSYS define HOME on Windows too, but in posix form
+        // (`/c/Users/...`), which a native binary does not read as a user
+        // path. USERPROFILE is always the native one: it has to win, even
+        // when both are defined.
         let h = elegir_home(
             Some(PathBuf::from("/c/Users/alguien")),
             Some(PathBuf::from(r"C:\Users\alguien")),
@@ -657,25 +660,26 @@ mod tests {
 
     #[test]
     fn elegir_home_usa_userprofile_si_no_hay_home() {
-        // El caso de Windows sin Git Bash: HOME no está definida y hay que
-        // caer a USERPROFILE en vez de fallar.
+        // The Windows-without-Git-Bash case: HOME is not defined and we
+        // have to fall back to USERPROFILE instead of failing.
         let h = elegir_home(None, Some(PathBuf::from(r"C:\Users\alguien")), false);
         assert_eq!(h, Some(PathBuf::from(r"C:\Users\alguien")));
     }
 
     #[test]
     fn elegir_home_en_windows_cae_a_home_si_no_hay_userprofile() {
-        // USERPROFILE gana cuando las dos están, pero si falta ella sola
-        // sigue habiendo un home utilizable en HOME.
+        // USERPROFILE wins when both are there, but if it alone is missing
+        // there is still a usable home in HOME.
         let h = elegir_home(Some(PathBuf::from(r"C:\Users\alguien")), None, true);
         assert_eq!(h, Some(PathBuf::from(r"C:\Users\alguien")));
     }
 
     #[test]
     fn elegir_home_home_vacia_no_cuenta_como_definida() {
-        // HOME puede existir como variable y estar vacía (export HOME=).
-        // Sin este chequeo, `resolve` uniría el resto de la ruta contra ""
-        // y el resultado sería relativo al directorio actual, en silencio.
+        // HOME can exist as a variable and be empty (export HOME=).
+        // Without this check, `resolve` would join the rest of the path
+        // against "" and the result would be relative to the current
+        // directory, silently.
         let h = elegir_home(Some(PathBuf::new()), Some(PathBuf::from(r"C:\Users\alguien")), false);
         assert_eq!(h, Some(PathBuf::from(r"C:\Users\alguien")));
     }
@@ -704,11 +708,11 @@ mod tests {
 
     #[test]
     fn resolve_sin_home_nombra_las_dos_variables() {
-        // Más fuerte que la afirmación original: no alcanza con que el
-        // mensaje mencione HOME, tiene que mencionar también la alternativa
-        // de Windows, porque ahora el fallback existe y quien lea el error
-        // en esa plataforma necesita saber que USERPROFILE es la que hay
-        // que definir.
+        // Stronger than the original assertion: it is not enough for the
+        // message to mention HOME, it has to mention the Windows
+        // alternative too, because the fallback now exists and whoever
+        // reads the error on that platform needs to know USERPROFILE is the
+        // one to define.
         let err = resolve("~/.anathem/mem.db", None).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("HOME"), "mensaje inesperado: {msg}");
