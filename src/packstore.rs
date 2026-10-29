@@ -80,7 +80,7 @@ impl Resolved {
         Resolved { pack: None, identity: None, warning: Some(warning) }
     }
 
-    fn resolved(pack: Pack, identity: PackIdentity, warning: Option<String>) -> Resolved {
+    fn with_pack(pack: Pack, identity: PackIdentity, warning: Option<String>) -> Resolved {
         Resolved { pack: Some(pack), identity: Some(identity), warning }
     }
 
@@ -179,7 +179,7 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
         }
     };
     if !sospechoso && p.name() == name && p.dims() == dims {
-        return Ok(Resolved::resolved(p, (name, sha, dims), None));
+        return Ok(Resolved::with_pack(p, (name, sha, dims), None));
     }
     // Reconciling recomputes the sha, adopts again — which deletes the old
     // vectors and the mark in one transaction — and reindexes. For an
@@ -200,7 +200,7 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
         )
     };
     match reconcile(conn, dir, &ruta_registrada, p) {
-        Ok((p, id)) => Ok(Resolved::resolved(p, id, Some(warning))),
+        Ok((p, id)) => Ok(Resolved::with_pack(p, id, Some(warning))),
         Err(e) => Ok(Resolved::degraded(format!(
             "{warning}\naviso: no se pudo reindexar ({e}); se busca solo con bm25 \
              hasta que se pueda. Reinstalá el paquete con `mem model install`."
