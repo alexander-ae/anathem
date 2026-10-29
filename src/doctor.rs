@@ -231,6 +231,7 @@ fn tablas_vectoriales_ausentes(conn: &Connection) -> rusqlite::Result<Vec<&'stat
 }
 
 /// Lists ids as `1, 2, 3 y 4 más`, without going past `EJEMPLOS`.
+/// The Spanish in the output is deliberate: it is user-facing text.
 fn nombrar(ids: &[String]) -> String {
     if ids.len() <= EJEMPLOS {
         ids.join(", ")

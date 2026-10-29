@@ -8,11 +8,10 @@ struct Rule {
     pat: &'static str,
 }
 
-/// Taxonomía por defecto: un conjunto pequeño de etiquetas de ingeniería de
-/// uso general — sin nombres propios ni vocabulario atado a un stack o
-/// equipo particular. Cualquier instalación puede reemplazarla por completo
-/// con un archivo `tags.json` junto a la base de datos; ver `load_rules` y
-/// el README.
+/// The default taxonomy: a small set of general-purpose engineering tags —
+/// no proper nouns and no vocabulary tied to a particular stack or team.
+/// Any installation can replace it entirely with a `tags.json` file next to
+/// the database; see `load_rules` and the README.
 const DEFAULT_RULES: &[Rule] = &[
     Rule { tag: "decision",    pat: r"(?i)\bse decidi[oó]\b|\bse descart[oó]\b|\bse opt[oó] por\b|\btrade-?offs?\b|\bpor qu[eé] se eligi[oó]\b" },
     Rule { tag: "bug",         pat: r"(?i)\bbugs?\b|\berror(es)?\b|\bfalla(s)?\b|\bregresi[oó]n(es)?\b|\bincidente(s)?\b" },
@@ -23,8 +22,8 @@ const DEFAULT_RULES: &[Rule] = &[
     Rule { tag: "code-review", pat: r"(?i)\bPR\s*#\d+|\bpull request\b|\breview(?:er|ó|o)?\b|\brevis(?:ar|é|ó|ando|or|ión|iones)\b" },
 ];
 
-/// Una regla `{tag, pattern}` tal como viene de un archivo `tags.json` de
-/// override.
+/// One `{tag, pattern}` rule exactly as it comes from an overriding
+/// `tags.json` file.
 #[derive(Deserialize)]
 struct OverrideRule {
     tag: String,
@@ -40,13 +39,12 @@ fn default_rules() -> Rules {
         .collect()
 }
 
-/// Compila las reglas de un archivo de override. Falla si el archivo no se
-/// puede leer, si no es JSON válido, si está vacío, o si algún `pattern` no
-/// compila como regex — en todos los casos el mensaje nombra el archivo (y,
-/// para un regex inválido, también la regla ofensora), porque quien escribió
-/// un archivo de configuración y ve comportamiento por defecto no tiene
-/// forma de notar el error: nunca hay un fallback silencioso a las reglas
-/// por defecto.
+/// Compiles the rules from an overriding file. It fails when the file
+/// cannot be read, is not valid JSON, is empty, or when some `pattern` does
+/// not compile as a regex — in every case the message names the file (and,
+/// for an invalid regex, the offending rule too), because whoever wrote a
+/// configuration file and sees default behaviour has no way to notice the
+/// mistake: there is never a silent fallback to the default rules.
 pub fn load_rules_from_file(path: &Path) -> Result<Rules, String> {
     let raw = std::fs::read_to_string(path)
         .map_err(|e| format!("tags: no se pudo leer {}: {e}", path.display()))?;
@@ -70,10 +68,10 @@ pub fn load_rules_from_file(path: &Path) -> Result<Rules, String> {
         .collect()
 }
 
-/// Carga las reglas activas para el directorio `dir` (el directorio de la
-/// base de datos): si existe `tags.json` en `dir`, sus reglas *reemplazan
-/// por completo* a las por defecto; si no existe (o `dir` es `None`, como en
-/// los tests unitarios), se usan las por defecto.
+/// Loads the active rules for directory `dir` (the database's directory):
+/// if `tags.json` exists in `dir`, its rules *completely replace* the
+/// defaults; if it does not exist (or `dir` is `None`, as in the unit
+/// tests), the defaults are used.
 pub fn load_rules(dir: Option<&Path>) -> Result<Rules, String> {
     match dir.map(|d| d.join("tags.json")) {
         Some(path) if path.exists() => load_rules_from_file(&path),
@@ -81,14 +79,15 @@ pub fn load_rules(dir: Option<&Path>) -> Result<Rules, String> {
     }
 }
 
-/// Directorio donde `classify`/`extract_refs` buscarán `tags.json`. Se fija
-/// una sola vez, con `init`, antes del primer uso de `classify`; llamadas
-/// posteriores a `init` no tienen efecto. Si nunca se llama (como en los
-/// tests) el directorio queda `None` y se usan las reglas por defecto.
+/// The directory where `classify`/`extract_refs` will look for
+/// `tags.json`. It is set once, with `init`, before the first use of
+/// `classify`; later calls to `init` have no effect. If it is never called
+/// (as in the tests) the directory stays `None` and the default rules are
+/// used.
 static DB_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
 
-/// Fija el directorio de la base de datos activa para esta ejecución del
-/// binario. Debe llamarse, si se va a llamar, antes de la primera llamada a
+/// Sets the active database's directory for this run of the binary. It has
+/// to be called, if it is called at all, before the first call to
 /// `classify`.
 pub fn init(db_path: &Path) {
     let _ = DB_DIR.set(db_path.parent().map(|p| p.to_path_buf()));
@@ -105,8 +104,8 @@ fn active() -> Result<&'static Rules, String> {
         .map_err(Clone::clone)
 }
 
-/// Clasifica `body` contra las reglas activas (por defecto, o las de
-/// `tags.json` si hay una instalada — ver `init`/`load_rules`).
+/// Classifies `body` against the active rules (the defaults, or those from
+/// `tags.json` when one is installed — see `init`/`load_rules`).
 pub fn classify(body: &str) -> Result<Vec<String>, String> {
     let rules = active()?;
     Ok(rules
@@ -118,9 +117,9 @@ pub fn classify(body: &str) -> Result<Vec<String>, String> {
 
 fn re_ticket() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
-    // Convención genérica de ticket ID (Jira, Linear, GitHub Projects, ...):
-    // un prefijo de proyecto en mayúsculas seguido de un número. No asume
-    // ningún prefijo particular.
+    // The generic ticket-id convention (Jira, Linear, GitHub Projects,
+    // ...): an uppercase project prefix followed by a number. It assumes no
+    // particular prefix.
     R.get_or_init(|| Regex::new(r"\b[A-Z]{2,10}-\d+\b").unwrap())
 }
 fn re_pr() -> &'static Regex {
@@ -161,16 +160,16 @@ fn re_save() -> &'static Regex {
 
 fn re_save_end() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
-    // El terminador puede venir precedido de espacio en blanco (incluyendo el
-    // salto de línea que normalmente lo separa del cuerpo); lo consumimos
-    // junto con el marcador para no dejar una línea en blanco colgando.
+    // The terminator can be preceded by whitespace (including the newline
+    // that normally separates it from the body); we consume it together with
+    // the marker so no blank line is left dangling.
     R.get_or_init(|| Regex::new(r"\s*\[/SAVE\]\s*$").unwrap())
 }
 
-/// Saca el marcador `[SAVE:proyecto:fecha]` de apertura y el `[/SAVE]` de
-/// cierre. El de apertura se removió desde el principio; el de cierre no —
-/// sobrevivía en el 87% de los cuerpos migrados y se colaba en snippets de
-/// búsqueda del MCP, en los archivos exportados y en el índice FTS.
+/// Strips the opening `[SAVE:project:date]` marker and the closing
+/// `[/SAVE]`. The opening one was removed from the start; the closing one
+/// was not — it survived in 87% of migrated bodies and leaked into MCP
+/// search snippets, exported files and the FTS index.
 pub fn strip_save_prefix(body: &str) -> (String, Option<String>) {
     let (rest, date) = match re_save().captures(body) {
         Some(c) => {

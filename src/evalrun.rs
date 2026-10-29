@@ -80,9 +80,10 @@ pub fn run(
             text: c.query.clone(),
             limit: 50,
             budget_tokens: usize::MAX, // el eval mide recuperación, no inyección
-            // El eval mide recuperación, no inyección: recortar el fragmento
-            // falsearía sus cifras. Ya es el valor por defecto, pero se deja
-            // explícito para que no dependa de que `Default` no cambie.
+            // The eval measures retrieval, not injection: trimming the
+            // snippet would falsify its figures. It is already the default,
+            // but it is left explicit so it does not depend on `Default`
+            // staying put.
             excerpt: None,
             ..Default::default()
         };
@@ -90,11 +91,11 @@ pub fn run(
         let hits = search::run(conn, &q, ctx)?;
         lat.push(t0.elapsed().as_secs_f64() * 1000.0);
 
-        // El rango se calcula sobre `hits` completo (incluyendo memorias sin
-        // ext_id, p.ej. creadas por save_memory del MCP) para que un hit sin
-        // ext_id ocupe su posición sin nunca poder matchear, en vez de ser
-        // eliminado de la lista y correr hacia arriba el rango de todo lo que
-        // viene después (I1).
+        // The rank is computed over the whole `hits` list (including
+        // memories with no ext_id, e.g. created by MCP's save_memory) so a
+        // hit without an ext_id occupies its position while never being able
+        // to match, instead of being removed from the list and pulling up
+        // the rank of everything that follows (I1).
         let rank = hits.iter().position(|h| {
             h.ext_id.as_deref().is_some_and(|e| c.expect_docs.iter().any(|d| d == e))
         });

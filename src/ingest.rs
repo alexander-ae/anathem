@@ -162,33 +162,35 @@ impl std::fmt::Display for BadRequest {
 
 impl std::error::Error for BadRequest {}
 
-/// `guardar_explicito` con clave de tema y/o `supersedes` opcionales.
+/// `save_explicit` with an optional topic key and/or `supersedes`.
 ///
-/// Sin ninguno de los dos es exactamente el guardado de siempre.
+/// With neither of the two it is exactly the ordinary save.
 ///
-/// **`topic`**: si el proyecto ya tiene una memoria **activa** con esa clave,
-/// la nueva la supersede: se inserta aparte y la vieja queda `superseded`,
-/// enlazada por `supersedes_id`, en vez de editarse en el lugar. El proyecto
-/// conserva historia (`mem history` recorre la cadena, el export incluye lo
-/// oculto), y editar acá destruiría la versión anterior. La clave se acota por
-/// proyecto: la misma en dos proyectos son dos temas.
+/// **`topic`**: if the project already has an **active** memory under that
+/// key, the new one supersedes it: it is inserted separately and the old one
+/// is left `superseded`, linked by `supersedes_id`, instead of being edited
+/// in place. The project keeps its history (`mem history` walks the chain,
+/// the export includes what is hidden), and editing here would destroy the
+/// previous version. The key is scoped per project: the same one in two
+/// projects is two topics.
 ///
-/// **`supersedes`**: el id de una memoria concreta que esta corrige, aunque se
-/// haya guardado sin clave. Tiene que existir y estar activa. Es el camino para
-/// lo que ya estaba guardado; `topic` es para lo que va a seguir evolucionando.
-/// Pueden darse juntos si apuntan a la misma memoria (o si la clave es nueva):
-/// una memoria nueva reemplaza como mucho a una, así que si la clave ya tiene
-/// una vigente distinta de `supersedes` se rechaza en vez de elegir en silencio.
+/// **`supersedes`**: the id of a specific memory this one corrects, even if
+/// that one was saved without a key. It has to exist and be active. It is
+/// the route for what was already saved; `topic` is for what will keep
+/// evolving. Both can be given together when they point at the same memory
+/// (or when the key is new): a new memory replaces at most one, so if the
+/// key already has a current one other than `supersedes` it is rejected
+/// instead of choosing silently.
 ///
-/// El marcado lo hace siempre `supersede::link` y no un `update` propio, para
-/// que haya un solo camino que decida qué es un reemplazo válido (y que
-/// rechace los ciclos).
+/// The marking is always done by `supersede::link` and not by an `update` of
+/// its own, so there is a single path deciding what a valid replacement is
+/// (and rejecting cycles).
 ///
-/// Todo corre en una transacción `immediate`: buscar la vigente, insertar y
-/// enlazar son una unidad. Con una transacción diferida, dos guardados
-/// simultáneos con la misma clave verían la misma vigente y dejarían dos
-/// memorias activas para un tema; `immediate` toma el lock de escritura antes
-/// de leer y el segundo espera al primero.
+/// It all runs in an `immediate` transaction: finding the current one,
+/// inserting and linking are one unit. With a deferred transaction, two
+/// simultaneous saves under the same key would see the same current one and
+/// leave two active memories for one topic; `immediate` takes the write lock
+/// before reading and the second waits for the first.
 pub fn save_with_topic(
     conn: &Connection,
     texto: &str,

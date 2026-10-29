@@ -876,7 +876,7 @@ mod tests {
         assert!(!v.release_if_idle(std::time::Duration::from_secs(3600)));
         assert!(v.has_open_pack());
 
-        // Uno ya vencido sí.
+        // One that has elapsed does.
         std::thread::sleep(std::time::Duration::from_millis(20));
         assert!(v.release_if_idle(std::time::Duration::from_millis(10)));
         assert!(!v.has_open_pack(), "tenía que quedar sin paquete");

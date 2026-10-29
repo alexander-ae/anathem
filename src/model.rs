@@ -9,7 +9,7 @@ pub struct NewMemory {
     pub source: String,
     pub ext_id: Option<String>,
     pub tags: Vec<String>,
-    /// Pares (kind, value) donde kind es "ticket", "pr" o "sha".
+    /// (kind, value) pairs where kind is "ticket", "pr" or "sha".
     pub refs: Vec<(String, String)>,
 }
 

@@ -11,8 +11,9 @@ pub struct MigrateReport {
     pub migradas: usize,
     pub archivadas: usize,
     pub fallidas: usize,
-    /// (ext_id, title) de documentos `failed` cuyo tipo es curado: su contenido
-    /// está intacto en el export pero no se migran — hay que reimportarlos a mano.
+    /// (ext_id, title) of `failed` documents whose type is curated: their
+    /// content is intact in the export but they are not migrated — they have
+    /// to be reimported by hand.
     pub curated_failed: Vec<(String, String)>,
 }
 
@@ -90,7 +91,8 @@ pub fn run(conn: &Connection, path: &Path) -> Result<MigrateReport> {
             ext_id: Some(row.id),
         };
 
-        // ext_id es unique: reinsertar el mismo documento no duplica.
+        // ext_id is unique: reinserting the same document does not
+        // duplicate it.
         let ya: i64 = conn.query_row(
             "select count(*) from memories where ext_id = ?1",
             [m.ext_id.as_deref().unwrap()],

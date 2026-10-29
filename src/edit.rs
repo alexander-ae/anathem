@@ -3,7 +3,7 @@ use anyhow::Result;
 use rusqlite::{params, Connection};
 
 fn rechunk(conn: &Connection, memory_id: i64, body: &str) -> Result<()> {
-    // El trigger chunks_ad limpia chunks_fts al borrar.
+    // The chunks_ad trigger cleans chunks_fts on delete.
     conn.execute("delete from chunks where memory_id = ?1", [memory_id])?;
     for (ord, c) in chunk::split(body, ingest::CHUNK_SIZE, ingest::CHUNK_STEP).iter().enumerate() {
         conn.execute(
@@ -14,9 +14,9 @@ fn rechunk(conn: &Connection, memory_id: i64, body: &str) -> Result<()> {
     Ok(())
 }
 
-/// Reemplaza el cuerpo de una memoria, y **recalcula su título**. El título
-/// se deriva del cuerpo, así que dejarlo quieto al editar deja la memoria
-/// describiéndose con un texto que ya no está adentro.
+/// Replaces a memory's body, and **recomputes its title**. The title
+/// derives from the body, so leaving it untouched on edit leaves the memory
+/// describing itself with text that is no longer inside it.
 pub fn replace_body(conn: &Connection, id: i64, body: &str) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
     tx.execute(
@@ -33,7 +33,7 @@ pub fn replace_body(conn: &Connection, id: i64, body: &str) -> Result<()> {
     Ok(())
 }
 
-/// Reconstruye chunks y el índice FTS5 desde `memories.body`.
+/// Rebuilds chunks and the FTS5 index from `memories.body`.
 pub fn reindex(conn: &Connection) -> Result<usize> {
     let rows: Vec<(i64, String)> = conn
         .prepare("select id, body from memories")?

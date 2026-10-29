@@ -1,17 +1,17 @@
 use anyhow::Result;
 use rusqlite::{params, Connection};
 
-/// Marca una memoria como `forgotten`. No borra la fila: `search::run` filtra
-/// por `status = 'active'`, así que basta con cambiar el status para sacarla
-/// de la búsqueda sin perder el contenido ni romper referencias (`supersedes_id`,
-/// `memory_refs`, etc.) que otras filas puedan tener hacia ella.
+/// Marks a memory as `forgotten`. It does not delete the row: `search::run`
+/// filters by `status = 'active'`, so changing the status is enough to take
+/// it out of search without losing the content or breaking references
+/// (`supersedes_id`, `memory_refs`, etc.) other rows may hold to it.
 ///
-/// `UPDATE ... WHERE id = ?` no falla en SQLite si no matchea ninguna fila —
-/// devuelve 0 filas afectadas y sigue. Comprobamos ese conteo explícitamente
-/// y fallamos con `bail!` nombrando el id, igual que `supersede::link` (Task
-/// 12) ya hace con su `nueva` inexistente: un comando de mantenimiento cuyo
-/// único propósito es mutar estado y reportarlo no puede reportar éxito
-/// sobre una fila que no existe.
+/// `UPDATE ... WHERE id = ?` does not fail in SQLite when it matches no row
+/// — it returns 0 affected rows and carries on. We check that count
+/// explicitly and fail with `bail!` naming the id, just as `supersede::link`
+/// already does with a nonexistent `new_id`: a maintenance command whose
+/// only purpose is to mutate state and report it cannot report success over
+/// a row that does not exist.
 pub fn forget(conn: &Connection, id: i64) -> Result<()> {
     let n = conn.execute("update memories set status='forgotten', updated=?2 where id=?1",
         params![id, chrono::Local::now().format("%Y-%m-%d").to_string()])?;
@@ -21,9 +21,9 @@ pub fn forget(conn: &Connection, id: i64) -> Result<()> {
     Ok(())
 }
 
-/// Fija o quita el flag `pinned` de una memoria. Ver `forget` sobre por qué
-/// se comprueba el conteo de filas afectadas en vez de confiar en que
-/// `execute` no haya devuelto un error.
+/// Sets or clears a memory's `pinned` flag. See `forget` on why the
+/// affected-row count is checked instead of trusting that `execute` returned
+/// no error.
 pub fn pin(conn: &Connection, id: i64, on: bool) -> Result<()> {
     let n = conn.execute("update memories set pinned=?2 where id=?1",
         params![id, if on { 1 } else { 0 }])?;
@@ -33,18 +33,19 @@ pub fn pin(conn: &Connection, id: i64, on: bool) -> Result<()> {
     Ok(())
 }
 
-/// Devuelve (id, title, status) desde `id` hacia atrás por la cadena de supersession.
+/// Returns (id, title, status) from `id` backwards along the supersession
+/// chain.
 ///
-/// `supersede::link` (Task 12) ya rechaza cualquier `link` cuya `nueva` no esté
-/// `active`, lo que hace estructuralmente imposible cerrar un ciclo por esa vía:
-/// la arista de cierre de un ciclo de k nodos siempre tendría una `nueva` que ya
-/// quedó `superseded` por una vuelta anterior del mismo ciclo. Así que un ciclo
-/// debería ser inalcanzable recorriendo este código.
+/// `supersede::link` already rejects any `link` whose `new_id` is not
+/// `active`, which makes closing a cycle structurally impossible by that
+/// route: the closing edge of a k-node cycle would always have a `new_id`
+/// already left `superseded` by an earlier turn of the same cycle. So a
+/// cycle should be unreachable walking this code.
 ///
-/// Igual mantenemos la guarda de corte (`out.len() > 50`) porque los datos
-/// pueden llegar por otras vías que no pasan por `link`: una base editada a
-/// mano, un import futuro, un bug en una tarea posterior. Un guardia que nunca
-/// se dispara cuesta una comparación; su ausencia costaría un loop infinito.
+/// We keep the cut-off guard (`out.len() > 50`) anyway because data can
+/// arrive by routes that do not pass through `link`: a hand-edited database,
+/// a future import, a bug in a later task. A guard that never fires costs
+/// one comparison; its absence would cost an infinite loop.
 pub fn history(conn: &Connection, id: i64) -> Result<Vec<(i64, String, String)>> {
     let mut out = Vec::new();
     let mut cur = Some(id);
@@ -61,21 +62,22 @@ pub fn history(conn: &Connection, id: i64) -> Result<Vec<(i64, String, String)>>
     Ok(out)
 }
 
-/// Una clave de tema tal como la lista `mem topics`.
+/// One topic key as `mem topics` lists it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tema {
     pub project: String,
     pub topic: String,
-    /// Cuántas memorias tuvo la clave en total, contando las ya reemplazadas
-    /// y las olvidadas: es el largo de su historia.
+    /// How many memories the key had in total, counting the ones already
+    /// replaced and the forgotten ones: it is the length of its history.
     pub total: i64,
-    /// La memoria activa que hoy responde por la clave. `None` si todas
-    /// quedaron olvidadas: la clave existe pero no hay versión vigente.
+    /// The active memory that answers for the key today. `None` when all of
+    /// them were forgotten: the key exists but there is no current
+    /// version.
     pub current_one: Option<i64>,
 }
 
-/// Las claves de tema que existen, ordenadas por proyecto y clave. La misma
-/// clave en dos proyectos son dos filas, porque son dos temas.
+/// The topic keys that exist, ordered by project and key. The same key in
+/// two projects is two rows, because they are two topics.
 pub fn topics(conn: &Connection) -> Result<Vec<Tema>> {
     let mut stmt = conn.prepare(
         "select project, topic, count(*),
