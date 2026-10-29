@@ -1,7 +1,7 @@
-/// Parte `text` en fragmentos de `size` caracteres avanzando `step` cada vez.
-/// Opera sobre caracteres, no bytes, para no cortar UTF-8 a la mitad.
+/// Splits `text` into chunks of `size` characters, advancing `step` each
+/// time. It works on characters, not bytes, so UTF-8 is never cut in half.
 pub fn split(text: &str, size: usize, step: usize) -> Vec<String> {
-    assert!(size > 0 && step > 0, "size y step deben ser positivos");
+    assert!(size > 0 && step > 0, "size and step must be positive");
     let chars: Vec<char> = text.chars().collect();
     if chars.is_empty() {
         return Vec::new();

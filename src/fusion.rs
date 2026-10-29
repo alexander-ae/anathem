@@ -1,33 +1,34 @@
-//! Fusión de dos rankings por Reciprocal Rank Fusion.
+//! Merging two rankings with Reciprocal Rank Fusion.
 //!
-//! Función pura: recibe dos listas de `memory_id` ya ordenadas de mejor a peor
-//! y devuelve una sola. No toca la base ni el modelo, para que la decisión de
-//! orden se pueda probar con listas escritas a mano.
+//! A pure function: it takes two lists of `memory_id`, each already ordered
+//! best to worst, and returns a single one. It touches neither the database
+//! nor the model, so the ordering decision can be tested with hand-written
+//! lists.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-/// Constante de amortiguación de RRF. El valor 60 es el del paper original y
-/// el que se usó en todas las mediciones del diseño.
+/// RRF damping constant. The value 60 is the one from the original paper and
+/// the one used in every measurement behind the design.
 pub const K: f64 = 60.0;
 
-/// Fusiona `bm25` y `vectorial`. `peso_bm25` escala el aporte del ranking
-/// léxico: con 1,0 los dos pesan igual, por debajo de 1,0 el vectorial manda.
+/// Merges `bm25` and `vector`. `bm25_weight` scales the lexical ranking's
+/// contribution: at 1.0 both count the same, below 1.0 the vector side wins.
 ///
-/// Sobre el valor por defecto de 1,0 y por qué no hay uno que gane en las dos
-/// direcciones, ver `docs/superpowers/medicion-corpus-real.md`.
-pub fn rrf(bm25: &[i64], vectorial: &[i64], bm25_weight: f64) -> Vec<i64> {
-    let mut punto: HashMap<i64, f64> = HashMap::new();
+/// On why the default is 1.0, and why no single value wins in both
+/// directions, see `docs/superpowers/medicion-corpus-real.md`.
+pub fn rrf(bm25: &[i64], vector: &[i64], bm25_weight: f64) -> Vec<i64> {
+    let mut score: HashMap<i64, f64> = HashMap::new();
     for (i, id) in bm25.iter().enumerate() {
-        *punto.entry(*id).or_insert(0.0) += bm25_weight / (K + (i + 1) as f64);
+        *score.entry(*id).or_insert(0.0) += bm25_weight / (K + (i + 1) as f64);
     }
-    for (i, id) in vectorial.iter().enumerate() {
-        *punto.entry(*id).or_insert(0.0) += 1.0 / (K + (i + 1) as f64);
+    for (i, id) in vector.iter().enumerate() {
+        *score.entry(*id).or_insert(0.0) += 1.0 / (K + (i + 1) as f64);
     }
-    let mut ids: Vec<(i64, f64)> = punto.into_iter().collect();
-    // Mayor puntaje primero; a igual puntaje, menor id. El desempate por id no
-    // es cosmético: `punto` es un HashMap y sin él dos documentos empatados
-    // saldrían en orden distinto entre corridas idénticas.
+    let mut ids: Vec<(i64, f64)> = score.into_iter().collect();
+    // Highest score first; on a tie, lowest id. Breaking ties by id is not
+    // cosmetic: `score` is a HashMap, and without it two tied documents would
+    // come out in a different order across identical runs.
     ids.sort_by(|a, b| {
         b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal).then(a.0.cmp(&b.0))
     });

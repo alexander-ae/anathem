@@ -22,13 +22,13 @@ pub fn record(
     Ok(conn.last_insert_rowid())
 }
 
-/// Marca que el agente pidió el cuerpo completo de una memoria después de
-/// buscarla: señal de que el fragmento inyectado no alcanzó.
+/// Records that the agent asked for a memory's full body after searching for
+/// it: a sign that the injected snippet was not enough.
 ///
-/// `returned_ids` es una lista de ids separados por coma (p.ej. "131,101,1,132").
-/// El match tiene que ser sobre entradas delimitadas, no una subcadena: comparar
-/// contra `',' || returned_ids || ','` con el patrón `%,id,%` evita que el id 1
-/// matchee dentro de 131 o 132.
+/// `returned_ids` is a comma-separated list of ids (e.g. "131,101,1,132").
+/// The match has to be against delimited entries, not a substring: comparing
+/// against `',' || returned_ids || ','` with the pattern `%,id,%` keeps id 1
+/// from matching inside 131 or 132.
 pub fn mark_follow_up(conn: &Connection, memory_id: i64) -> Result<()> {
     conn.execute(
         "update search_log set followed_up = 1
