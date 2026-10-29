@@ -1,19 +1,20 @@
-//! Comprobar si hay una versión más nueva publicada.
+//! Checking whether a newer version has been published.
 //!
-//! Es un comando y no algo automático a propósito. anathem no habla con
-//! ningún servidor mientras trabaja, y que lo hiciera solo —aunque fuera una
-//! vez por día— convertiría cada arranque en una señal de que esta máquina
-//! está usando la herramienta. Acá la consulta la pide una persona.
+//! This is a command and not something automatic, on purpose. anathem talks
+//! to no server while it works, and doing so on its own — even once a day —
+//! would turn every startup into a signal that this machine is using the
+//! tool. Here a person asks for the lookup.
 //!
-//! Tampoco baja ni reemplaza el binario. Eso lo hace el instalador, que ya
-//! sabe verificar el sha256 y dónde va cada cosa; duplicar esa lógica sería
-//! mantener dos caminos que tienen que coincidir.
+//! It also neither downloads nor replaces the binary. The installer does
+//! that, and it already knows how to verify the sha256 and where each piece
+//! goes; duplicating that logic would mean maintaining two paths that have
+//! to agree.
 
 use anyhow::{bail, Context, Result};
 use std::process::Command;
 
-/// Dónde preguntar. Se puede apuntar a otro lado con `ANATHEM_REPO`, igual
-/// que en el instalador, para quien tenga su propia copia del proyecto.
+/// Where to ask. It can be pointed elsewhere with `ANATHEM_REPO`, same as in
+/// the installer, for anyone running their own copy of the project.
 fn latest_release_api() -> String {
     let repo =
         std::env::var("ANATHEM_REPO").unwrap_or_else(|_| "__alexander__/anathem".to_string());
@@ -21,12 +22,12 @@ fn latest_release_api() -> String {
     format!("https://gitlab.com/api/v4/projects/{codificado}/releases/permalink/latest")
 }
 
-/// Baja una URL con lo que haya en el sistema.
+/// Fetches a URL with whatever the system has.
 ///
-/// Se usa `curl` o `wget` en vez de un cliente HTTP compilado adentro porque
-/// esto se invoca a mano y muy de vez en cuando: meter una pila de TLS en el
-/// binario para eso lo engordaría y sumaría dependencias que después hay que
-/// seguir en cada aviso de seguridad.
+/// It shells out to `curl` or `wget` instead of compiling an HTTP client in,
+/// because this runs by hand and very occasionally: putting a TLS stack in
+/// the binary for that would bloat it and add dependencies to track on every
+/// security advisory.
 fn fetch(url: &str) -> Result<String> {
     let intento = |programa: &str, args: &[&str]| -> Option<std::process::Output> {
         Command::new(programa).args(args).output().ok().filter(|o| o.status.success())
@@ -43,11 +44,11 @@ fn fetch(url: &str) -> Result<String> {
     }
 }
 
-/// La etiqueta de la última release, sin la `v`.
+/// The latest release's tag, without the leading `v`.
 fn latest_published(json: &str) -> Result<String> {
-    // Se busca el campo a mano para no sumar un parser de JSON a un camino
-    // que corre una vez cada tanto; la respuesta es de GitLab y el campo es
-    // estable.
+    // The field is found by hand so a JSON parser is not added to a path
+    // that runs once in a while; the response comes from GitLab and the
+    // field is stable.
     let marca = "\"tag_name\":\"";
     let i = json.find(marca).context("la respuesta no trae tag_name")?;
     let resto = &json[i + marca.len()..];
@@ -55,11 +56,11 @@ fn latest_published(json: &str) -> Result<String> {
     Ok(resto[..j].trim_start_matches('v').to_string())
 }
 
-/// Compara dos versiones tipo `0.2.0`. Devuelve si `publicada` es mayor.
+/// Compares two versions like `0.2.0`. Returns whether `published` is newer.
 ///
-/// Compara número a número y no como texto, porque `0.10.0` es mayor que
-/// `0.9.0` pero menor alfabéticamente, y ese error aparece recién cuando el
-/// proyecto llega a la décima versión.
+/// It compares number by number and not as text, because `0.10.0` is greater
+/// than `0.9.0` but smaller alphabetically, and that bug only shows up once
+/// the project reaches its tenth version.
 pub fn is_newer(publicada: &str, actual: &str) -> bool {
     let partes = |s: &str| -> Vec<u64> {
         s.split(['.', '-']).map(|x| x.parse().unwrap_or(0)).collect()
@@ -74,7 +75,7 @@ pub fn is_newer(publicada: &str, actual: &str) -> bool {
     false
 }
 
-/// Consulta y cuenta. Devuelve si hay una más nueva.
+/// Looks it up and reports. Returns whether a newer one exists.
 pub fn check_for_update() -> Result<bool> {
     let actual = env!("CARGO_PKG_VERSION");
     let json = fetch(&latest_release_api())?;
@@ -92,8 +93,9 @@ pub fn check_for_update() -> Result<bool> {
         println!("Estás al día: {actual} es la última publicada.");
         Ok(false)
     } else {
-        // Pasa en una copia compilada del repositorio, que va por delante de
-        // lo publicado. Decir "estás al día" ahí sería mentir al revés.
+        // Happens in a copy built from the repository, which runs ahead of
+        // what is published. Saying "you are up to date" there would be
+        // lying the other way around.
         println!(
             "Tenés la {actual}, más nueva que la última publicada ({publicada}). \
              Seguramente la compilaste vos."
@@ -110,7 +112,7 @@ mod tests {
     fn se_lee_la_etiqueta_de_la_respuesta() {
         let j = r#"{"name":"v0.3.0","tag_name":"v0.3.0","description":"algo"}"#;
         assert_eq!(latest_published(j).unwrap(), "0.3.0");
-        // Sin la `v` también.
+        // Without the leading `v` too.
         let j = r#"{"tag_name":"1.2.3"}"#;
         assert_eq!(latest_published(j).unwrap(), "1.2.3");
     }
@@ -125,14 +127,14 @@ mod tests {
     fn las_versiones_se_comparan_por_numero_y_no_como_texto() {
         assert!(is_newer("0.2.0", "0.1.0"));
         assert!(is_newer("1.0.0", "0.9.9"));
-        // El caso que rompe la comparación alfabética.
+        // The case that breaks alphabetical comparison.
         assert!(is_newer("0.10.0", "0.9.0"));
         assert!(!is_newer("0.9.0", "0.10.0"));
-        // Iguales no es "más nueva".
+        // Equal is not "newer".
         assert!(!is_newer("0.2.0", "0.2.0"));
-        // Más vieja tampoco.
+        // Older is not either.
         assert!(!is_newer("0.1.0", "0.2.0"));
-        // Distinta cantidad de partes.
+        // Different number of parts.
         assert!(is_newer("0.2.1", "0.2"));
         assert!(!is_newer("0.2", "0.2.0"));
     }
