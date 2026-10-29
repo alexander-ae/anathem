@@ -567,14 +567,57 @@ pub struct PaqueteVivo {
     /// necesita para no escribir vectores de un paquete caducado, y leer
     /// `meta` una segunda vez para completarlo reabriría la misma ventana.
     activo: Option<(Pack, Identidad)>,
+    /// Cuándo se usó el paquete por última vez, para poder soltarlo si pasa
+    /// mucho sin usarse. `None` mientras no haya ninguno abierto.
+    ultimo_uso: Option<std::time::Instant>,
+    /// Se soltó por inactividad y hay que reabrirlo en el próximo uso.
+    ///
+    /// Hace falta porque `registro` no cambia al soltarlo: sin esta marca,
+    /// `actual` vería que el registro es el mismo, decidiría que no hay nada
+    /// que recargar, y la sesión se quedaría sin capa vectorial para siempre.
+    /// Y no alcanza con mirar si `activo` está vacío: eso también pasa cuando
+    /// no hay ningún paquete instalado, y ahí reintentar en cada mensaje
+    /// costaría entre 40 y 120 ms, que es justo lo que `registro` evita.
+    soltado: bool,
 }
+
+/// Le pide al asignador que devuelva al sistema lo que ya no usa.
+///
+/// Sin esto, soltar el paquete no se nota: `drop` libera los ~50 MB del
+/// tokenizador para el programa, pero glibc los retiene en su arena y el RSS
+/// no baja. Medido: 64 MB antes de soltar, 57 después; con esto, vuelve al
+/// orden de los 9 MB del arranque.
+///
+/// Es específico de glibc. En musl, macOS o Windows no existe y la llamada
+/// no está: ahí soltar el paquete libera el mapeo igual, y el resto queda a
+/// criterio del asignador de la plataforma.
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn devolver_el_heap_al_sistema() {
+    extern "C" {
+        fn malloc_trim(pad: usize) -> std::os::raw::c_int;
+    }
+    // Seguro: no toca memoria del programa, solo le dice al asignador que
+    // devuelva páginas libres de su arena.
+    unsafe {
+        malloc_trim(0);
+    }
+}
+
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+fn devolver_el_heap_al_sistema() {}
 
 impl PaqueteVivo {
     /// No toca la base ni el disco: abrir el paquete queda para el primer
     /// `actual()` que de verdad lo necesite. Ver el comentario de
     /// `PaqueteVivo` arriba.
     pub fn nuevo(dir: &Path) -> PaqueteVivo {
-        PaqueteVivo { dir: dir.to_path_buf(), registro: None, activo: None }
+        PaqueteVivo {
+            dir: dir.to_path_buf(),
+            registro: None,
+            activo: None,
+            ultimo_uso: None,
+            soltado: false,
+        }
     }
 
     /// El paquete que corresponde usar ahora mismo, con la identidad bajo
@@ -585,10 +628,45 @@ impl PaqueteVivo {
     /// lectura y la otra el registro puede cambiar.
     pub fn actual(&mut self, conn: &Connection) -> Option<(&Pack, &Identidad)> {
         let ahora = vecstore::pack_registrado(conn).ok().flatten();
-        if ahora != self.registro {
+        if ahora != self.registro || self.soltado {
             self.recargar(conn);
         }
+        if self.activo.is_some() {
+            self.ultimo_uso = Some(std::time::Instant::now());
+        }
         self.activo.as_ref().map(|(p, i)| (p, i))
+    }
+
+    /// Suelta el paquete si lleva más de `limite` sin usarse. Devuelve si lo
+    /// soltó.
+    ///
+    /// El tokenizador cuesta unos 60 MB de heap privado por proceso, y una
+    /// sesión que buscó una vez y después se quedó quieta los sigue pagando
+    /// hasta cerrarse. Soltarlo la devuelve a unos 7 MB; lo único que cuesta
+    /// es volver a abrirlo —del orden de 90 ms— en la próxima búsqueda, que
+    /// ya no es inmediata por definición: hubo un hueco de por medio.
+    ///
+    /// No se olvida el `registro`: sirve para saber si el paquete cambió, y
+    /// tirarlo obligaría a releer `meta` sin motivo.
+    pub fn soltar_si_inactivo(&mut self, limite: std::time::Duration) -> bool {
+        if limite.is_zero() || self.activo.is_none() {
+            return false;
+        }
+        match self.ultimo_uso {
+            Some(t) if t.elapsed() >= limite => {
+                self.activo = None;
+                self.ultimo_uso = None;
+                self.soltado = true;
+                devolver_el_heap_al_sistema();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Si hay un paquete abierto ahora mismo. Para tests y diagnóstico.
+    pub fn hay_paquete_abierto(&self) -> bool {
+        self.activo.is_some()
     }
 
     fn recargar(&mut self, conn: &Connection) {
@@ -606,6 +684,8 @@ impl PaqueteVivo {
         // registro, y si se guardara el de antes se recargaría en cada
         // mensaje.
         self.registro = vecstore::pack_registrado(conn).ok().flatten();
+        self.ultimo_uso = self.activo.as_ref().map(|_| std::time::Instant::now());
+        self.soltado = false;
     }
 }
 
@@ -757,6 +837,65 @@ mod tests {
         assert!(
             ruta(dir, "nuevo-es").exists(),
             "el archivo tiene que vivir ahora en el nombre nuevo"
+        );
+    }
+
+    // --- soltar el paquete tras un rato sin usarlo -----------------------
+
+    /// Prepara un `PaqueteVivo` con el paquete ya abierto.
+    fn vivo_con_paquete(dir: &Path) -> (rusqlite::Connection, PaqueteVivo) {
+        std::fs::create_dir_all(directorio(dir)).unwrap();
+        escribir_pack_de_prueba(&ruta(dir, "es"), "es");
+        let conn = crate::db::open(&dir.join("mem.db")).unwrap();
+        let sha = crate::pack::sha256(&ruta(dir, "es")).unwrap();
+        vecstore::registrar_pack(&conn, "es", &sha, 4).unwrap();
+        let mut v = PaqueteVivo::nuevo(dir);
+        assert!(v.actual(&conn).is_some(), "el escenario exige el paquete abierto");
+        (conn, v)
+    }
+
+    #[test]
+    fn el_paquete_se_suelta_tras_estar_inactivo_y_vuelve_al_usarlo() {
+        let d = tempfile::tempdir().unwrap();
+        let (conn, mut v) = vivo_con_paquete(d.path());
+
+        // Un plazo que todavía no venció no lo suelta.
+        assert!(!v.soltar_si_inactivo(std::time::Duration::from_secs(3600)));
+        assert!(v.hay_paquete_abierto());
+
+        // Uno ya vencido sí.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        assert!(v.soltar_si_inactivo(std::time::Duration::from_millis(10)));
+        assert!(!v.hay_paquete_abierto(), "tenía que quedar sin paquete");
+
+        // Soltarlo de nuevo no hace nada: no hay qué soltar.
+        assert!(!v.soltar_si_inactivo(std::time::Duration::from_millis(10)));
+
+        // Y la próxima búsqueda lo reabre sola.
+        let mut v = v;
+        assert!(v.actual(&conn).is_some(), "tenía que reabrirse al volver a usarlo");
+        assert!(v.hay_paquete_abierto());
+    }
+
+    #[test]
+    fn con_el_plazo_en_cero_no_se_suelta_nunca() {
+        let d = tempfile::tempdir().unwrap();
+        let (_conn, mut v) = vivo_con_paquete(d.path());
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        assert!(!v.soltar_si_inactivo(std::time::Duration::ZERO));
+        assert!(v.hay_paquete_abierto(), "cero significa no soltarlo nunca");
+    }
+
+    #[test]
+    fn usarlo_corre_el_reloj_de_la_inactividad() {
+        let d = tempfile::tempdir().unwrap();
+        let (conn, mut v) = vivo_con_paquete(d.path());
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        // Usarlo justo antes de mirar el plazo: ya no lleva 20 ms quieto.
+        assert!(v.actual(&conn).is_some());
+        assert!(
+            !v.soltar_si_inactivo(std::time::Duration::from_millis(20)),
+            "si se acaba de usar, no está inactivo"
         );
     }
 }

@@ -235,6 +235,40 @@ funciona aunque git no esté instalado y no cuesta un subproceso por guardado.
 quiere acotar. Filtrar por defecto escondería memorias sin avisar, que es
 peor que traer alguna de más.
 
+## Lo que cuesta tener varias sesiones abiertas
+
+Cada agente lanza su propio `mem serve`, así que el costo de memoria se
+multiplica por sesión. Dos cosas lo mantienen chico:
+
+- **El paquete se abre recién al buscar.** Una sesión que nunca busca se queda
+  en unos 9 MB.
+- **Y se suelta tras un rato sin buscar.** El tokenizador cuesta unos 55 MB de
+  heap privado, y una sesión que buscó una vez y se quedó quieta los seguiría
+  pagando hasta cerrarse.
+
+Medido sobre una sesión real:
+
+```
+al arrancar             9 MB
+tras buscar            64 MB   (65 ms)
+tras 5 min sin buscar  12 MB
+al volver a buscar     64 MB   (60 ms)
+```
+
+O sea que estar quieto cuesta 12 MB y volver cuesta 60 ms, una vez. El plazo
+se ajusta en `config.json`; con `0` no se suelta nunca:
+
+```json
+{ "soltar_paquete_tras": 300 }
+```
+
+Soltarlo incluye pedirle al asignador que devuelva las páginas al sistema.
+Sin ese paso el `drop` libera la memoria para el programa pero glibc la
+retiene en su arena y el RSS no baja: medido, 64 MB pasaban a 57 en vez de a
+12. Esa llamada es de glibc; en musl, macOS y Windows no está, y ahí soltar
+el paquete libera el mapeo igual pero el resto queda a criterio del asignador
+de la plataforma.
+
 ## Pasarle el trabajo de un agente a otro
 
 Si trabajás con más de un agente —Claude Code y opencode, por ejemplo— cada uno

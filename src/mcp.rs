@@ -343,10 +343,51 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
     // sesión que nunca lo use no vería que desapareció. Este chequeo cuesta
     // un `stat` y cubre ese caso al arrancar.
     crate::paquete::avisar_si_falta_el_archivo(conn, dir);
-    let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
-    for line in stdin.lock().lines() {
-        let line = line?;
+
+    // Leer en otro hilo y esperar con plazo. Un `for line in stdin` se queda
+    // bloqueado para siempre entre mensajes, y una sesión quieta es
+    // justamente la que tiene que soltar el paquete: sin despertar, nunca
+    // llegaría a hacerlo.
+    let (tx, rx) = std::sync::mpsc::channel::<std::io::Result<String>>();
+    std::thread::spawn(move || {
+        let entrada = std::io::stdin();
+        for linea in entrada.lock().lines() {
+            if tx.send(linea).is_err() {
+                break; // el otro lado cerró: nadie va a leer más
+            }
+        }
+    });
+
+    let limite = std::time::Duration::from_secs(cfg.soltar_paquete_tras);
+    // Mirar más seguido que el plazo para no estirarlo al doble, pero no
+    // tanto como para despertar por gusto en una sesión que no hace nada.
+    let intervalo = if limite.is_zero() {
+        std::time::Duration::from_secs(60)
+    } else {
+        (limite / 4).max(std::time::Duration::from_secs(5))
+    };
+
+    loop {
+        let line = match rx.recv_timeout(intervalo) {
+            Ok(Ok(l)) => l,
+            Ok(Err(e)) => {
+                eprintln!("anathem: no se pudo leer la entrada: {e}");
+                break;
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                if vivo.soltar_si_inactivo(limite) {
+                    eprintln!(
+                        "anathem: paquete soltado tras {}s sin buscar; se reabre en la próxima búsqueda",
+                        cfg.soltar_paquete_tras
+                    );
+                }
+                continue;
+            }
+            // El hilo lector terminó: se cerró stdin, que es como el cliente
+            // avisa que se va.
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+        };
         if line.trim().is_empty() {
             continue;
         }

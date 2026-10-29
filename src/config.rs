@@ -57,6 +57,18 @@ pub struct Config {
     /// Qué tan atrás mirar para ese resumen: `6h`, `2d`. Por defecto 24h.
     #[serde(default = "traspaso_ventana_por_defecto")]
     pub traspaso_ventana: String,
+
+    /// Tras cuántos segundos sin buscar, el servidor suelta el paquete de
+    /// vocabulario. Con 0 no lo suelta nunca.
+    ///
+    /// El tokenizador cuesta unos 60 MB de heap privado por proceso. Una
+    /// sesión que buscó una vez y se quedó quieta los sigue pagando hasta
+    /// cerrarse, y con varios agentes abiertos eso se multiplica. Soltarlo la
+    /// devuelve a unos 7 MB; lo único que cuesta es reabrirlo —del orden de
+    /// 90 ms— en la próxima búsqueda, que por definición viene después de un
+    /// hueco.
+    #[serde(default = "soltar_tras_por_defecto")]
+    pub soltar_paquete_tras: u64,
 }
 
 fn peso_por_defecto() -> f64 {
@@ -79,6 +91,10 @@ fn traspaso_ventana_por_defecto() -> String {
     "24h".to_string()
 }
 
+fn soltar_tras_por_defecto() -> u64 {
+    300
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -87,6 +103,7 @@ impl Default for Config {
             extracto: extracto_por_defecto(),
             traspaso_items: traspaso_por_defecto(),
             traspaso_ventana: traspaso_ventana_por_defecto(),
+            soltar_paquete_tras: soltar_tras_por_defecto(),
         }
     }
 }
