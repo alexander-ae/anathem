@@ -1,72 +1,74 @@
-//! `mem doctor`: todo lo que antes había que ir a buscar a mano, en un comando.
+//! `mem doctor`: everything one used to go look up by hand, in one command.
 //!
-//! Existe porque tres fallas seguidas fueron silenciosas: un binario
-//! instalado que estaba atrás del código, un paquete de vocabulario que
-//! quedó desinstalado mientras la búsqueda seguía andando degradada, y un
-//! plugin que no levantaba. Cada una costó rato descubrirla, y cada una se
-//! habría visto de un vistazo.
+//! It exists because three failures in a row were silent: an installed
+//! binary that lagged behind the code, a vocabulary pack left uninstalled
+//! while search kept running degraded, and a plugin that would not start.
+//! Each took a while to discover, and each would have been visible at a
+//! glance.
 //!
-//! Código de salida: 0 si no hay problemas (los avisos y la información no
-//! cuentan), 1 si los hay, 2 si doctor mismo no pudo correr.
+//! Exit code: 0 when there are no problems (warnings and information do not
+//! count), 1 when there are, 2 when doctor itself could not run.
 //!
-//! Dos reglas ordenan el módulo:
+//! Two rules order the module:
 //!
-//! 1. **Es de solo lectura.** No repara, no migra, no crea ni la base ni su
-//!    carpeta: abre la base con `SQLITE_OPEN_READ_ONLY` y *no* pasa por
-//!    `db::open`, que ejecuta el esquema, crea las tablas que falten y agrega
-//!    columnas. Un diagnóstico que modifica lo que diagnostica puede esconder
-//!    justo el problema que se le pidió encontrar. Si algo está mal, dice qué
-//!    comando lo arregla y deja que lo corra una persona.
-//! 2. **Nunca se cae por lo que diagnostica.** Cada comprobación atrapa sus
-//!    propios errores y los convierte en una línea; un archivo roto, una
-//!    tabla ausente o una base que ni es SQLite no impiden que las demás
-//!    comprobaciones corran. Un diagnóstico que no arranca cuando hay un
-//!    problema no sirve.
+//! 1. **It is read-only.** It does not repair, migrate, or create either the
+//!    database or its folder: it opens the database with
+//!    `SQLITE_OPEN_READ_ONLY` and does *not* go through `db::open`, which
+//!    runs the schema, creates missing tables and adds columns. A diagnostic
+//!    that modifies what it diagnoses can hide the very problem it was asked
+//!    to find. If something is wrong, it says which command fixes it and
+//!    leaves a person to run it.
+//! 2. **It never falls over on what it diagnoses.** Every check catches its
+//!    own errors and turns them into a line; a broken file, a missing table
+//!    or a database that is not even SQLite do not stop the other checks
+//!    from running. A diagnostic that will not start when there is a problem
+//!    is useless.
 //!
-//! Un límite que conviene tener presente: la comprobación del índice FTS5
-//! verifica **presencia**, no contenido. Compara qué ids de `chunks` están en
-//! el índice y viceversa, pero no que el texto indexado sea el de
-//! `chunks.body`: si el `body` cambia sin pasar por el trigger, doctor dice
-//! "sincronizado" y la búsqueda no encuentra el texto nuevo. Comprobarlo
-//! (`integrity-check`) es un `insert`, y doctor no escribe.
+//! One limit worth keeping in mind: the FTS5 index check verifies
+//! **presence**, not content. It compares which `chunks` ids are in the
+//! index and vice versa, but not that the indexed text is the one in
+//! `chunks.body`: if the `body` changes without going through the trigger,
+//! doctor says "in sync" and search does not find the new text. Checking
+//! that (`integrity-check`) is an `insert`, and doctor does not write.
 
 use crate::{config, pack::Pack, packstore, tags, vecstore};
 use rusqlite::{Connection, OpenFlags};
 use std::path::Path;
 
-/// La versión del paquete, la de `Cargo.toml`.
+/// The crate's version, the one in `Cargo.toml`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// El commit con el que se compiló, o `desconocido` si no había git (ver
-/// `build.rs`).
+/// The commit it was built from, or `desconocido` when there was no git
+/// (see `build.rs`).
 pub const COMMIT: &str = env!("ANATHEM_COMMIT");
 
-/// Lo que imprime `mem --version`.
+/// What `mem --version` prints.
 pub const VERSION_COMPLETA: &str =
     concat!(env!("CARGO_PKG_VERSION"), " (commit ", env!("ANATHEM_COMMIT"), ")");
 
-/// Código de salida de `mem doctor` cuando encontró problemas.
+/// `mem doctor`'s exit code when it found problems.
 pub const SALIDA_PROBLEMAS: i32 = 1;
 
-/// Código de salida de `mem doctor` cuando no pudo correr (una ruta de base
-/// imposible de resolver, un uso incorrecto de la línea de comandos). Es
-/// distinto del anterior para que un script distinga "encontró problemas" de
-/// "se rompió". Sin problemas sale con 0.
+/// `mem doctor`'s exit code when it could not run (a database path that
+/// cannot be resolved, incorrect command-line usage). It differs from the
+/// previous one so a script can tell "found problems" from "broke". With no
+/// problems it exits 0.
 pub const SALIDA_ROTO: i32 = 2;
 
-/// Cuántos ids concretos se nombran por comprobación antes de resumir con
-/// "y N más": alcanza para ir a mirarlos sin inundar la terminal.
+/// How many concrete ids each check names before summarising with "y N
+/// más": enough to go look at them without flooding the terminal.
 const EJEMPLOS: usize = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Level {
-    /// Todo en orden.
+    /// All good.
     Bien,
-    /// Información: algo que conviene saber y que no es un problema.
+    /// Information: something worth knowing that is not a problem.
     Info,
-    /// Algo raro que no impide que todo ande; no cambia el código de salida.
+    /// Something odd that does not stop anything working; it does not
+    /// change the exit code.
     Aviso,
-    /// Un problema. Hace que `mem doctor` salga con código distinto de cero.
+    /// A problem. It makes `mem doctor` exit non-zero.
     Mal,
 }
 
@@ -124,8 +126,8 @@ impl Informe {
         self.secciones.iter().flat_map(|s| &s.lines_).filter(|l| l.nivel == nivel).count()
     }
 
-    /// Cuántas comprobaciones salieron mal. Es lo que decide el código de
-    /// salida: los avisos y la información no cuentan.
+    /// How many checks came out badly. It is what decides the exit code:
+    /// warnings and information do not count.
     pub fn problemas(&self) -> usize {
         self.contar(Level::Mal)
     }
@@ -167,12 +169,13 @@ fn plural(n: usize, uno: &'static str, varios: &'static str) -> &'static str {
     }
 }
 
-/// Corre todas las comprobaciones sobre la base en `db` y el directorio que la
-/// contiene. No escribe nada y no falla: lo que no se pueda comprobar queda
-/// dicho en el informe.
+/// Runs every check against the database at `db` and the directory holding
+/// it. It writes nothing and does not fail: whatever cannot be checked is
+/// stated in the report.
 pub fn diagnosticar(db: &Path) -> Informe {
-    // `parent()` de una ruta sin carpeta (`mem.db`) es `""`, que unido a un
-    // nombre da una ruta relativa al directorio actual: lo correcto.
+    // `parent()` of a path with no folder (`mem.db`) is `""`, which joined
+    // with a name gives a path relative to the current directory: the right
+    // thing.
     let dir = db.parent().unwrap_or(Path::new("."));
     let mut secciones = vec![binario()];
     let (seccion_base, conn) = base(db);
@@ -198,7 +201,7 @@ fn binario() -> Seccion {
     s
 }
 
-/// `count(*)` y compañía: una consulta que devuelve un entero.
+/// `count(*)` and friends: a query returning one integer.
 fn entero(conn: &Connection, sql: &str) -> rusqlite::Result<i64> {
     conn.query_row(sql, [], |r| r.get(0))
 }
@@ -211,10 +214,10 @@ fn tiene_tabla(conn: &Connection, name: &str) -> rusqlite::Result<bool> {
     )? > 0)
 }
 
-/// Las tablas de la capa vectorial que una base anterior a ella no tiene. Es
-/// el mismo caso que una base anterior a las claves de tema: nada está roto,
-/// `db::open` las crea (`create table if not exists`) la próxima vez que un
-/// comando abra la base para escribir.
+/// The vector layer's tables, which a database predating it does not have.
+/// It is the same case as a database predating topic keys: nothing is
+/// broken, `db::open` creates them (`create table if not exists`) the next
+/// time a command opens the database for writing.
 const TABLAS_VECTORIALES: [&str; 2] = ["chunk_vectors", "meta"];
 
 fn tablas_vectoriales_ausentes(conn: &Connection) -> rusqlite::Result<Vec<&'static str>> {
@@ -227,7 +230,7 @@ fn tablas_vectoriales_ausentes(conn: &Connection) -> rusqlite::Result<Vec<&'stat
     Ok(v)
 }
 
-/// Lista ids como `1, 2, 3 y 4 más`, sin pasarse de `EJEMPLOS`.
+/// Lists ids as `1, 2, 3 y 4 más`, without going past `EJEMPLOS`.
 fn nombrar(ids: &[String]) -> String {
     if ids.len() <= EJEMPLOS {
         ids.join(", ")
@@ -236,31 +239,35 @@ fn nombrar(ids: &[String]) -> String {
     }
 }
 
-/// Devuelve la primera columna de cada fila como texto.
+/// Returns each row's first column as text.
 fn texts(conn: &Connection, sql: &str) -> rusqlite::Result<Vec<String>> {
     conn.prepare(sql)?.query_map([], |r| r.get::<_, String>(0))?.collect()
 }
 
-/// Cierra una comprobación que puede fallar: si falla, no se cae, lo dice.
+/// Wraps a check that can fail: if it fails, it does not fall over, it
+/// says so.
 fn atrapar(s: &mut Seccion, que: &str, f: impl FnOnce(&mut Seccion) -> anyhow::Result<()>) {
     if let Err(e) = f(s) {
         s.mal(format!("no se pudo comprobar {que}: {e:#}"));
     }
 }
 
-/// Abre la base sin poder escribirla, y sin dejar rastro en el directorio.
+/// Opens the database unable to write it, and without leaving a trace in
+/// the directory.
 ///
-/// `SQLITE_OPEN_READ_ONLY` solo no alcanza: en una base en modo WAL, SQLite
-/// crea `mem.db-wal` y `mem.db-shm` aunque la conexión sea de lectura, y como
-/// no puede hacer el checkpoint al cerrar, los deja. No es contenido, pero es
-/// un diagnóstico que ensucia la carpeta que diagnostica.
+/// `SQLITE_OPEN_READ_ONLY` alone is not enough: on a WAL-mode database,
+/// SQLite creates `mem.db-wal` and `mem.db-shm` even for a read-only
+/// connection, and since it cannot checkpoint on close, it leaves them
+/// behind. That is not content, but it is a diagnostic dirtying the very
+/// folder it diagnoses.
 ///
-/// Cuando no hay `-wal` es porque ninguna conexión tiene la base abierta (la
-/// última en cerrarse lo borra después de hacer el checkpoint) y todo lo
-/// escrito ya está en el archivo principal: ahí se abre `immutable=1`, que ni
-/// toma locks ni toca el WAL. Si el `-wal` existe, hay alguien escribiendo o
-/// quedó una escritura sin consolidar, y ignorarlo mostraría una foto
-/// vieja: ahí se abre normal, que lo lee y no crea nada nuevo.
+/// When there is no `-wal` it is because no connection has the database open
+/// (the last one to close deletes it after checkpointing) and everything
+/// written is already in the main file: there it opens `immutable=1`, which
+/// neither takes locks nor touches the WAL. If the `-wal` exists, someone is
+/// writing or a write was left unconsolidated, and ignoring it would show a
+/// stale picture: there it opens normally, which reads it and creates
+/// nothing new.
 fn open_read_only(db: &Path) -> rusqlite::Result<Connection> {
     #[cfg(unix)]
     {
@@ -290,10 +297,11 @@ fn open_read_only(db: &Path) -> rusqlite::Result<Connection> {
 fn base(db: &Path) -> (Seccion, Option<Connection>) {
     let mut s = Seccion::nueva("Base de datos");
     if !db.exists() {
-        // Aviso y no información: con un `--db` mal escrito, un `$HOME`
-        // distinto o un volumen sin montar, el resumen no puede afirmar que
-        // todo está en orden cuando no se revisó ninguna base. El código de
-        // salida sigue siendo 0 porque "todavía no instalé nada" es legítimo.
+        // A warning and not information: with a mistyped `--db`, a
+        // different `$HOME` or an unmounted volume, the summary cannot claim
+        // everything is in order when no database was checked at all. The
+        // exit code stays 0 because "I have not installed anything yet" is
+        // legitimate.
         s.aviso(format!(
             "{} no existe todavía: no hay base que revisar. Se crea con `mem init` o al \
              guardar la primera memoria; si esperabas encontrarla acá, revisá `--db`",
@@ -301,8 +309,8 @@ fn base(db: &Path) -> (Seccion, Option<Connection>) {
         ));
         return (s, None);
     }
-    // Solo lectura, y a propósito no `db::open`: ver la documentación del
-    // módulo.
+    // Read-only, and deliberately not `db::open`: see the module's
+    // documentation.
     let conn = match open_read_only(db) {
         Ok(c) => c,
         Err(e) => {
@@ -311,8 +319,8 @@ fn base(db: &Path) -> (Seccion, Option<Connection>) {
         }
     };
     let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
-    // Abrir no lee nada: un archivo que no es SQLite recién se queja en la
-    // primera consulta.
+    // Opening reads nothing: a file that is not SQLite only complains on
+    // the first query.
     match entero(&conn, "select count(*) from sqlite_master where name = 'memories'") {
         Err(e) => {
             s.mal(format!(
@@ -363,8 +371,9 @@ fn conteos(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
             "superseded" => por_estado[1] = n,
             "draft" => por_estado[2] = n,
             "forgotten" => por_estado[3] = n,
-            // El check de la tabla lo impide; si una base vieja trae otro, se
-            // sumaría a ninguna columna y el total no cerraría sin explicación.
+            // The table's check constraint prevents it; if an older
+            // database carried another, it would add to no column and the
+            // total would not add up with no explanation.
             otro => s.aviso(format!("{n} memorias con un estado desconocido: {otro}")),
         }
     }
@@ -381,14 +390,14 @@ fn conteos(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Compara los fragmentos con lo que el índice FTS5 tiene indexado.
+/// Compares the chunks against what the FTS5 index actually holds.
 ///
-/// **No se puede contar con `select count(*) from chunks_fts`**: `chunks_fts`
-/// es de contenido externo (`content='chunks'`) y un recorrido completo lee
-/// las filas de `chunks`, no del índice, así que daría siempre el mismo
-/// número que `chunks` y nunca detectaría nada. Lo que sí refleja lo que se
-/// indexó de verdad es la tabla sombra `chunks_fts_docsize`, que tiene una
-/// fila por documento indexado.
+/// **`select count(*) from chunks_fts` cannot be used**: `chunks_fts` is an
+/// external-content table (`content='chunks'`) and a full scan reads the
+/// rows of `chunks`, not of the index, so it would always give the same
+/// number as `chunks` and never detect anything. What does reflect what was
+/// really indexed is the shadow table `chunks_fts_docsize`, which has one
+/// row per indexed document.
 fn indice_fts(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
     let fragmentos = entero(conn, "select count(*) from chunks")?;
     let indexados = entero(conn, "select count(*) from chunks_fts_docsize")?;
@@ -420,8 +429,8 @@ fn huerfanos(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
         "select count(*) from chunks c
           where not exists (select 1 from memories m where m.id = c.memory_id)",
     )?;
-    // Sin la tabla (base anterior a la capa vectorial) no hay vectores que
-    // pudieran quedar huérfanos.
+    // Without the table (a database predating the vector layer) there are
+    // no vectors that could be orphaned.
     let sin_fragmento = if tiene_tabla(conn, "chunk_vectors")? {
         entero(
             conn,
@@ -434,7 +443,8 @@ fn huerfanos(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
     if sin_memoria == 0 && sin_fragmento == 0 {
         s.bien("sin huérfanos");
     } else {
-        // El cascade lo impide, así que si pasó hay un bug: conviene saberlo.
+        // The cascade prevents it, so if it happened there is a bug: worth
+        // knowing.
         s.mal(format!(
             "huérfanos (no debería haber ninguno, el cascade lo impide: hay un bug que \
              reportar) — fragmentos sin memoria: {sin_memoria}, vectores sin fragmento: \
@@ -466,10 +476,10 @@ fn supersession(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
 }
 
 fn topic_keys(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
-    // Una base de antes de las claves de tema no tiene la columna, y no hay
-    // nada que decir de un invariante que todavía no existe. No se agrega
-    // acá: arreglarlo es cosa de `db::open`, que lo hace al primer comando
-    // que escribe.
+    // A database from before topic keys has no such column, and there is
+    // nothing to say about an invariant that does not exist yet. It is not
+    // added here: fixing that is `db::open`'s job, which it does on the
+    // first command that writes.
     let has_column = entero(
         conn,
         "select count(*) from pragma_table_info('memories') where name = 'topic'",
@@ -505,8 +515,8 @@ fn topic_keys(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
 
 fn vectorial(conn: &Connection, dir: &Path) -> Seccion {
     let mut s = Seccion::nueva("Capa vectorial");
-    // La ausencia de las tablas ya se dijo en la sección de la base; acá solo
-    // hace falta no tropezar con ella.
+    // The tables' absence was already reported in the database section;
+    // here it is only a matter of not tripping over it.
     if tablas_vectoriales_ausentes(conn).map_or(false, |v| !v.is_empty()) {
         s.info("sin paquete de vocabulario: la base todavía no tiene capa vectorial");
         laterales(&mut s, dir);
@@ -524,8 +534,8 @@ fn vectorial(conn: &Connection, dir: &Path) -> Seccion {
             atrapar(&mut s, "la cobertura", |s| coverage(conn, s, dims));
         }
     }
-    // La marca de instalación a medias es de la base, no del archivo: se
-    // mira siempre.
+    // The half-finished install mark belongs to the database, not the file:
+    // it is always checked.
     match vecstore::instalacion_pendiente(conn) {
         Ok(Some(n)) => s.aviso(format!(
             "hay una instalación de {n} a medias: el archivo en disco puede no ser el que \
@@ -586,9 +596,10 @@ fn coverage(conn: &Connection, s: &mut Seccion, dims: usize) -> anyhow::Result<(
     Ok(())
 }
 
-/// Restos de una instalación interrumpida en el directorio de paquetes: el
-/// archivo que `packstore::reemplazar` aparta mientras pone el nuevo
-/// (`*.reemplazando-*`) y el temporal de `packstore::instalar` (`.instalando-*`).
+/// Leftovers from an interrupted install in the packs directory: the file
+/// `packstore::replace_file` sets aside while putting the new one in
+/// (`*.reemplazando-*`) and `packstore::install`'s temporary
+/// (`.instalando-*`).
 fn laterales(s: &mut Seccion, dir: &Path) {
     let carpeta = packstore::packs_dir(dir);
     let Ok(entradas) = std::fs::read_dir(&carpeta) else {
@@ -616,7 +627,7 @@ fn configuracion(dir: &Path) -> Seccion {
     let mut s = Seccion::nueva("Configuración");
 
     let pack_path = dir.join("config.json");
-    // `cargar` falla ante un archivo inválido: acá se atrapa y se reporta.
+    // `cargar` fails on an invalid file: here it is caught and reported.
     match config::cargar(dir) {
         Ok(c) => {
             let valores = format!(
