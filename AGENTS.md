@@ -45,8 +45,20 @@ Reemplazá la ruta por la que el script haya impreso.
 
 **Claude Code sin el CLI.** El registro usa `claude mcp add --scope user`. Si
 el comando `claude` no está en el `PATH` —pasa cuando solo está la aplicación
-de escritorio— el script lo dice y sigue. Ahí hay que agregar a mano la entrada
-`mcpServers` que describe [`docs/instalacion.md`](docs/instalacion.md).
+de escritorio— el script lo dice y sigue. La salida más simple es instalarlo
+como plugin, desde adentro de Claude Code y sin tocar ningún archivo:
+
+```
+/plugin marketplace add https://gitlab.com/__alexander__/anathem.git
+/plugin install anathem@anathem
+```
+
+Un detalle que importa: el plugin invoca `mem` por nombre, así que depende de
+que `~/.local/bin` esté en el `PATH` que ve Claude Code al lanzar el servidor.
+Las apps de escritorio no siempre heredan el `PATH` de la shell. Si las tools
+no aparecen tras reiniciar, el camino a prueba de balas es el del CLI —que
+escribe la ruta absoluta— o la entrada `mcpServers` a mano que describe
+[`docs/instalacion.md`](docs/instalacion.md).
 
 **Reiniciar el agente.** Las tools nuevas aparecen en una sesión nueva, no en
 la que está corriendo. Decíselo al terminar.
