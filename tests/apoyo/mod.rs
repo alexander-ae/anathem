@@ -1,12 +1,12 @@
-// Cada binario de test incluye este módulo entero pero usa solo algunos
-// ayudantes, así que el resto queda "sin usar" desde su punto de vista.
+// Every test binary includes this whole module but uses only some of the
+// helpers, so the rest counts as "unused" from its point of view.
 #![allow(dead_code)]
 
 use std::path::Path;
 
-/// Tokenizador Unigram mínimo. Cuatro piezas: el desconocido, dos palabras y
-/// un sufijo. El sufijo está para comprobar la re-segmentación: "mundos" se
-/// parte en "▁mundo" + "s" en vez de caer en desconocido.
+/// A minimal Unigram tokenizer. Four pieces: the unknown one, two words and
+/// a suffix. The suffix is there to check re-segmentation: "mundos" splits
+/// into "▁mundo" + "s" instead of falling back to unknown.
 pub const TOKENIZER_MINI: &str = r#"{
  "version":"1.0","truncation":null,"padding":null,"added_tokens":[],
  "normalizer":null,
@@ -16,12 +16,12 @@ pub const TOKENIZER_MINI: &str = r#"{
    "vocab":[["<unk>",0.0],["▁hola",-1.0],["▁mundo",-2.0],["s",-8.0]]}
 }"#;
 
-/// `TOKENIZER_MINI` más un `added_token` cuyo id (7) cae **fuera** del
-/// vocabulario del modelo, que tiene cuatro piezas (ids 0 a 3).
+/// `TOKENIZER_MINI` plus an `added_token` whose id (7) falls **outside** the
+/// model's vocabulary, which has four pieces (ids 0 to 3).
 ///
-/// Es la forma de cualquier tokenizador sentencepiece podado: el generador
-/// vuelca una fila por pieza de `model.vocab` y deja `added_tokens` como
-/// venía, con ids que el recorte no reasigna.
+/// It is the shape of any pruned sentencepiece tokenizer: the generator dumps
+/// one row per piece of `model.vocab` and leaves `added_tokens` as it found
+/// them, with ids the trimming does not reassign.
 pub const TOKENIZER_CON_AGREGADO_FUERA_DE_RANGO: &str = r#"{
  "version":"1.0","truncation":null,"padding":null,
  "added_tokens":[{"id":7,"content":"<mask>","single_word":false,"lstrip":false,
@@ -33,18 +33,19 @@ pub const TOKENIZER_CON_AGREGADO_FUERA_DE_RANGO: &str = r#"{
    "vocab":[["<unk>",0.0],["▁hola",-1.0],["▁mundo",-2.0],["s",-8.0]]}
 }"#;
 
-/// Escribe un paquete con la tabla que se le pase, usando `TOKENIZER_MINI`.
+/// Writes a pack with whatever table it is handed, using `TOKENIZER_MINI`.
 ///
-/// La escala es 1,0 y el mínimo 0,0 en cada dimensión, así el valor
-/// descuantizado es el byte tal cual y los vectores esperados se calculan a
-/// mano. `n_tokens` sale del largo de `filas`, que es justo el campo que hay
-/// que poder descuadrar para probar la validación de `Pack::abrir`.
+/// The scale is 1.0 and the minimum 0.0 in every dimension, so the
+/// dequantized value is the byte itself and the expected vectors are worked
+/// out by hand. `n_tokens` comes from the length of `rows`, which is exactly
+/// the field that has to be put out of step to test `Pack::open_pack`'s
+/// validation.
 pub fn escribir_pack_filas(pack_path: &Path, name: &str, dims: usize, rows: &[Vec<u8>]) {
     escribir_pack_con_tokenizador(pack_path, name, dims, rows, TOKENIZER_MINI);
 }
 
-/// `escribir_pack_filas` eligiendo también el tokenizador embebido, para
-/// poder descuadrar la relación entre la tabla y el vocabulario.
+/// `write_pack_rows` choosing the embedded tokenizer as well, so the
+/// relation between table and vocabulary can be put out of step.
 pub fn escribir_pack_con_tokenizador(
     pack_path: &Path,
     name: &str,
@@ -75,9 +76,9 @@ pub fn escribir_pack_con_tokenizador(
     std::fs::write(pack_path, b).unwrap();
 }
 
-/// Escribe un paquete de 4 tokens y 4 dimensiones en `ruta`.
+/// Writes a pack of 4 tokens and 4 dimensions at `path`.
 ///
-/// Filas: `<unk>`=[0,0,0,0], `▁hola`=[10,0,0,0], `▁mundo`=[0,10,0,0],
+/// Rows: `<unk>`=[0,0,0,0], `▁hola`=[10,0,0,0], `▁mundo`=[0,10,0,0],
 /// `s`=[0,0,10,0].
 pub fn escribir_pack_mini(pack_path: &Path, name: &str) {
     escribir_pack_filas(
@@ -88,13 +89,13 @@ pub fn escribir_pack_mini(pack_path: &Path, name: &str) {
     );
 }
 
-/// Un paquete de las **mismas** 4 dimensiones que `escribir_pack_mini` pero
-/// con la tabla permutada: `▁hola` cae en el eje 3 y `▁mundo` en el 2.
+/// A pack of the **same** 4 dimensions as `write_pack_mini` but with the
+/// table permuted: `▁hola` lands on axis 3 and `▁mundo` on 2.
 ///
-/// Es el caso peligroso de la mezcla, y el que el formato hace real: como
-/// fija 256 dimensiones para todo paquete, los blobs de dos paquetes
-/// distintos miden exactamente lo mismo y nada los distingue salvo mirar
-/// hacia dónde apuntan.
+/// It is the dangerous case of mixing, and the one the format makes real:
+/// since it fixes 256 dimensions for every pack, the blobs of two different
+/// packs are exactly the same size and nothing tells them apart short of
+/// looking at where they point.
 pub fn escribir_pack_permutado(pack_path: &Path, name: &str) {
     escribir_pack_filas(
         pack_path,
@@ -104,32 +105,31 @@ pub fn escribir_pack_permutado(pack_path: &Path, name: &str) {
     );
 }
 
-/// Un paquete cuya tabla es todo ceros: abre, instala y produce solo
-/// vectores nulos.
+/// A pack whose table is all zeros: it opens, installs and produces nothing
+/// but null vectors.
 pub fn escribir_pack_nulo(pack_path: &Path, name: &str) {
     escribir_pack_filas(pack_path, name, 4, &vec![vec![0u8; 4]; 4]);
 }
 
-/// Lee un vector de `chunk_vectors` como `Vec<f32>`.
+/// Reads a vector from `chunk_vectors` as a `Vec<f32>`.
 pub fn leer_vector(conn: &rusqlite::Connection, sql: &str) -> Vec<f32> {
     let blob: Vec<u8> = conn.query_row(sql, [], |r| r.get(0)).unwrap();
     blob.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect()
 }
 
-/// Reescribe un byte suelto del archivo, para construir paquetes corruptos.
+/// Rewrites a single byte of the file, so as to build corrupt packs.
 pub fn corromper(pack_path: &Path, offset: usize, value: u8) {
     let mut b = std::fs::read(pack_path).unwrap();
     b[offset] = value;
     std::fs::write(pack_path, b).unwrap();
 }
 
-/// Registra `p` como el paquete de la base y sincroniza con esa identidad.
+/// Registers `p` as the database's pack and syncs under that identity.
 ///
-/// `vecstore::sincronizar` exige la identidad registrada para poder
-/// comprobar, dentro de la transacción de cada lote, que sigue siendo la
-/// vigente. Registrar antes no es ceremonia de test: en la vida real los
-/// vectores solo existen cuando hay un paquete instalado, y `instalar` deja
-/// el registro puesto antes de sincronizar.
+/// `vecstore::sync` demands the registered identity so it can check, inside
+/// each batch's transaction, that it is still the current one. Registering
+/// first is not test ceremony: in real life vectors only exist once a pack is
+/// installed, and `install` leaves the registry set before syncing.
 pub fn registrar_y_sincronizar(
     conn: &rusqlite::Connection,
     p: &anathem::pack::Pack,

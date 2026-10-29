@@ -1,6 +1,6 @@
-//! `mem doctor`: un comando que vuelve visible lo que antes había que ir a
-//! buscar a mano. Estos tests invocan el binario real, porque lo que importa
-//! es lo que ve (y el código de salida que recibe) quien lo corre.
+//! `mem doctor`: a command that makes visible what used to be looked up by
+//! hand. These tests invoke the real binary, because what matters is what
+//! whoever runs it sees — and the exit code they get.
 
 mod apoyo;
 
@@ -18,7 +18,7 @@ impl Salida {
     fn ok(&self) -> bool {
         self.codigo == Some(0)
     }
-    /// Lo que vería quien lo corre en una terminal.
+    /// What someone running it in a terminal would see.
     fn todo(&self) -> String {
         format!("{}{}", self.stdout, self.stderr)
     }
@@ -38,8 +38,8 @@ fn mem(db: &Path, args: &[&str]) -> Salida {
     }
 }
 
-/// Una base con tres memorias: A y B comparten clave de tema (A queda
-/// superseded, B vigente) y C es suelta, con un tag explícito.
+/// A database with three memories: A and B share a topic key (A ends up
+/// superseded, B current) and C stands alone, with an explicit tag.
 fn base_sana(dir: &Path) -> std::path::PathBuf {
     let db = dir.join("mem.db");
     assert!(mem(&db, &["init"]).ok());
@@ -54,8 +54,8 @@ fn base_sana(dir: &Path) -> std::path::PathBuf {
     db
 }
 
-/// Abre la base para sabotearla, con las claves foráneas apagadas: es la
-/// única forma de fabricar el daño que el cascade impediría.
+/// Opens the database in order to sabotage it, with foreign keys off: the
+/// only way to manufacture the damage the cascade would prevent.
 fn sabotear(db: &Path) -> Connection {
     let c = Connection::open(db).unwrap();
     c.execute_batch("pragma foreign_keys = off;").unwrap();
@@ -122,8 +122,8 @@ fn a_freshly_created_database_does_not_break_the_diagnostic() {
 fn it_detects_an_out_of_sync_fts5_index_and_exits_nonzero() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
-    // Saca una fila del índice sin tocar `chunks`: lo que pasaría si un
-    // camino de escritura se saltara los triggers.
+    // Removes a row from the index without touching `chunks`: what would
+    // happen if a write path skipped the triggers.
     let c = sabotear(&db);
     c.execute(
         "insert into chunks_fts(chunks_fts, rowid, body)
@@ -149,7 +149,7 @@ fn a_broken_config_is_reported_and_the_diagnostic_survives() {
     assert_eq!(o.codigo, Some(1), "un config roto es un problema: {}", o.todo());
     assert!(o.stdout.contains("config.json"), "{}", o.stdout);
     assert!(!o.stderr.contains("panicked"), "no puede entrar en pánico: {}", o.stderr);
-    // Y siguió: el resto del diagnóstico está.
+    // And it carried on: the rest of the diagnostic is there.
     assert!(o.stdout.contains("2 activas"), "tiene que seguir con el resto: {}", o.stdout);
 }
 
@@ -171,8 +171,8 @@ fn a_valid_config_shows_the_effective_values() {
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
     assert!(o.stdout.contains("candidatos=7"), "{}", o.stdout);
-    // Los que no se tocaron aparecen con su valor por defecto: eso son los
-    // "efectivos".
+    // The ones left alone appear with their default value: that is what
+    // "effective" means here.
     assert!(o.stdout.contains("extracto=120"), "{}", o.stdout);
 }
 
@@ -269,7 +269,7 @@ fn a_supersession_chain_to_a_missing_memory_is_detected() {
 fn two_active_memories_under_one_topic_key_are_detected() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
-    // Una base vieja, de antes del índice único, podría tenerlo violado.
+    // An old database, from before the unique index, could be violating it.
     let c = sabotear(&db);
     c.execute("drop index idx_mem_topic_activa", []).unwrap();
     c.execute("update memories set status = 'active' where id = 1", []).unwrap();
@@ -327,9 +327,9 @@ fn a_database_that_does_not_exist_yet_neither_breaks_nor_is_created() {
 
 #[test]
 fn a_missing_database_does_not_claim_everything_is_fine() {
-    // Con un `--db` mal escrito, un script de verificación pasaría en verde
-    // sin haber comprobado nada. El código de salida puede ser 0, pero el
-    // texto no puede decir que revisó lo que no existe.
+    // With a misspelled `--db`, a verification script would go green having
+    // checked nothing. The exit code may be 0, but the text cannot claim it
+    // reviewed something that does not exist.
     let d = tempfile::tempdir().unwrap();
     let o = mem(&d.path().join("no-esta").join("mem.db"), &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
@@ -347,7 +347,7 @@ fn the_summary_tells_all_clear_from_no_problems_but_warnings() {
     std::fs::write(d.path().join("paquetes").join("x.anathem-pack.reemplazando-1"), b"r").unwrap();
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
-    // (Si el binario se compiló sin git hay un aviso más: no se fija el número.)
+    // (If the binary was built without git there is one more warning: the count is not pinned.)
     assert!(o.stdout.contains("Sin problemas ("), "{}", o.stdout);
     assert!(!o.stdout.contains("Todo en orden"), "{}", o.stdout);
 }
@@ -360,7 +360,7 @@ fn a_file_that_is_not_a_database_is_reported_without_crashing() {
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
     assert!(!o.stderr.contains("panicked"), "{}", o.stderr);
-    // Y las comprobaciones que no dependen de la base siguen corriendo.
+    // And the checks that do not depend on the database keep running.
     assert!(o.stdout.contains("config.json"), "{}", o.stdout);
 }
 
@@ -381,18 +381,19 @@ fn a_database_predating_topic_keys_does_not_break_the_diagnostic() {
     assert!(o.stdout.contains("2 activas"), "{}", o.stdout);
 }
 
-/// Cada archivo del árbol con un resumen de su contenido, para comparar antes
-/// y después sin volcar bytes en el mensaje de un fallo.
-/// Huella del directorio, sin los archivos auxiliares de SQLite.
+/// Every file in the tree with a digest of its contents, so before and after
+/// can be compared without dumping bytes into a failure message.
+/// A fingerprint of the directory, minus SQLite's auxiliary files.
 ///
-/// Se dejan afuera `-wal` y `-shm` porque leer una base en modo WAL exige
-/// crearlos: no es algo que doctor elija hacer. En Linux SQLite los borra al
-/// cerrar la última conexión y el directorio queda igual que antes; en Windows
-/// quedan en disco, y exigir que no aparezcan sería exigir lo imposible.
+/// `-wal` and `-shm` are left out because reading a database in WAL mode
+/// requires creating them: it is not something doctor chooses to do. On Linux
+/// SQLite deletes them when the last connection closes and the directory ends
+/// up as it was; on Windows they stay on disk, and demanding they not appear
+/// would be demanding the impossible.
 ///
-/// Lo que sí queda comprobado es lo que importa: `mem.db` byte por byte. Si
-/// doctor consolidara el WAL —lo primero que haría un diagnóstico que
-/// "arregla"— el archivo principal cambiaría y el test lo vería.
+/// What does get checked is what matters: `mem.db`, byte for byte. Were
+/// doctor to checkpoint the WAL — the first thing a diagnostic that "fixes"
+/// would do — the main file would change and the test would see it.
 fn instantanea(dir: &Path) -> std::collections::BTreeMap<String, u64> {
     use std::hash::{Hash, Hasher};
     fn sqlite_helper(rel: &str) -> bool {
@@ -425,7 +426,7 @@ fn the_diagnostic_is_read_only_even_with_a_damaged_database() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     install_pack(d.path(), &db);
-    // Todo roto a la vez: es cuando más tentador sería "arreglar".
+    // Everything broken at once: the moment when "fixing" would be most tempting.
     let c = sabotear(&db);
     c.execute("update memories set supersedes_id = 9999 where id = 3", []).unwrap();
     c.execute(
@@ -440,9 +441,9 @@ fn the_diagnostic_is_read_only_even_with_a_damaged_database() {
     std::fs::write(d.path().join("paquetes").join("x.anathem-pack.reemplazando-1"), b"r").unwrap();
 
     let antes = instantanea(d.path());
-    // Si el filtro de auxiliares se comiera de más, el test pasaría sin
-    // comprobar nada. Que el archivo principal esté en la huella es la
-    // condición para que lo de abajo signifique algo.
+    // If the auxiliary-file filter swallowed too much, the test would pass
+    // having checked nothing. The main file being in the fingerprint is the
+    // precondition for anything below to mean something.
     assert!(antes.contains_key("mem.db"), "la huella no incluye la base: {antes:?}");
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
@@ -457,8 +458,8 @@ fn the_diagnostic_is_read_only_even_with_a_damaged_database() {
 
 #[test]
 fn it_sees_writes_from_a_live_connection_that_has_not_checkpointed() {
-    // Con el servidor MCP abierto, lo último que se guardó puede estar solo
-    // en el `-wal`. Un diagnóstico que lo ignorara mostraría una foto vieja.
+    // With the MCP server open, the last thing saved may live only in the
+    // `-wal`. A diagnostic that ignored it would show a stale picture.
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     let viva = Connection::open(&db).unwrap();
@@ -487,8 +488,8 @@ fn a_path_with_spaces_and_symbols_works() {
 
 #[test]
 fn a_database_predating_the_vector_layer_is_information_not_three_problems() {
-    // Mismo caso que una base anterior a las claves de tema: no está rota,
-    // se migra sola en la próxima escritura.
+    // Same case as a database predating topic keys: it is not broken, it
+    // migrates itself on the next write.
     for tablas in [
         &["chunk_vectors", "meta"][..],
         &["chunk_vectors"][..],
@@ -506,7 +507,7 @@ fn a_database_predating_the_vector_layer_is_information_not_three_problems() {
         assert!(!o.stdout.contains('✗'), "sin {tablas:?}: {}", o.stdout);
         assert!(o.stdout.contains("anterior a la capa vectorial"), "sin {tablas:?}: {}", o.stdout);
         assert!(o.stdout.contains("2 activas"), "sin {tablas:?}: {}", o.stdout);
-        // Y es verdad que se migra sola: la próxima escritura la deja sana.
+        // And it really does migrate itself: the next write leaves it healthy.
         assert!(mem(&db, &["save", "otra", "--project", "p"]).ok());
         let o = mem(&db, &["doctor"]);
         assert!(!o.stdout.contains("anterior a la capa vectorial"), "{}", o.stdout);
@@ -515,9 +516,9 @@ fn a_database_predating_the_vector_layer_is_information_not_three_problems() {
 
 #[test]
 fn a_doctor_failure_exits_2_and_problems_exit_1() {
-    // Sin HOME y sin --db, la ruta por defecto no se puede resolver: doctor no
-    // llega a correr. Un script tiene que poder distinguir eso de "encontró
-    // problemas" (1).
+    // With no HOME and no --db, the default path cannot be resolved: doctor
+    // never gets to run. A script has to be able to tell that from "found
+    // problems" (1).
     let correr = |args: &[&str]| {
         Command::new(env!("CARGO_BIN_EXE_mem"))
             .args(args)
@@ -529,10 +530,10 @@ fn a_doctor_failure_exits_2_and_problems_exit_1() {
     let o = correr(&["doctor"]);
     assert_eq!(o.status.code(), Some(2), "{}", String::from_utf8_lossy(&o.stderr));
     assert!(String::from_utf8_lossy(&o.stderr).contains("HOME"));
-    // Los demás comandos conservan su 1 de siempre.
+    // Every other command keeps its usual 1.
     assert_eq!(correr(&["init"]).status.code(), Some(1));
 
-    // Y con problemas reales sigue siendo 1.
+    // And with real problems it is still 1.
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     std::fs::write(d.path().join("config.json"), "roto").unwrap();
@@ -541,9 +542,9 @@ fn a_doctor_failure_exits_2_and_problems_exit_1() {
 
 #[test]
 fn the_fts5_index_is_compared_by_ids_and_not_only_by_count() {
-    // Mismo conteo de filas en `chunks` y en el índice, pero no las mismas:
-    // se saca el id 1 del índice y se mete un 99 que no existe en `chunks`.
-    // Una comparación de conteos diría "sincronizado".
+    // The same row count in `chunks` and in the index, but not the same
+    // rows: id 1 is taken out of the index and a 99 that does not exist in
+    // `chunks` is put in. A comparison of counts would say "in sync".
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     let c = sabotear(&db);

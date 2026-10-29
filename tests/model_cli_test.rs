@@ -93,10 +93,10 @@ fn a_missing_pack_file_degrades_search_to_bm25() {
     assert!(String::from_utf8_lossy(&o.stderr).contains("aviso"));
 }
 
-/// Variante del fixture con otro nombre y otras dimensiones, para forzar la
-/// incompatibilidad.
+/// A variant of the fixture with a different name and different dimensions,
+/// to force the mismatch.
 fn escribir_pack_ancho(pack_path: &std::path::Path, name: &str) {
-    // Mismo tokenizador, pero 8 dimensiones en vez de 4.
+    // Same tokenizer, but 8 dimensions instead of 4.
     let tok = apoyo::TOKENIZER_MINI.as_bytes();
     let dims = 8usize;
     let rows: [[u8; 8]; 4] = [
@@ -137,7 +137,7 @@ fn switching_packs_rebuilds_the_index_instead_of_mixing() {
     assert!(txt.contains("ancho-es"), "debe quedar el último instalado: {txt}");
     assert!(txt.contains("1/1"), "el índice debe estar completo y rehecho: {txt}");
 
-    // Y los vectores guardados tienen que ser de 8 dimensiones, no de 4.
+    // And the stored vectors have to be 8-dimensional, not 4.
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let largo: i64 = conn
         .query_row("select length(vec) from chunk_vectors limit 1", [], |r| r.get(0))
@@ -147,8 +147,8 @@ fn switching_packs_rebuilds_the_index_instead_of_mixing() {
 
 #[test]
 fn a_pack_swapped_by_hand_triggers_the_reindex() {
-    // El registro dice "mini-es" pero el archivo con ese nombre es en realidad
-    // otro paquete. Buscar no puede usar los vectores viejos.
+    // The registry says "mini-es" but the file under that name is in fact a
+    // different pack. Search cannot use the old vectors.
     let d = tempfile::tempdir().unwrap();
     let a = d.path().join("a.anathem-pack");
     apoyo::escribir_pack_mini(&a, "mini-es");
@@ -169,11 +169,11 @@ fn a_pack_swapped_by_hand_triggers_the_reindex() {
 
 #[test]
 fn a_name_mismatch_leaves_the_registry_consistent_with_disk() {
-    // El registro dice "mini-es", y el archivo en paquetes/mini-es.anathem-pack
-    // tiene las MISMAS dimensiones (4) pero es en realidad "otro-es": mismo
-    // largo de vector, vocabulario distinto. Mezclar sería numéricamente
-    // válido y semánticamente basura — el caso más peligroso, porque nada en
-    // el largo del blob lo delata.
+    // The registry says "mini-es", and the file at
+    // packs/mini-es.anathem-pack has the SAME dimensions (4) but is in fact
+    // "otro-es": same vector length, different vocabulary. Mixing would be
+    // numerically valid and semantically garbage — the most dangerous case,
+    // because nothing in the blob's length gives it away.
     let d = tempfile::tempdir().unwrap();
     let a = d.path().join("a.anathem-pack");
     apoyo::escribir_pack_mini(&a, "mini-es");
@@ -186,9 +186,8 @@ fn a_name_mismatch_leaves_the_registry_consistent_with_disk() {
     let o1 = mem(d.path(), &["search", "hola"]);
     assert!(o1.status.success(), "{}", String::from_utf8_lossy(&o1.stderr));
 
-    // El registro tiene que quedar apuntando a un archivo que existe de
-    // verdad: el nombre registrado y el nombre del archivo en disco tienen
-    // que coincidir.
+    // The registry has to end up pointing at a file that really exists: the
+    // registered name and the name of the file on disk have to match.
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let (name, _sha, _dims) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
     assert_eq!(name, "otro-es", "el registro debe reflejar el nombre real del paquete");
@@ -199,8 +198,8 @@ fn a_name_mismatch_leaves_the_registry_consistent_with_disk() {
         registered_path.display()
     );
 
-    // Una segunda búsqueda tiene que encontrar el paquete sin volver a avisar
-    // que falta el archivo ni degradar a bm25.
+    // A second search has to find the pack without warning again that the
+    // file is missing, and without degrading to bm25.
     let o2 = mem(d.path(), &["search", "hola"]);
     assert!(o2.status.success(), "{}", String::from_utf8_lossy(&o2.stderr));
     let err2 = String::from_utf8_lossy(&o2.stderr).to_string();
@@ -212,13 +211,13 @@ fn a_name_mismatch_leaves_the_registry_consistent_with_disk() {
 
 #[test]
 fn reinstalling_from_the_installed_path_does_not_destroy_the_pack() {
-    // `mem model install paquetes/mini-es.anathem-pack` —reinstalar "para
-    // forzar el reindexado", o un script que instala siempre desde la ruta
-    // canónica— copiaba el archivo sobre sí mismo y lo truncaba a cero
-    // bytes. Y como el `abrir` que lo habría detectado corría DESPUÉS del
-    // `olvidar_pack`, el resultado era el paquete destruido en disco, cero
-    // vectores, y el registro apuntando a basura con el sha viejo, que no
-    // delata nada. Irrecuperable sin una copia externa.
+    // `mem model install packs/mini-es.anathem-pack` — reinstalling "to
+    // force the reindex", or a script that always installs from the
+    // canonical path — copied the file over itself and truncated it to zero
+    // bytes. And since the `open_pack` that would have caught it ran AFTER
+    // the `forget_pack`, the result was the pack destroyed on disk, zero
+    // vectors, and the registry pointing at garbage under the old sha, which
+    // gives nothing away. Unrecoverable without an external copy.
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
@@ -251,7 +250,7 @@ fn reinstalling_from_the_installed_path_does_not_destroy_the_pack() {
     let err = String::from_utf8_lossy(&b.stderr).to_string();
     assert!(!err.contains("aviso"), "no puede quedar avisando para siempre: {err}");
 
-    // Y la instalación no deja temporales tirados en `paquetes/`.
+    // And the install leaves no temporaries lying around in `packs/`.
     let extras: Vec<String> = std::fs::read_dir(d.path().join("paquetes"))
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
@@ -262,11 +261,11 @@ fn reinstalling_from_the_installed_path_does_not_destroy_the_pack() {
 
 #[test]
 fn a_pack_that_recognizes_nothing_is_rejected_without_touching_the_current_one() {
-    // Un paquete cuya tabla no cubre el vocabulario que usa esta memoria
-    // instala limpio, reporta cobertura completa y produce solo vectores
-    // nulos: la búsqueda vectorial deja de aportar nada y nada lo dice.
-    // Encima, instalarlo pisaba al paquete que funcionaba antes de haber
-    // comprobado siquiera que el nuevo sirviera.
+    // A pack whose table does not cover the vocabulary this memory uses
+    // installs cleanly, reports full coverage and produces nothing but null
+    // vectors: vector search stops contributing anything and nothing says
+    // so. On top of that, installing it used to overwrite the pack that
+    // worked before even checking that the new one was any good.
     let d = tempfile::tempdir().unwrap();
     let bueno = d.path().join("bueno.anathem-pack");
     apoyo::escribir_pack_mini(&bueno, "mini-es");
@@ -294,18 +293,18 @@ fn a_pack_that_recognizes_nothing_is_rejected_without_touching_the_current_one()
 
 #[test]
 fn status_does_not_count_vectors_search_discards_as_covered() {
-    // `cobertura` hacía `count(*)`, así que reportaba 1/1 mientras `buscar`
-    // descartaba esa misma fila por dimensión incompatible. El único
-    // diagnóstico que la especificación designa para hacer visible el hueco
-    // informaba salud perfecta justo cuando el hueco era total.
+    // `coverage` did a `count(*)`, so it reported 1/1 while
+    // `search_vectors` discarded that very row for an incompatible
+    // dimension. The one diagnostic the spec designates for making the gap
+    // visible reported perfect health precisely when the gap was total.
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
     mem(d.path(), &["save", "hola mundo"]);
     mem(d.path(), &["model", "install", r.to_str().unwrap()]);
 
-    // Un vector de 8 dimensiones donde el paquete activo tiene 4: lo que
-    // deja cualquiera de las mezclas que esta rama persigue.
+    // An 8-dimensional vector where the active pack has 4: what any of the
+    // mixtures this branch is after leaves behind.
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     conn.execute("update chunk_vectors set vec = zeroblob(32)", []).unwrap();
     drop(conn);
@@ -318,9 +317,10 @@ fn status_does_not_count_vectors_search_discards_as_covered() {
     );
 }
 
-/// Cuántas filas `pack_instalando` hay en `meta`. Se consulta con SQL crudo
-/// a propósito: así este test no depende de que la API para leer la marca
-/// exista, y falla por lo que afirma y no por no compilar.
+/// How many `pack_instalando` rows there are in `meta`. Queried with raw SQL
+/// on purpose: that way this test does not depend on an API for reading the
+/// mark existing, and fails for what it asserts rather than for not
+/// compiling.
 fn install_marks(db: &std::path::Path) -> i64 {
     let conn = rusqlite::Connection::open(db).unwrap();
     conn.query_row("select count(*) from meta where key = 'pack_instalando'", [], |r| r.get(0))
@@ -329,17 +329,17 @@ fn install_marks(db: &std::path::Path) -> i64 {
 
 #[test]
 fn an_install_cut_short_after_the_rename_does_not_keep_querying_the_old_build() {
-    // Entre el `rename` —que ya reemplazó el archivo en `paquetes/`— y el
-    // `adoptar_pack` que iba a describirlo hay una ventana. Un SIGKILL ahí
-    // deja el build NUEVO en disco con `meta` describiendo al VIEJO.
+    // Between the `rename` — which has already replaced the file in
+    // `packs/` — and the `adopt_pack` that was going to describe it, there
+    // is a window. A SIGKILL there leaves the NEW build on disk with `meta`
+    // describing the OLD one.
     //
-    // Es el caso que ninguna guarda ve: si el build nuevo se llama igual y
-    // mide igual que el viejo —actualizar `en-es`, el motivo más común para
-    // reinstalar— el nombre y las dimensiones coinciden, y el sha registrado
-    // se descarta a propósito para no hashear 22 MB en cada arranque.
-    // Resultado: consultas embebidas con el paquete nuevo contra vectores
-    // del viejo, indefinidamente, y `model status` informando cobertura
-    // completa.
+    // It is the case no guard sees: if the new build has the same name and
+    // the same size as the old — updating `en-es`, the commonest reason to
+    // reinstall — name and dimensions match, and the registered sha is
+    // discarded on purpose so as not to hash 22 MB on every start. Result:
+    // queries embedded with the new pack against the old one's vectors,
+    // indefinitely, and `model status` reporting full coverage.
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let old = d.path().join("viejo.anathem-pack");
@@ -353,10 +353,11 @@ fn an_install_cut_short_after_the_rename_does_not_keep_querying_the_old_build() 
         let conn = rusqlite::Connection::open(&db).unwrap();
         let v = apoyo::leer_vector(&conn, "select vec from chunk_vectors");
         assert!(v[0] > 0.5, "precondición: el índice es del build viejo, salió {v:?}");
-        // Matar el proceso justo entre el rename y el `adoptar_pack` no se
-        // puede pedir desde un test. Se hace fallar el `adoptar_pack`, que
-        // deja exactamente el mismo estado: el archivo ya reemplazado y
-        // `meta` todavía describiendo al viejo.
+        // Killing the process exactly between the rename and the
+        // `adopt_pack` is not something a test can ask for. Instead the
+        // `adopt_pack` is made to fail, which leaves precisely the same
+        // state: the file already replaced and `meta` still describing the
+        // old one.
         conn.execute_batch(
             "create trigger cortar_la_instalacion before delete on chunk_vectors
              begin select raise(abort, 'instalación interrumpida'); end;",
@@ -374,7 +375,7 @@ fn an_install_cut_short_after_the_rename_does_not_keep_querying_the_old_build() 
     );
 
     {
-        // El proceso muerto no deja triggers; este era el instrumento.
+        // A killed process leaves no triggers behind; this one was the instrument.
         let conn = rusqlite::Connection::open(&db).unwrap();
         conn.execute_batch("drop trigger cortar_la_instalacion").unwrap();
     }
@@ -402,8 +403,8 @@ fn an_install_cut_short_after_the_rename_does_not_keep_querying_the_old_build() 
 
 #[test]
 fn a_complete_install_leaves_no_mark_behind() {
-    // La otra mitad: si la marca sobreviviera a una instalación exitosa,
-    // cada búsqueda posterior reindexaría el corpus entero para siempre.
+    // The other half: were the mark to survive a successful install, every
+    // later search would reindex the whole corpus, forever.
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let r = d.path().join("mini.anathem-pack");
@@ -419,12 +420,13 @@ fn a_complete_install_leaves_no_mark_behind() {
 
 #[test]
 fn an_install_failing_before_touching_the_file_leaves_no_mark() {
-    // Si el rename ni siquiera llegó a pasar, el archivo del paquete
-    // registrado está intacto y la marca no describe ningún riesgo: dejarla
-    // puesta costaría un reindexado del corpus entero al pedo.
+    // If the rename never even happened, the registered pack's file is
+    // intact and the mark describes no risk at all: leaving it set would
+    // cost a reindex of the whole corpus for nothing.
     //
-    // El rename se hace fallar con el destino ocupado por un directorio no
-    // vacío, que da EISDIR para cualquier uid y no depende de permisos.
+    // The rename is made to fail with the target occupied by a non-empty
+    // directory, which gives EISDIR for any uid and does not depend on
+    // permissions.
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let r = d.path().join("mini.anathem-pack");
@@ -441,7 +443,7 @@ fn an_install_failing_before_touching_the_file_leaves_no_mark() {
     assert!(!o.status.success(), "el rename imposible tiene que hacer fallar la instalación");
     assert_eq!(install_marks(&db), 0, "el archivo no se tocó: la marca no corresponde");
 
-    // Y tampoco quedan temporales tirados.
+    // And no temporaries are left lying around either.
     let extras: Vec<String> = std::fs::read_dir(&packs)
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().to_string())

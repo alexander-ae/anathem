@@ -1,9 +1,8 @@
-//! Lo que pasa cuando hay más de un proceso.
+//! What happens when there is more than one process.
 //!
-//! Cada tarea del plan protegió el principio de "nunca mezclar vectores"
-//! dentro de su propio proceso, y ninguna tuvo dos procesos en su diff. Estos
-//! tests lanzan procesos de verdad: un `mem` por terminal, como en la vida
-//! real.
+//! Every task in the plan protected the "never mix vectors" principle inside
+//! its own process, and none of them had two processes in its diff. These
+//! tests spawn real processes: one `mem` per terminal, as in real life.
 
 mod apoyo;
 
@@ -25,9 +24,9 @@ fn lanzar(db: &Path, args: &[&str]) -> std::process::Child {
         .unwrap()
 }
 
-/// Siembra fragmentos sin vector directamente en la base, para que ningún
-/// `mem` los haya sincronizado antes de tiempo. Son los "pendientes" que
-/// después se van a pelear varios procesos a la vez.
+/// Seeds vectorless chunks straight into the database, so that no `mem` has
+/// synced them ahead of time. These are the "pending" ones that several
+/// processes will then fight over at once.
 fn seed_chunks_without_vectors(db: &Path, cuantos: usize) {
     let conn = anathem::db::open(db).unwrap();
     conn.execute(
@@ -37,8 +36,8 @@ fn seed_chunks_without_vectors(db: &Path, cuantos: usize) {
     )
     .unwrap();
     let id = conn.last_insert_rowid();
-    // En una sola transacción: sembrar decenas de miles de fragmentos de a
-    // un commit por fila tardaría más que el escenario que se quiere medir.
+    // In a single transaction: seeding tens of thousands of chunks one
+    // commit per row would take longer than the scenario being measured.
     let tx = conn.unchecked_transaction().unwrap();
     for i in 0..cuantos {
         tx.execute(
@@ -52,17 +51,17 @@ fn seed_chunks_without_vectors(db: &Path, cuantos: usize) {
 
 #[test]
 fn concurrent_saves_neither_fail_nor_lose_vectors() {
-    // `sincronizar` calculaba los pendientes fuera de la transacción y los
-    // insertaba con un `insert` pelado sobre una clave primaria: con varios
-    // procesos a la vez, los que perdían la carrera salían con código 1 y
-    // `UNIQUE constraint failed` aunque la memoria sí se había guardado, y
-    // sus fragmentos se perdían con el rollback. Por MCP el agente recibía
-    // `-32603 error interno` por un guardado exitoso.
+    // `sync` computed the pending set outside the transaction and inserted
+    // it with a bare `insert` against a primary key: with several processes
+    // at once, the ones that lost the race exited 1 with `UNIQUE constraint
+    // failed` even though the memory had in fact been saved, and their
+    // chunks were lost to the rollback. Over MCP the agent got `-32603
+    // internal error` for a successful save.
     //
-    // Además embebía DENTRO de la transacción de escritura, así que el
-    // lock quedaba tomado todo lo que tardara el corpus entero — y sin
-    // `busy_timeout`, el otro proceso fallaba de inmediato en vez de
-    // esperar su turno.
+    // It also embedded INSIDE the write transaction, so the lock stayed
+    // held for as long as the whole corpus took — and with no
+    // `busy_timeout`, the other process failed immediately instead of
+    // waiting its turn.
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let r = d.path().join("mini.anathem-pack");
@@ -70,8 +69,8 @@ fn concurrent_saves_neither_fail_nor_lose_vectors() {
     assert!(mem(&db, &["init"]).status.success());
     assert!(mem(&db, &["model", "install", r.to_str().unwrap()]).status.success());
 
-    // Suficientes fragmentos como para que la ventana entre "ver qué falta"
-    // y "escribirlo" no sea instantánea.
+    // Enough chunks that the window between "see what is missing" and
+    // "write it" is not instantaneous.
     seed_chunks_without_vectors(&db, 600);
 
     let hijos: Vec<_> = (0..6)
@@ -105,12 +104,12 @@ fn concurrent_saves_neither_fail_nor_lose_vectors() {
 
 #[test]
 fn search_does_not_fail_even_when_it_cannot_reindex() {
-    // La guarda de identidad convertía a `mem search` en un escritor que
-    // renombraba el archivo y reindexaba el corpus entero, y propagaba con
-    // `?` todos los errores de ese camino. Con `paquetes/` de solo lectura,
-    // buscar salía con 1 y no imprimía nada, permanentemente — contra el
-    // docstring de la propia función y contra la fila de la especificación
-    // que dice que buscar nunca falla por la capa vectorial.
+    // The identity guard turned `mem search` into a writer that renamed the
+    // file and reindexed the whole corpus, and propagated every error on
+    // that path with `?`. With `packs/` read-only, searching exited 1 and
+    // printed nothing, permanently — against the function's own docstring
+    // and against the row of the spec saying search never fails because of
+    // the vector layer.
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let a = d.path().join("a.anathem-pack");
@@ -119,22 +118,22 @@ fn search_does_not_fail_even_when_it_cannot_reindex() {
     assert!(mem(&db, &["save", "hola mundo"]).status.success());
     assert!(mem(&db, &["model", "install", a.to_str().unwrap()]).status.success());
 
-    // El archivo instalado pasa a ser, en realidad, otro paquete: la guarda
-    // se dispara y el reindexado necesita renombrarlo.
+    // The installed file becomes, in fact, a different pack: the guard
+    // trips and the reindex needs to rename it.
     let packs = d.path().join("paquetes");
     apoyo::escribir_pack_permutado(&packs.join("mini-es.anathem-pack"), "otro-es");
 
-    // El rename tiene que fallar, y tiene que fallar para cualquiera. Antes
-    // esto era `paquetes/` en modo 0555, que a root no lo detiene: en CI
-    // dentro de un contenedor —el caso habitual— el test se saltaba entero y
-    // el único escenario determinista de "buscar no falla aunque no pueda
-    // reindexar" quedaba cubierto solo por una carrera.
+    // The rename has to fail, and it has to fail for anyone. This used to
+    // be `packs/` in mode 0555, which does not stop root: in CI inside a
+    // container — the usual case — the test skipped itself entirely and the
+    // only deterministic scenario for "search does not fail even when it
+    // cannot reindex" was covered by a race alone.
     //
-    // El destino del rename ocupado por un directorio NO VACÍO falla siempre,
-    // sin depender de permisos: `rename(2)` de un archivo sobre un directorio
-    // devuelve EISDIR —y ENOTEMPTY si el kernel llegara a mirar el contenido
-    // primero— también para root. Ningún uid puede reemplazar un directorio
-    // poblado por un archivo; no es una comprobación de permisos.
+    // A rename target occupied by a NON-EMPTY directory always fails,
+    // without depending on permissions: `rename(2)` of a file onto a
+    // directory returns EISDIR — and ENOTEMPTY, should the kernel look at
+    // the contents first — for root as well. No uid can replace a populated
+    // directory with a file; it is not a permission check.
     let target = packs.join("otro-es.anathem-pack");
     std::fs::create_dir(&target).unwrap();
     std::fs::write(target.join("ocupado"), b"x").unwrap();
@@ -146,17 +145,17 @@ fn search_does_not_fail_even_when_it_cannot_reindex() {
     assert!(o.status.success(), "buscar no puede fallar por la capa vectorial: {err}");
     assert!(out.contains("hola"), "tiene que seguir devolviendo resultados de bm25: {out}");
     assert!(err.to_lowercase().contains("bm25"), "y decir que quedó degradada: {err}");
-    // Y que el escenario se montó de verdad: lo que falló es el rename, no
-    // cualquier otra cosa que también degradaría. Sin esto, el test podría
-    // volver a ser un no-op sin que nadie se entere — que es justo como se
-    // anulaba antes cuando corría como root.
+    // And that the scenario really was set up: what failed is the rename,
+    // not anything else that would also degrade. Without this the test could
+    // quietly become a no-op again — which is exactly how it used to void
+    // itself when running as root.
     assert!(
         err.contains("renombrar"),
         "el escenario tiene que ser el rename imposible, no otro fallo: {err}"
     );
 
-    // Y no puede haber quedado nada a medias: el registro sigue nombrando al
-    // archivo que existe.
+    // And nothing can have been left half done: the registry still names
+    // the file that exists.
     let conn = rusqlite::Connection::open(&db).unwrap();
     let (name, _, _) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
     assert!(
@@ -167,9 +166,9 @@ fn search_does_not_fail_even_when_it_cannot_reindex() {
 
 #[test]
 fn two_parallel_searches_both_survive_with_the_guard_tripped() {
-    // Las dos ven la incompatibilidad y las dos quieren renombrar y
-    // reindexar. La que pierde la carrera se moría en el `rename`. Ahora
-    // degrada a bm25, que es un resultado peor pero honesto, y sale con 0.
+    // Both see the mismatch and both want to rename and reindex. The one
+    // that lost the race used to die on the `rename`. Now it degrades to
+    // bm25, which is a worse result but an honest one, and exits 0.
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let a = d.path().join("a.anathem-pack");
@@ -195,30 +194,29 @@ fn two_parallel_searches_both_survive_with_the_guard_tripped() {
     }
 }
 
-/// Cuántos fragmentos sin vector siembra el escenario de la mezcla.
+/// How many vectorless chunks the mixing scenario seeds.
 ///
-/// Tiene que alcanzar para que embeberlos dure bastante más que arrancar un
-/// proceso y copiar un paquete de fixture: con veinte mil, el `mem save`
-/// tarda alrededor de un segundo y el `mem model install` entra en el medio
-/// con un margen de casi diez a uno. Es el único parámetro de este test que
-/// habría que subir si alguna vez se pusiera inestable.
+/// It has to be enough that embedding them takes considerably longer than
+/// starting a process and copying a fixture pack: at twenty thousand, the
+/// `mem save` takes about a second and the `mem model install` lands in the
+/// middle of it with close to a ten-to-one margin. It is the only parameter
+/// of this test to raise if it ever turns flaky.
 const BACKLOG: usize = 20_000;
 
 #[test]
 fn a_concurrent_install_leaves_no_vectors_from_two_packs() {
-    // El agujero: `sincronizar` recibía un `&Pack` y no volvía a mirar el
-    // registro nunca. Un proceso que resolvía el paquete A y después embebía
-    // un backlog grande seguía escribiendo vectores de A minutos más tarde,
-    // aunque otra terminal ya hubiera corrido `mem model install B`: el
-    // `adoptar_pack` de B borraba los vectores de A que ya estaban, pero no
-    // detenía al que los seguía produciendo, y el `on conflict do nothing`
-    // los grababa en silencio al lado de los de B.
+    // The hole: `sync` took a `&Pack` and never looked at the registry
+    // again. A process that resolved pack A and then embedded a large
+    // backlog kept writing A's vectors minutes later, even once another
+    // terminal had run `mem model install B`: B's `adopt_pack` deleted the
+    // A vectors already there, but did not stop the one still producing
+    // them, and `on conflict do nothing` wrote them silently alongside B's.
     //
-    // Los dos paquetes tienen las MISMAS dimensiones a propósito: es el caso
-    // real —el formato fija 256 para todo paquete— y el peor, porque ni
-    // `buscar` ni `cobertura` distinguen los blobs, y como `sincronizar`
-    // saltea los fragmentos que ya tienen vector, ningún `mem reindex`
-    // posterior lo corrige. La mezcla es permanente.
+    // Both packs have the SAME dimensions on purpose: it is the real case —
+    // the format fixes 256 for every pack — and the worst one, because
+    // neither `search_vectors` nor `coverage` tells the blobs apart, and
+    // since `sync` skips chunks that already have a vector, no later `mem
+    // reindex` corrects it. The mixing is permanent.
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let a = d.path().join("a.anathem-pack");
@@ -226,16 +224,16 @@ fn a_concurrent_install_leaves_no_vectors_from_two_packs() {
     apoyo::escribir_pack_mini(&a, "mini-es"); // ▁hola -> eje 0, ▁mundo -> eje 1
     apoyo::escribir_pack_permutado(&b, "otro-es"); // ▁hola -> eje 3, ▁mundo -> eje 2
     assert!(mem(&db, &["init"]).status.success());
-    // Se instala A con la base vacía, así que no queda nada indexado: el
-    // backlog se siembra después, que es la situación de siempre (memorias
-    // guardadas sin paquete, o un `install` cortado con Ctrl-C).
+    // A is installed against an empty database, so nothing ends up indexed:
+    // the backlog is seeded afterwards, which is the usual situation
+    // (memories saved with no pack, or an `install` cut short with Ctrl-C).
     assert!(mem(&db, &["model", "install", a.to_str().unwrap()]).status.success());
     seed_chunks_without_vectors(&db, BACKLOG);
 
-    // Terminal 1: guarda una memoria, y al terminar arrastra el backlog
-    // entero con el paquete A.
+    // Terminal 1: saves a memory, and on finishing drags the whole backlog
+    // along with pack A.
     let guardado = lanzar(&db, &["save", "hola mundo"]);
-    // Terminal 2: cambia el paquete mientras el otro embebe.
+    // Terminal 2: switches the pack while the other one embeds.
     std::thread::sleep(std::time::Duration::from_millis(100));
     let instalado = lanzar(&db, &["model", "install", b.to_str().unwrap()]);
 
@@ -256,10 +254,10 @@ fn a_concurrent_install_leaves_no_vectors_from_two_packs() {
     let (name, _, dims) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
     assert_eq!(name, "otro-es", "el último que adoptó fue el install de B");
 
-    // Ningún texto de este test contiene la pieza "s", así que con `otro-es`
-    // los ejes 0 y 1 son exactamente cero y con `mini-es` son justo los dos
-    // que se encienden. Un solo vector con peso ahí es un vector de A
-    // viviendo en un índice que dice ser de B.
+    // No text in this test contains the piece "s", so under `otro-es` axes
+    // 0 and 1 are exactly zero, and under `mini-es` they are precisely the
+    // two that light up. A single vector with weight there is an A vector
+    // living in an index that claims to be B's.
     let mut stmt = conn.prepare("select vec from chunk_vectors").unwrap();
     let vectores: Vec<Vec<f32>> = stmt
         .query_map([], |r| r.get::<_, Vec<u8>>(0))
@@ -278,9 +276,8 @@ fn a_concurrent_install_leaves_no_vectors_from_two_packs() {
         vectores.len()
     );
 
-    // Y el desenlace aceptable sí tiene que haber pasado: el índice que
-    // queda es el de B, completo, porque su `sincronizar` no lo interrumpió
-    // nadie.
+    // And the acceptable outcome does have to have happened: the index left
+    // behind is B's, complete, because nobody interrupted its `sync`.
     let (con, tot) = anathem::vecstore::coverage(&conn, dims).unwrap();
     assert_eq!(con, tot, "el paquete que ganó tiene que terminar su propio índice");
 }

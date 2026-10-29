@@ -96,7 +96,7 @@ fn the_pack_registry_round_trips() {
         vecstore::registered_pack(&conn).unwrap(),
         Some(("en-es".into(), "abc123".into(), 256))
     );
-    // registrar de nuevo pisa, no duplica
+    // registering again overwrites, it does not duplicate
     vecstore::register_pack(&conn, "en-es-pt", "def456", 256).unwrap();
     assert_eq!(
         vecstore::registered_pack(&conn).unwrap(),
@@ -115,11 +115,11 @@ fn forgetting_the_pack_clears_registry_and_vectors() {
     assert_eq!(vecstore::coverage(&conn, p.dims()).unwrap(), (0, 1));
 }
 
-// Compañera del test de abajo, para Windows: `#[cfg(unix)]` sacaría el test
-// de la compilación entera, y ahí no aparecería ni como "ignored" — solo un
-// número total más bajo que nadie va a comparar contra el de Linux. Con esta
-// versión, `cargo test` en Windows lo cuenta y lo marca ignorado con el
-// motivo a la vista, en vez de hacerlo desaparecer en silencio.
+// Companion to the test below, for Windows: `#[cfg(unix)]` would take the
+// test out of the build entirely, and there it would not even show as
+// "ignored" — only a lower total that nobody is going to compare against
+// Linux's. With this version, `cargo test` on Windows counts it and marks it
+// ignored with the reason in plain sight, instead of making it disappear.
 #[cfg(windows)]
 #[test]
 #[ignore = "el cuerpo real usa PermissionsExt y un $EDITOR de shell (shebang), \
@@ -132,40 +132,39 @@ fn editing_a_memory_invalidates_its_vectors() {
     )
 }
 
-// Se salta en Windows: el `$EDITOR` de mentira es un script de shell al que
-// este test le pone el bit ejecutable a mano con `PermissionsExt`, que no
-// existe fuera de Unix. Lo que prueba —que `mem edit` sincroniza los
-// vectores nuevos— no depende de nada específico de plataforma; es el modo
-// de fingir el editor el que sí lo es. No hay una forma portable de armar
-// un `$EDITOR` de una línea sin invocar un intérprete de shell. La versión
-// de Windows de este test, arriba, deja constancia de que se saltea y por
-// qué en vez de desaparecer de la compilación en silencio.
+// Skipped on Windows: the fake `$EDITOR` is a shell script this test marks
+// executable by hand with `PermissionsExt`, which does not exist outside
+// Unix. What it proves — that `mem edit` syncs the new vectors — depends on
+// nothing platform-specific; it is the way of faking the editor that does.
+// There is no portable way to build a one-line `$EDITOR` without invoking a
+// shell interpreter. The Windows version of this test, above, puts on record
+// that it is skipped and why, instead of vanishing from the build.
 #[cfg(unix)]
 #[test]
 fn editing_a_memory_invalidates_its_vectors() {
-    // rechunk borra los fragmentos y el cascade se lleva los vectores. Esa
-    // mitad siempre anduvo; la que faltaba es que alguien reconstruya los
-    // nuevos.
+    // Re-chunking deletes the chunks and the cascade takes the vectors with
+    // it. That half always worked; the missing one was somebody rebuilding
+    // the new ones.
     //
-    // La versión anterior de este test llamaba a `sincronizar` a mano
-    // después de `replace_body`, así que quedaba verde mientras `mem edit`
-    // —el único camino de escritura que no sincronizaba— dejaba la memoria
-    // editada sin un solo vector. Daba confianza falsa sobre justo el
-    // camino que estaba roto. Ahora corre el binario de verdad.
+    // The previous version of this test called `sync` by hand after
+    // `replace_body`, so it stayed green while `mem edit` — the one write
+    // path that did not sync — left the edited memory without a single
+    // vector. It gave false confidence about precisely the path that was
+    // broken. Now it runs the real binary.
     let (dir, _conn, p) = fixture();
     let db = dir.path().join("t.db");
     let out_text = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--db").arg(&db).args(["save", "hola"]).output().unwrap();
     assert!(out_text.status.success());
 
-    // Instalar el paquete deja la memoria con su vector de "hola".
+    // Installing the pack leaves the memory with its vector for "hola".
     let out_text = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--db").arg(&db)
         .args(["model", "install", dir.path().join("mini.anathem-pack").to_str().unwrap()])
         .output().unwrap();
     assert!(out_text.status.success(), "{}", String::from_utf8_lossy(&out_text.stderr));
 
-    // Un $EDITOR de mentira que reemplaza el cuerpo por otro texto.
+    // A fake $EDITOR that replaces the body with different text.
     let editor = dir.path().join("editor.sh");
     std::fs::write(&editor, "#!/bin/sh\nprintf 'mundo' > \"$1\"\n").unwrap();
     std::fs::set_permissions(
@@ -190,7 +189,7 @@ fn editing_a_memory_invalidates_its_vectors() {
         "después de `mem edit` la memoria tiene que quedar con su vector new_id, \
          no sin vectores hasta el próximo `mem reindex`"
     );
-    // Y el vector tiene que ser el del texto NUEVO: "mundo" es el eje 1.
+    // And the vector has to be the NEW text's: "mundo" is axis 1.
     let blob: Vec<u8> = conn
         .query_row("select vec from chunk_vectors", [], |r| r.get(0))
         .unwrap();
@@ -200,13 +199,13 @@ fn editing_a_memory_invalidates_its_vectors() {
 
 #[test]
 fn search_collapses_several_chunks_of_one_memory() {
-    // `sembrar` usa cuerpos de 4-5 caracteres, que siempre caben en un solo
-    // fragmento (CHUNK_SIZE=500) y nunca ejercitan el colapso por máximo en
-    // `buscar` (el `mejor.entry(mid).or_insert(...)`). Esta memoria es
-    // deliberadamente larga para forzar al menos dos fragmentos: el primero,
-    // relleno de "mundo", y el segundo, el único que contiene "hola" — así el
-    // resultado depende de que `buscar` elija el fragmento más parecido y no
-    // cualquiera de los dos.
+    // `seed` uses bodies of 4-5 characters, which always fit in a single
+    // chunk (CHUNK_SIZE=500) and never exercise the collapse-by-maximum in
+    // `search_vectors` (the `best.entry(mid).or_insert(...)`). This memory is
+    // deliberately long so as to force at least two chunks: the first,
+    // padding of "mundo", and the second, the only one containing "hola" — so
+    // the result depends on `search_vectors` picking the closest chunk and
+    // not either of the two.
     let (_d, conn, p) = fixture();
     let relleno = "mundo ".repeat(100); // 600 caracteres, puro "mundo"
     let goal = "hola ".repeat(50); // 250 caracteres, puro "hola"
@@ -224,8 +223,8 @@ fn search_collapses_several_chunks_of_one_memory() {
 
     apoyo::registrar_y_sincronizar(&conn, &p);
 
-    // Por construcción, "hola" solo aparece en un fragmento: los primeros
-    // 500 caracteres caen enteros dentro del relleno de "mundo".
+    // By construction, "hola" appears in only one chunk: the first 500
+    // characters fall entirely inside the "mundo" padding.
     let esperado_id: i64 = conn
         .query_row(
             "select id from chunks where memory_id = ?1 and body like '%hola%'",
@@ -247,11 +246,11 @@ fn search_collapses_several_chunks_of_one_memory() {
 
 #[test]
 fn registered_pack_propagates_real_errors_instead_of_swallowing_them() {
-    // `.ok()` sobre `query_row` convertiría cualquier error real de sqlite
-    // (tabla ausente, base corrupta) en `None`, indistinguible de "no hay
-    // paquete registrado": la búsqueda degradaría a bm25 en silencio y nadie
-    // se enteraría de que la base está rota. Forzamos un error real (falta
-    // la tabla `meta`) y confirmamos que se propaga en vez de esconderse.
+    // `.ok()` on `query_row` would turn any real sqlite error (missing
+    // table, corrupt database) into `None`, indistinguishable from "no pack
+    // registered": search would silently degrade to bm25 and nobody would
+    // learn the database is broken. We force a real error (the `meta` table
+    // is missing) and confirm it propagates instead of hiding.
     let (_d, conn, _p) = fixture();
     conn.execute("drop table meta", []).unwrap();
     let err = vecstore::registered_pack(&conn).unwrap_err();
@@ -261,9 +260,9 @@ fn registered_pack_propagates_real_errors_instead_of_swallowing_them() {
     );
 }
 
-/// Mete `cuantos` fragmentos sin vector en una memoria de relleno, en una
-/// sola transacción. Son el "backlog" que tarda en embeberse y durante el
-/// cual el paquete puede cambiar debajo.
+/// Puts `how_many` vectorless chunks into a filler memory, in a single
+/// transaction. They are the "backlog" that takes a while to embed and during
+/// which the pack can change underneath.
 fn sembrar_pendientes(conn: &Connection, cuantos: usize) {
     let id = sembrar(conn, "relleno");
     conn.execute("delete from chunks where memory_id = ?1", [id]).unwrap();
@@ -280,12 +279,12 @@ fn sembrar_pendientes(conn: &Connection, cuantos: usize) {
 
 #[test]
 fn sync_writes_not_one_vector_under_a_stale_identity() {
-    // El caso mínimo del defecto: quien llama resolvió el paquete A y, para
-    // cuando terminó de embeber, la base ya está registrada con B. Sin la
-    // comprobación dentro de la transacción de escritura, los vectores de A
-    // entraban en un índice que dice ser de B, y el `on conflict do nothing`
-    // ni siquiera daba error. Con las dimensiones iguales —el caso real—
-    // nada los distingue después.
+    // The minimal form of the defect: the caller resolved pack A and, by the
+    // time it finished embedding, the database is already registered with B.
+    // Without the check inside the write transaction, A's vectors went into
+    // an index that claims to be B's, and `on conflict do nothing` did not
+    // even raise an error. With equal dimensions — the real case — nothing
+    // tells them apart afterwards.
     let (_d, conn, p) = fixture();
     sembrar(&conn, "hola");
     let caducada = ("mini-es".to_string(), "sha-de-a".to_string(), p.dims());
@@ -307,17 +306,17 @@ fn sync_writes_not_one_vector_under_a_stale_identity() {
 
 #[test]
 fn sync_abandons_midway_when_the_pack_changes_between_batches() {
-    // El caso que de verdad pasa: el backlog es grande, el primer lote se
-    // escribe con el paquete correcto y en el medio otra terminal corre
-    // `mem model install`. Los lotes siguientes seguían escribiéndose con el
-    // paquete viejo al lado de los del nuevo, y como `sincronizar` saltea
-    // los fragmentos que ya tienen vector, ningún `mem reindex` posterior lo
-    // corregía: la mezcla quedaba para siempre.
+    // The case that actually happens: the backlog is large, the first batch
+    // is written with the right pack and halfway through another terminal
+    // runs `mem model install`. The following batches kept being written
+    // with the old pack alongside the new one's, and since `sync` skips
+    // chunks that already have a vector, no later `mem reindex` corrected
+    // it: the mixing stayed forever.
     //
-    // El cambio "de otro proceso" lo hace un trigger de sqlite sobre
-    // `chunk_vectors`, que es la única forma de que el momento exacto sea el
-    // mismo en cada corrida: dispara dentro de la transacción del primer
-    // lote, igual que un `adoptar_pack` ajeno que gana el lock justo ahí.
+    // The "other process" change is made by a sqlite trigger on
+    // `chunk_vectors`, which is the only way for the exact moment to be the
+    // same on every run: it fires inside the first batch's transaction, just
+    // like someone else's `adopt_pack` winning the lock right there.
     let (_d, conn, p) = fixture();
     let total = 300usize; // más de un lote (el lote son 256)
     sembrar_pendientes(&conn, total);
@@ -344,10 +343,10 @@ fn sync_abandons_midway_when_the_pack_changes_between_batches() {
     );
 }
 
-/// Los filtros de proyecto y tags tienen que valer igual del lado vectorial
-/// que del léxico. Estaban escritos dos veces; este test fija que el vector
-/// no devuelva lo que bm25 descarta, que es lo que esa duplicación iba a
-/// costar el día que los dos lados se separaran.
+/// The project and tag filters have to hold on the vector side exactly as on
+/// the lexical one. They used to be written twice; this test pins down that
+/// the vector does not return what bm25 discards, which is what that
+/// duplication was going to cost the day the two sides drifted apart.
 #[test]
 fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
     let d = tempfile::tempdir().unwrap();
@@ -359,8 +358,8 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
     anathem::ingest::save_explicit(&conn, "nota del proyecto dos", "dos", vec!["beta".into()])
         .unwrap();
 
-    // Vectores iguales para todos: así el coseno no desempata y lo único que
-    // puede dejar algo afuera es el filtro.
+    // Identical vectors for all of them: that way the cosine breaks no ties
+    // and the only thing that can leave something out is the filter.
     let dims = 4usize;
     let v: Vec<u8> = [1.0f32, 0.0, 0.0, 0.0].iter().flat_map(|x| x.to_le_bytes()).collect();
     for id in conn
@@ -399,7 +398,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
     let r = anathem::vecstore::search_vectors(&conn, &query_, &con_tag, 50).unwrap();
     assert_eq!(r.len(), 1, "el filtro de tags tiene que valer también acá: {r:?}");
 
-    // Y sin filtros, los dos.
+    // And with no filters, both of them.
     let sin = anathem::search::Query {
         text: "nota".into(),
         project: None,
