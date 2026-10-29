@@ -1,8 +1,8 @@
 use anathem::tags;
 
-/// Estas pruebas ejercitan `load_rules`/`load_rules_from_file` de forma
-/// directa (sin pasar por el estado global `init`/`classify`), así que no
-/// interfieren entre sí ni con el resto de la suite.
+/// These tests exercise `load_rules`/`load_rules_from_file` directly
+/// (without going through the global `init`/`classify` state), so they
+/// interfere neither with each other nor with the rest of the suite.
 
 #[test]
 fn with_no_file_next_to_the_db_it_uses_the_default_rules() {
@@ -29,8 +29,8 @@ fn a_tags_json_next_to_the_db_replaces_the_default_rules_outright() {
     let tags: Vec<&str> = rules.iter().map(|(t, _)| t.as_str()).collect();
     assert_eq!(tags, vec!["urgente", "cliente"], "el override debe reemplazar, no sumar");
 
-    // Una entrada que matchearía la regla por defecto "code-review" (revisor)
-    // no debe producir ningún tag: las reglas por defecto ya no están activas.
+    // An entry that would match the default "code-review" rule (reviewer)
+    // must produce no tag at all: the default rules are no longer active.
     let sin_match: Vec<&(String, regex::Regex)> = rules
         .iter()
         .filter(|(_, re)| re.is_match("el revisor aprobó el PR"))

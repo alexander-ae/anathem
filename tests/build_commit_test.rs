@@ -1,9 +1,9 @@
-//! `build.rs` tiene que mantener el commit al día: si se congela en el de la
-//! primera compilación, `mem --version` dice un commit que ya no es el del
-//! binario, que es exactamente la falla que existe para hacer visible.
+//! `build.rs` has to keep the commit current: if it freezes on the first
+//! build's, `mem --version` reports a commit that is no longer the binary's —
+//! exactly the failure it exists to make visible.
 //!
-//! Compila un paquete mínimo con una copia del `build.rs` real dentro de un
-//! repositorio temporal, y lo recompila tras cada cambio de commit.
+//! It builds a minimal package with a copy of the real `build.rs` inside a
+//! temporary repository, and rebuilds it after each change of commit.
 
 use std::path::Path;
 use std::process::Command;
@@ -20,7 +20,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&o.stdout).trim().to_string()
 }
 
-/// Compila y corre el paquete mínimo; devuelve el commit que cree tener.
+/// Builds and runs the minimal package; returns the commit it believes it has.
 fn binary_commit(dir: &Path, target: &Path) -> String {
     let o = Command::new(env!("CARGO"))
         .args(["run", "-q", "--offline"])
@@ -59,16 +59,17 @@ fn the_binary_commit_tracks_head_after_pack_refs_and_on_the_first_commit() {
     std::fs::write(pack_.join(".gitignore"), "target\n").unwrap();
     git(&pack_, &["init", "-q"]);
 
-    // Sin ningún commit no hay nada que decir, y no puede fallar.
+    // With no commit at all there is nothing to report, and it cannot fail.
     assert_eq!(binary_commit(&pack_, &target), "desconocido");
 
-    // El primer commit: ninguno de los archivos que existían cambió.
+    // The first commit: none of the files that existed changed.
     git(&pack_, &["add", "-A"]);
     git(&pack_, &["commit", "-qm", "uno"]);
     assert_eq!(binary_commit(&pack_, &target), git(&pack_, &["rev-parse", "--short", "HEAD"]));
 
-    // Tras `pack-refs` la rama vive solo en `packed-refs`; el commit siguiente
-    // crea el archivo suelto y ni `HEAD` ni `packed-refs` cambian.
+    // After `pack-refs` the branch lives only in `packed-refs`; the next
+    // commit creates the loose file and neither `HEAD` nor `packed-refs`
+    // changes.
     git(&pack_, &["pack-refs", "--all"]);
     assert_eq!(binary_commit(&pack_, &target), git(&pack_, &["rev-parse", "--short", "HEAD"]));
     for n in 0..2 {

@@ -1,4 +1,4 @@
-//! El servidor MCP vive horas; el paquete puede cambiar debajo.
+//! The MCP server lives for hours; the pack can change underneath it.
 
 mod apoyo;
 
@@ -12,16 +12,16 @@ fn mem(db: &Path, args: &[&str]) -> std::process::Output {
 
 #[test]
 fn the_server_does_not_mix_vectors_when_the_pack_changes_underneath() {
-    // `mem serve` abría el paquete una vez al arrancar y no volvía a mirar
-    // el registro nunca más. Un `mem model install` desde otra terminal
-    // —dos comandos de primera clase— dejaba al servidor escribiendo
-    // vectores del paquete viejo junto a los del nuevo. Con dimensiones
-    // distintas el blob corto queda muerto; con las mismas —el caso real,
-    // porque el formato fija 256 para todo paquete— nada lo distingue y la
-    // búsqueda calcula cosenos contra dos espacios vectoriales mezclados.
+    // `mem serve` opened the pack once on startup and never looked at the
+    // registry again. A `mem model install` from another terminal — two
+    // first-class commands — left the server writing the old pack's vectors
+    // alongside the new one's. With different dimensions the short blob is
+    // dead; with the same ones — the real case, since the format fixes 256
+    // for every pack — nothing tells them apart and search computes cosines
+    // against two mixed vector spaces.
     //
-    // Por eso los dos paquetes de este test tienen las MISMAS dimensiones:
-    // lo único que los separa es hacia dónde apunta cada palabra.
+    // That is why both packs in this test have the SAME dimensions: the only
+    // thing separating them is where each word points.
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let a = d.path().join("a.anathem-pack");
@@ -44,18 +44,18 @@ fn the_server_does_not_mix_vectors_when_the_pack_changes_underneath() {
     let mut entry = hijo.stdin.take().unwrap();
     let mut out_text = BufReader::new(hijo.stdout.take().unwrap());
 
-    // Un mensaje cualquiera primero, para que el servidor esté arriba y ya
-    // haya resuelto el paquete A.
+    // Some message first, so the server is up and has already resolved pack
+    // A.
     writeln!(entry, r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#).unwrap();
     let mut line_ = String::new();
     out_text.read_line(&mut line_).unwrap();
     assert!(line_.contains("protocolVersion"), "el servidor no arrancó: {line_}");
 
-    // Y ahora, desde otra terminal, alguien cambia el paquete.
+    // And now, from another terminal, someone switches the pack.
     let o = mem(&db, &["model", "install", b.to_str().unwrap()]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
 
-    // El agente guarda una memoria por MCP, sin enterarse de nada.
+    // The agent saves a memory over MCP, none the wiser.
     writeln!(
         entry,
         r#"{{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{{"name":"save_memory","arguments":{{"text":"mundo"}}}}}}"#
@@ -84,9 +84,9 @@ fn the_server_does_not_mix_vectors_when_the_pack_changes_underneath() {
 
 #[test]
 fn the_server_stops_using_the_pack_once_it_is_removed() {
-    // El otro lado del mismo agujero: `mem model remove` desde otra
-    // terminal borra los vectores y el registro, y el servidor seguía
-    // escribiendo vectores de un paquete que la base ya no reconoce.
+    // The other side of the same hole: `mem model remove` from another
+    // terminal deletes the vectors and the registry, and the server kept
+    // writing vectors of a pack the database no longer recognizes.
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let a = d.path().join("a.anathem-pack");

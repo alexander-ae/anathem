@@ -12,23 +12,23 @@ fn with_no_bm25_ranking_it_keeps_the_vector_one() {
 
 #[test]
 fn at_a_low_weight_the_vector_side_beats_bm25() {
-    // Cada uno aporta un documento distinto en la posición 1. Con peso 0,25
-    // el de bm25 vale la cuarta parte, así que manda el vectorial.
+    // Each contributes a different document at position 1. At a weight of
+    // 0.25 bm25's is worth a quarter, so the vector one rules.
     assert_eq!(rrf(&[10], &[20], 0.25), vec![20, 10]);
 }
 
 #[test]
 fn at_weight_one_they_tie_and_the_id_breaks_it() {
-    // Mismo caso, pesos iguales: los puntajes son idénticos y el desempate
-    // estable por id deja primero al menor. Sin ese desempate el orden
-    // dependería del recorrido del HashMap y variaría entre corridas.
+    // Same case, equal weights: the scores are identical and the stable
+    // tiebreak by id puts the lower one first. Without that tiebreak the
+    // order would depend on the HashMap's traversal and vary between runs.
     assert_eq!(rrf(&[10], &[20], 1.0), vec![10, 20]);
 }
 
 #[test]
 fn appearing_in_both_rankings_beats_leading_one() {
-    // 20 está en ambos (posición 2 en bm25, 1 en vectorial); 30 solo en el
-    // vectorial en posición 2; 10 solo en bm25 en posición 1.
+    // 20 is in both (position 2 in bm25, 1 in the vector one); 30 only in
+    // the vector one at position 2; 10 only in bm25 at position 1.
     assert_eq!(rrf(&[10, 20], &[20, 30], 0.25), vec![20, 30, 10]);
 }
 
@@ -44,10 +44,10 @@ fn it_does_not_repeat_documents() {
 
 #[test]
 fn breaking_ties_by_id_is_deterministic() {
-    // 10 en posición 0 de bm25, posición 1 de vectorial
-    // 20 en posición 1 de bm25, posición 0 de vectorial
-    // Con peso_bm25=1.0 ambos tienen el mismo puntaje total.
-    // El desempate estable por id debe poner 10 primero, siempre.
+    // 10 at position 0 in bm25, position 1 in the vector one
+    // 20 at position 1 in bm25, position 0 in the vector one
+    // With bm25_weight=1.0 both have the same total score.
+    // The stable tiebreak by id has to put 10 first, always.
     let expected = vec![10, 20];
     for _ in 0..20 {
         assert_eq!(rrf(&[10, 20], &[20, 10], 1.0), expected);
@@ -56,9 +56,9 @@ fn breaking_ties_by_id_is_deterministic() {
 
 #[test]
 fn peso_cero_bm25_pone_solo_vectorial_adelante() {
-    // Con peso cero, bm25 no contribuye nada. Los documentos que solo están
-    // en bm25 (10, 30) quedan detrás de los que están en vectorial (20, 40),
-    // y el orden interno del vectorial se preserva.
+    // At weight zero, bm25 contributes nothing. The documents that are only
+    // in bm25 (10, 30) fall behind the ones in the vector list (20, 40), and
+    // the vector list's internal order is preserved.
     assert_eq!(rrf(&[10, 20, 30, 40], &[20, 40], 0.0), vec![20, 40, 10, 30]);
 }
 

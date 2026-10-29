@@ -65,10 +65,10 @@ fn history_returns_the_supersession_chain() {
     assert_eq!(cadena[1].0, older);
 }
 
-/// El guardado explícito debe comportarse igual venga de la CLI o de MCP:
-/// clasificar cuando no se dan tags, extraer referencias siempre, y derivar
-/// el título de la primera línea no vacía. Antes vivía duplicado en dos
-/// lugares y la rama de la CLI no clasificaba ni extraía nada.
+/// An explicit save has to behave the same whether it comes from the CLI or
+/// from MCP: classify when no tags are given, always extract references, and
+/// derive the title from the first non-empty line. It used to live duplicated
+/// in two places and the CLI branch classified and extracted nothing.
 #[test]
 fn guardar_explicito_clasifica_y_extrae_refs() {
     let dir = tempfile::tempdir().unwrap();
@@ -86,7 +86,7 @@ fn guardar_explicito_clasifica_y_extrae_refs() {
     assert!(n_refs >= 2, "no extrajo el ticket ABC-42 ni el PR #7: {n_refs} refs");
 }
 
-/// Si se pasan tags explícitos, se respetan y NO se clasifica encima.
+/// When explicit tags are passed they are respected and NOT classified over.
 #[test]
 fn save_explicit_respects_the_given_tags() {
     let dir = tempfile::tempdir().unwrap();
@@ -100,17 +100,17 @@ fn save_explicit_respects_the_given_tags() {
     assert_eq!(tags, vec!["mio".to_string()], "clasificó encima de los tags dados");
 }
 
-/// La CLI y MCP deben usar el MISMO proyecto por defecto. Antes la CLI usaba
-/// "default" y MCP "sin-proyecto", así que las memorias guardadas desde la
-/// terminal y las guardadas por el agente caían en proyectos distintos y no
-/// se veían entre sí: ni para supersession ni para búsquedas filtradas.
+/// The CLI and MCP have to use the SAME default project. The CLI used to use
+/// "default" and MCP "sin-proyecto", so memories saved from the terminal and
+/// memories saved by the agent landed in different projects and could not see
+/// each other: not for supersession, not for filtered searches.
 #[test]
 fn the_default_project_is_the_same_in_cli_and_mcp() {
-    // Los dos caminos tienen que derivar el mismo proyecto parados en el
-    // mismo lugar. Antes esto se comprobaba mirando si la ayuda mencionaba
-    // la constante; ahora que el valor se deriva, se comprueba ejecutando
-    // los dos caminos de verdad, que es lo que la invariante siempre quiso
-    // decir.
+    // Both paths have to derive the same project when standing in the same
+    // place. This used to be checked by looking at whether the help text
+    // mentioned the constant; now that the value is derived, it is checked
+    // by really running both paths, which is what the invariant always meant
+    // to say.
     let d = tempfile::tempdir().unwrap();
     let repo = d.path().join("carpeta-cualquiera");
     std::fs::create_dir_all(repo.join(".git")).unwrap();
@@ -121,14 +121,14 @@ fn the_default_project_is_the_same_in_cli_and_mcp() {
     .unwrap();
     let db = d.path().join("m.db");
 
-    // Camino de la CLI
+    // The CLI path
     std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
         .current_dir(&repo)
         .args(["--db", db.to_str().unwrap(), "save", "guardada por la cli"])
         .output()
         .unwrap();
 
-    // Camino de MCP, con el servidor parado en el mismo directorio
+    // The MCP path, with the server standing in the same directory
     let mut s = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
         .current_dir(&repo)
         .args(["--db", db.to_str().unwrap(), "serve"])

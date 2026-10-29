@@ -62,7 +62,7 @@ fn ingesta_crea_memoria_chunks_tags_y_refs() {
         .unwrap();
     assert_eq!(n_refs, 2);
 
-    // el índice FTS5 debe haberse poblado por trigger
+    // the FTS5 index must have been populated by trigger
     let n_fts: i64 = conn
         .query_row("select count(*) from chunks_fts where chunks_fts match 'justifica'", [], |r| r.get(0))
         .unwrap();
@@ -92,7 +92,7 @@ fn a_ref_with_an_invalid_kind_fails_instead_of_being_ignored() {
         "el error debe nombrar el kind ofensor: {err}"
     );
 
-    // la transacción entera se descarta: ni siquiera queda la memoria insertada
+    // the whole transaction is discarded: not even the inserted memory remains
     let n_memorias: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
     assert_eq!(n_memorias, 0, "un ref inválido debe hacer rollback de toda la transacción");
 }

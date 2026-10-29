@@ -2,7 +2,7 @@ use anathem::project::{detect, resolve, NO_PROJECT};
 use std::fs;
 use std::path::Path;
 
-/// Crea un repo de mentira: un `.git/` con el config que se le pase.
+/// Creates a fake repo: a `.git/` with whatever config it is handed.
 fn repo(raiz: &Path, url_remoto: Option<&str>) {
     fs::create_dir_all(raiz.join(".git")).unwrap();
     let mut cfg = String::from("[core]\n\trepositoryformatversion = 0\n");
@@ -14,7 +14,7 @@ fn repo(raiz: &Path, url_remoto: Option<&str>) {
 
 #[test]
 fn it_uses_the_remote_name_and_not_the_folder_name() {
-    // El caso que motivó todo: el repo `api-monolito` vive en `API/Web`.
+    // The case that motivated all of this: the `api-monolito` repo lives in `API/Web`.
     let d = tempfile::tempdir().unwrap();
     let w = d.path().join("API").join("Web");
     fs::create_dir_all(&w).unwrap();
@@ -47,8 +47,9 @@ fn from_a_subdirectory_it_finds_the_root() {
 
 #[test]
 fn in_a_worktree_it_gives_the_project_and_not_the_branch_name() {
-    // Este es el caso que la derivación ingenua rompe: dentro de
-    // `.claude/worktrees/op200-implementation`, el basename es el de la rama.
+    // This is the case naive derivation breaks: inside
+    // `.claude/worktrees/op200-implementation`, the basename is the
+    // branch's.
     let d = tempfile::tempdir().unwrap();
     let principal = d.path().join("Web");
     fs::create_dir_all(&principal).unwrap();

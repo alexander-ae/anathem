@@ -54,10 +54,10 @@ fn with_no_prefix_it_returns_the_body_untouched() {
 
 #[test]
 fn it_also_strips_the_save_terminator() {
-    // Regresión del hallazgo D: strip_save_prefix sacaba el marcador de
-    // apertura pero dejaba el [/SAVE] de cierre, que sobrevivía en el 87% de
-    // los cuerpos migrados y aparecía en snippets de búsqueda del MCP, en los
-    // archivos exportados y en el índice FTS.
+    // Regression for finding D: strip_save_prefix removed the opening marker
+    // but left the closing [/SAVE], which survived in 87% of migrated bodies
+    // and showed up in MCP search snippets, in exported files and in the FTS
+    // index.
     let (body, date) = tags::strip_save_prefix(
         "[SAVE:demo:2026-09-21]\n\nEl cache no se justifica.\n[/SAVE]",
     );
@@ -74,15 +74,15 @@ fn it_strips_the_save_terminator_even_without_a_prefix() {
 
 #[test]
 fn clasifica_code_review_en_espanol() {
-    // Formas solo en español (sin "PR #") - debe matchear vía los patrones
-    // de "revisión/revisó".
+    // Spanish-only forms (with no "PR #") - it has to match through the
+    // "revisión/revisó" patterns.
     let t = tags::classify("sobre el doble rol en la revisión del ticket PROJ-143").unwrap();
     assert!(t.contains(&"code-review".to_string()), "tags: {t:?}");
 }
 
 #[test]
 fn it_classifies_code_review_with_a_reviewer() {
-    // Otra variante en español.
+    // Another Spanish variant.
     let t = tags::classify("el revisor aprobó los cambios tras revisarlos").unwrap();
     assert!(t.contains(&"code-review".to_string()), "tags: {t:?}");
 }

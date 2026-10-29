@@ -1,23 +1,24 @@
-//! El servidor MCP no puede pagar el heap del tokenizador (~54 MB) por una
-//! sesión que nunca busca ni guarda. Este test mide memoria real del
-//! proceso, no la infiere: arranca `mem serve` con un paquete instalado de
-//! verdad, lee `VmRSS` de `/proc/<pid>/status` en dos momentos, y comprueba
-//! que el paquete se abre recién en la primera `search_memory`, no antes.
+//! The MCP server cannot pay for the tokenizer's heap (~54 MB) on a session
+//! that never searches nor saves. This test measures the process's real
+//! memory rather than inferring it: it starts `mem serve` with a genuinely
+//! installed pack, reads `VmRSS` from `/proc/<pid>/status` at two moments,
+//! and checks the pack is opened only on the first `search_memory`, not
+//! before.
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
-/// El paquete real de prueba (22,5 MB, en-es) que deja el banco de pruebas.
-/// No es parte de este repo: si no está, el test se salta en vez de fallar,
-/// porque su ausencia no dice nada sobre si el código anda.
+/// The real test pack (22.5 MB, en-es) the test bench leaves behind. It is
+/// not part of this repo: when absent the test skips rather than fails,
+/// because its absence says nothing about whether the code works.
 const PAQUETE_REAL: &str = "/home/alguien/anathem-bench/exp/en-es.anathem-pack";
 
 fn mem(db: &Path, args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_mem")).arg("--db").arg(db).args(args).output().unwrap()
 }
 
-/// Lee `VmRSS` (memoria residente real, en kB) de `/proc/<pid>/status`.
+/// Reads `VmRSS` (real resident memory, in kB) from `/proc/<pid>/status`.
 #[cfg(target_os = "linux")]
 fn vmrss_kb(pid: u32) -> u64 {
     let content = std::fs::read_to_string(format!("/proc/{pid}/status"))
@@ -90,11 +91,11 @@ fn the_server_opens_the_pack_only_on_the_first_search() {
     let resp = leer_linea(&mut out_text);
     assert!(resp.contains("search_memory"), "tools/list no respondió bien: {resp}");
 
-    // Con un paquete instalado, `initialize` y `tools/list` no lo necesitan:
-    // ninguna de las dos tools que exponen se llamó todavía. El umbral es
-    // holgado a propósito (el proceso sin paquete abierto mide ~7 MB; el
-    // heap del tokenizador solo, ~54 MB más) para no ser frágil frente al
-    // ruido normal de RSS.
+    // With a pack installed, `initialize` and `tools/list` do not need it:
+    // neither of the two tools they expose has been called yet. The
+    // threshold is deliberately generous (the process with no pack open
+    // measures ~7 MB; the tokenizer's heap alone, ~54 MB more) so as not to
+    // be brittle against the normal noise in RSS.
     let rss_antes = vmrss_kb(pid);
     assert!(
         rss_antes < 25_000,
@@ -120,8 +121,8 @@ fn the_server_opens_the_pack_only_on_the_first_search() {
     matar(hijo);
 }
 
-/// Compañero del test de arriba para plataformas sin `/proc`: no desaparece
-/// del conteo de tests, solo dice por qué no corre.
+/// Companion to the test above for platforms without `/proc`: it does not
+/// vanish from the test count, it just says why it does not run.
 #[test]
 #[cfg(not(target_os = "linux"))]
 fn the_server_opens_the_pack_only_on_the_first_search() {
@@ -134,10 +135,10 @@ fn the_server_opens_the_pack_only_on_the_first_search() {
 #[cfg(target_os = "linux")]
 #[test]
 fn it_warns_on_startup_when_the_registered_pack_is_gone() {
-    // La apertura perezosa hace que una sesión que solo lista tags nunca
-    // abra el paquete, y por lo tanto nunca descubra que falta. Comprobar
-    // que el archivo exista cuesta un `stat`, así que ese caso se detecta
-    // al arrancar sin pagar la apertura.
+    // Lazy opening means a session that only lists tags never opens the
+    // pack, and so never finds out it is missing. Checking that the file
+    // exists costs one `stat`, so that case is caught on startup without
+    // paying for the open.
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("m.db");
     let conn = anathem::db::open(&db).unwrap();

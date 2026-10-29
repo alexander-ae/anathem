@@ -1,5 +1,5 @@
-//! El export tiene que poder volver: restaurar un respaldo, mudar la memoria
-//! de máquina, sincronizar dos computadoras a mano con git.
+//! The export has to be able to come back: restoring a backup, moving the
+//! memory to another machine, syncing two computers by hand with git.
 
 use anathem::{db, import, ingest};
 use std::path::Path;
@@ -31,7 +31,7 @@ fn a_whole_database_survives_the_round_trip() {
         ingest::save_explicit(&conn, "primera nota con ticket ABC-1", "uno", vec!["alfa".into()])
             .unwrap();
         ingest::save_explicit(&conn, "segunda nota del proyecto dos", "dos", vec![]).unwrap();
-        // Una cadena de supersession, que es lo que obliga a remapear ids.
+        // A supersession chain, which is what forces ids to be remapped.
         ingest::save_with_topic(&conn, "version vieja del estado", "uno", vec![], Some("estado"), None)
             .unwrap();
         ingest::save_with_topic(&conn, "version nueva del estado", "uno", vec![], Some("estado"), None)
@@ -48,7 +48,7 @@ fn a_whole_database_survives_the_round_trip() {
 
     assert_eq!(counts(&source), counts(&target), "la base importada tiene que ser equivalente");
 
-    // Y se puede buscar: los triggers del índice FTS5 corrieron.
+    // And it is searchable: the FTS5 index triggers ran.
     let (ok, out, _) = mem(&target, &["search", "segunda nota"]);
     assert!(ok);
     assert!(out.contains("segunda nota"), "la búsqueda no encuentra lo importado: {out}");
@@ -65,12 +65,12 @@ fn importing_onto_a_nonempty_database_is_rejected_without_merge() {
     let exp = d.path().join("exp");
     mem(&source, &["export", "--out", exp.to_str().unwrap()]);
 
-    // La misma base, que ya tiene contenido.
+    // The same database, which already has content.
     let (ok, _, err) = mem(&source, &["import", "--desde", exp.to_str().unwrap()]);
     assert!(!ok, "tenía que negarse: importar encima duplicaría todo");
     assert!(err.contains("--fusionar"), "el error tiene que decir la salida: {err}");
 
-    // Con --fusionar sí, y no duplica lo que ya estaba.
+    // With --fusionar it does, and it does not duplicate what was there.
     let (ok, out, err) = mem(&source, &["import", "--desde", exp.to_str().unwrap(), "--fusionar"]);
     assert!(ok, "{err}");
     assert!(out.contains("importadas 0"), "no tenía que insertar nada: {out}");
@@ -112,8 +112,8 @@ fn the_fields_export_writes_are_read_back() {
     assert_eq!(m.refs, vec![("ticket".to_string(), "ABC-1".to_string())]);
     assert_eq!(m.body, "el cuerpo de la memoria");
 
-    // Sin frontmatter no es una memoria.
+    // With no frontmatter it is not a memory.
     assert!(import::parse("solo texto suelto").is_none());
-    // Con frontmatter pero sin proyecto tampoco.
+    // Nor is it with frontmatter but no project.
     assert!(import::parse("---\nid: 1\n---\n\ncuerpo\n").is_none());
 }

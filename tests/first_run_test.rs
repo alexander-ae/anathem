@@ -1,6 +1,6 @@
-//! Lo que encuentra alguien que instala anathem por primera vez.
-//! Estos tests invocan el binario real: si la experiencia del primer día se
-//! rompe, fallan aunque la biblioteca esté perfecta.
+//! What someone installing anathem for the first time runs into.
+//! These tests invoke the real binary: if the first-day experience breaks,
+//! they fail even with the library in perfect shape.
 
 use std::process::Command;
 
@@ -14,8 +14,8 @@ fn mem(db: &std::path::Path, args: &[&str]) -> (String, String, bool) {
     )
 }
 
-/// Buscar en una base vacía debe DECIRLO. Antes no imprimía nada, así que
-/// era indistinguible de un binario roto.
+/// Searching an empty database has to SAY SO. It used to print nothing,
+/// which was indistinguishable from a broken binary.
 #[test]
 fn a_search_with_no_results_says_so() {
     let dir = tempfile::tempdir().unwrap();
@@ -26,8 +26,8 @@ fn a_search_with_no_results_says_so() {
     assert!(!out.trim().is_empty(), "search no imprimió nada; el usuario no puede saber si funcionó");
 }
 
-/// `eval` sin eval set debe explicar qué es y cómo armarlo, no devolver un
-/// error de archivo no encontrado.
+/// `eval` without an eval set has to explain what one is and how to build
+/// it, not return a file-not-found error.
 #[test]
 fn eval_without_a_set_explains_what_is_missing() {
     let dir = tempfile::tempdir().unwrap();
@@ -41,7 +41,7 @@ fn eval_without_a_set_explains_what_is_missing() {
         "el mensaje no explica qué es un eval set: {todo}");
 }
 
-/// El ciclo mínimo del primer día: guardar algo y encontrarlo.
+/// The minimal first-day cycle: save something and find it.
 #[test]
 fn the_minimal_cycle_works_with_nothing_configured() {
     let dir = tempfile::tempdir().unwrap();
@@ -56,9 +56,9 @@ fn the_minimal_cycle_works_with_nothing_configured() {
 
 #[test]
 fn the_search_budget_can_be_raised() {
-    // Sin esto no hay forma de inspeccionar más candidatos de los que entran
-    // en el contexto de un agente, que es justo lo que hace falta para medir
-    // si conviene devolver más y más cortos.
+    // Without this there is no way to inspect more candidates than fit in an
+    // agent's context, which is exactly what is needed to measure whether
+    // returning more and shorter ones pays off.
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("m.db");
     let mem = |args: &[&str]| {

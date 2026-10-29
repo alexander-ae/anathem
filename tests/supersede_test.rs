@@ -49,7 +49,7 @@ fn it_does_not_propose_itself() {
             "se propuso a sí misma: {c:?}");
 }
 
-// -- I1: `link` con `nueva` inexistente ------------------------------------
+// -- I1: `link` with a missing `newer` -------------------------------------
 
 #[test]
 fn link_with_a_missing_newer_one_fails_and_leaves_the_older_alone() {
@@ -61,9 +61,9 @@ fn link_with_a_missing_newer_one_fails_and_leaves_the_older_alone() {
         .expect_err("link con nueva inexistente debe fallar, no reportar éxito");
     assert!(err.to_string().contains("999999"), "mensaje inesperado: {err}");
 
-    // vieja no debe quedar huérfana: ni marcada superseded ni con
-    // supersedes_id, porque la llamada entera debe abortar antes de tocar
-    // la base.
+    // the older one must not be left orphaned: neither marked superseded
+    // nor carrying a supersedes_id, because the whole call has to abort
+    // before touching the database.
     let (status, supersedes): (String, Option<i64>) = conn.query_row(
         "select status, supersedes_id from memories where id = ?1",
         [older],
@@ -73,7 +73,7 @@ fn link_with_a_missing_newer_one_fails_and_leaves_the_older_alone() {
     assert_eq!(supersedes, None);
 }
 
-// -- I2: `link` no debe permitir armar un ciclo -----------------------------
+// -- I2: `link` must not allow building a cycle -----------------------------
 
 #[test]
 fn link_refuses_to_close_a_two_step_cycle() {
@@ -101,7 +101,7 @@ fn link_refuses_to_close_a_two_step_cycle() {
     assert_eq!(activos, 1, "el ciclo dejó sin ninguna versión activa (o dos)");
 }
 
-// -- I3: candidates() por id, no por contenido, con un caso que distingue --
+// -- I3: candidates() by id, not by content, with a case that tells them apart --
 
 #[test]
 fn candidates_does_not_discard_preexisting_duplicates_from_the_same_project() {
@@ -109,23 +109,23 @@ fn candidates_does_not_discard_preexisting_duplicates_from_the_same_project() {
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let text = "El endpoint de boletas duplica el cobro de cuota mensual";
 
-    // dos memorias activas preexistentes, mismo proyecto, cuerpo idéntico
-    // entre sí -- el caso real es 17/18, pero esas están en proyectos
-    // distintos; acá lo reproducimos en un mismo proyecto a propósito, que
-    // es el caso que la regla por id debe cubrir aunque hoy no esté en el
-    // corpus migrado.
+    // two preexisting active memories, same project, bodies identical to
+    // each other -- the real case is 17/18, but those are in different
+    // projects; here we reproduce it within one project on purpose, which is
+    // the case the by-id rule has to cover even if it is not in today's
+    // migrated corpus.
     let dup_a = seed(&conn, "dup_a", text);
     let dup_b = seed(&conn, "dup_b", text);
-    // una tercera, recién insertada, con el mismo cuerpo -- es la que
-    // candidates() debe tratar como "self" y excluir.
+    // a third one, freshly inserted, with the same body -- it is the one
+    // candidates() has to treat as "self" and exclude.
     let recien_insertada = seed(&conn, "nueva", text);
 
     let c = supersede::candidates(&conn, text, "p", 5).unwrap();
 
-    // la regla anterior (excluir por cuerpo idéntico al query) habría
-    // descartado dup_a, dup_b Y recien_insertada -- las tres tienen el
-    // mismo cuerpo que el query -- dejando `c` sin ninguno de los
-    // duplicados reales. La regla por id solo descarta la de mayor id.
+    // the previous rule (exclude by body identical to the query) would have
+    // discarded dup_a, dup_b AND the freshly inserted one -- all three share
+    // the query's body -- leaving `c` without either of the real duplicates.
+    // The by-id rule discards only the one with the highest id.
     assert!(c.iter().any(|h| h.memory_id == dup_a), "no propuso dup_a: {c:?}");
     assert!(c.iter().any(|h| h.memory_id == dup_b), "no propuso dup_b: {c:?}");
     assert!(c.iter().all(|h| h.memory_id != recien_insertada),

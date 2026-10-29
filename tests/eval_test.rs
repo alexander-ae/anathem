@@ -30,7 +30,7 @@ fn it_computes_metrics_over_a_known_fixture() {
 
     let r = evalrun::run(&conn, &es, "anathem bm25", &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(r.n_cases, 3);
-    // q1 y q2 aciertan en rango 1; q3 no acierta
+    // q1 and q2 hit at rank 1; q3 does not hit
     assert!((r.recall_at_5 - 2.0 / 3.0).abs() < 1e-9, "recall@5 = {}", r.recall_at_5);
     assert!((r.mrr - 2.0 / 3.0).abs() < 1e-9, "MRR = {}", r.mrr);
     assert_eq!(r.per_case.len(), 3);
@@ -40,15 +40,16 @@ fn it_computes_metrics_over_a_known_fixture() {
 
 #[test]
 fn a_hit_without_an_ext_id_is_not_dropped_from_the_rank_count() {
-    // Regresión I1: un memory sin ext_id (p.ej. creado por save_memory del MCP,
-    // no por `migrate`) que rankea mejor que el match esperado no debe correr el
-    // rango reportado hacia arriba. `first_rank` debe reflejar la posición real
-    // dentro de `hits`, no la posición dentro de la lista ya filtrada por ext_id.
+    // Regression I1: a memory with no ext_id (created by MCP's save_memory,
+    // say, and not by `migrate`) that ranks above the expected match must not
+    // push the reported rank upward. `first_rank` has to reflect the real
+    // position within `hits`, not the position within the list already
+    // filtered by ext_id.
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
 
-    // Sin ext_id, mucho más corto y con más repeticiones del término de la
-    // query: bm25 lo puntúa mejor (más negativo) que el documento objetivo.
+    // No ext_id, far shorter and with more repetitions of the query's term:
+    // bm25 scores it better (more negative) than the target document.
     ingest::insert(&conn, &NewMemory {
         project: "p".into(), title: "gato".into(),
         body: "gato gato gato gato gato".into(),
@@ -56,8 +57,8 @@ fn a_hit_without_an_ext_id_is_not_dropped_from_the_rank_count() {
         source: "explicit".into(), ext_id: None,
         tags: vec![], refs: vec![],
     }).unwrap();
-    // El documento objetivo: mismo término, pero diluido en un cuerpo más
-    // largo, así que bm25 lo puntúa peor y cae detrás del anterior.
+    // The target document: the same term, but diluted in a longer body, so
+    // bm25 scores it worse and it falls behind the previous one.
     ingest::insert(&conn, &NewMemory {
         project: "p".into(), title: "gato".into(),
         body: "gato relleno relleno relleno relleno relleno relleno relleno relleno relleno".into(),
@@ -73,8 +74,8 @@ fn a_hit_without_an_ext_id_is_not_dropped_from_the_rank_count() {
 
     let r = evalrun::run(&conn, &es, "anathem bm25", &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(r.per_case.len(), 1);
-    // El hit sin ext_id ocupa el rango 1 sin matchear nunca; el objetivo
-    // aparece en rango 2, no en rango 1.
+    // The hit with no ext_id takes rank 1 without ever matching; the target
+    // shows up at rank 2, not rank 1.
     assert_eq!(
         r.per_case[0].first_rank,
         Some(2),

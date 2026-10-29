@@ -1,5 +1,5 @@
-//! Ronda de arreglos 1 de Task 5: un paquete corrupto no puede tumbar la
-//! búsqueda. Este test invoca el binario real, así como `primer_uso_test.rs`.
+//! Task 5, fix round 1: a corrupt pack cannot bring search down. This test
+//! invokes the real binary, as `first_run_test.rs` does.
 
 use std::process::Command;
 
@@ -13,10 +13,10 @@ fn mem(db: &std::path::Path, args: &[&str]) -> (String, String, bool) {
     )
 }
 
-/// Simula una instalación corrupta o a medio escribir del paquete: la fila
-/// de `meta` dice que hay un paquete `mini-es`, pero el archivo que debería
-/// contenerlo es basura. Buscar no puede fallar por eso: tiene que avisar
-/// por stderr y seguir devolviendo resultados de bm25.
+/// Simulates a corrupt or half-written install of the pack: the `meta` row
+/// says there is a `mini-es` pack, but the file that should hold it is
+/// garbage. Search cannot fail over that: it has to warn on stderr and go on
+/// returning bm25 results.
 #[test]
 fn a_corrupt_pack_degrades_to_bm25_without_breaking_search() {
     let dir = tempfile::tempdir().unwrap();

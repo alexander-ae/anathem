@@ -85,9 +85,10 @@ fn the_search_is_recorded_in_the_log() {
 
 #[test]
 fn search_memory_respects_the_requested_limit() {
-    // Sin `limit` no hay forma de pedirle al servidor más candidatos de los
-    // diez por defecto, que es el parámetro que hace falta poder mover para
-    // evaluar si conviene devolver más y más cortos.
+    // With no `limit` there is no way to ask the server for more than the
+    // default ten candidates, which is the parameter that has to be movable
+    // in order to evaluate whether returning more and shorter ones pays
+    // off.
     let (_d, conn) = fixture_with_several();
     let ctx = search::SearchContext::bm25_only();
     let pedir = |n: u64| {
@@ -120,9 +121,10 @@ fn fixture_with_several() -> (tempfile::TempDir, rusqlite::Connection) {
 
 #[test]
 fn search_memory_returns_twenty_candidates_by_default() {
-    // Sin `limit` explícito, la tool tiene que usar `Config::default().candidatos`
-    // (20) y no los 10 de antes: es la mitad del cambio de diseño (candidatos
-    // más numerosos, extracto más corto, mismo presupuesto).
+    // With no explicit `limit`, the tool has to use
+    // `Config::default().candidates` (20) and not the earlier 10: it is half
+    // of the design change (more numerous candidates, shorter excerpt, same
+    // budget).
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     for i in 0..25 {

@@ -10,7 +10,7 @@ fn empty_conn() -> (tempfile::TempDir, rusqlite::Connection) {
 #[test]
 fn mark_follow_up_does_not_match_by_substring() {
     let (_d, conn) = empty_conn();
-    // returned_ids contiene "131" y "132" pero nunca el id "1" como entrada propia.
+    // returned_ids holds "131" and "132" but never the id "1" as an entry of its own.
     conn.execute(
         "insert into search_log (ts, query, project, returned_ids, budget_used)
          values ('2026-09-22T00:00:00', 'q', null, ?1, 0)",
