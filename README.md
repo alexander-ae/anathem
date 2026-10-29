@@ -152,6 +152,7 @@ búsqueda es solo léxica. El instalador lo baja solo; a mano se instala con
 | `topics` | Lista las claves de tema: proyecto, cuántas memorias tuvo cada una y el id de la vigente | `mem topics` |
 | `edit <id>` | Edita el cuerpo de una memoria en `$EDITOR` | `mem edit 42` |
 | `export --out <dir>` | Exporta todo a markdown con frontmatter, un archivo por memoria, sin perder nada ([formato](docs/formato-de-export.md)) | `mem export --out export/` |
+| `import --desde <dir>` | Lee lo que escribió `export`: restaurar un respaldo, mudar la memoria de máquina, o sincronizar dos computadoras a mano con git. Exige una base vacía salvo que pases `--fusionar`, que agrega solo lo que falte | `mem import --desde export/` |
 | `reindex` | Reconstruye chunks y el índice FTS5 desde `memories.body` | `mem reindex` |
 | `supersede <nueva> <vieja>` | Marca `vieja` como reemplazada por `nueva`; deja de salir en búsquedas | `mem supersede 42 43` |
 | `pin <id>` | Fija una memoria para que sobreviva el recorte de candidatos de la búsqueda | `mem pin 17` |

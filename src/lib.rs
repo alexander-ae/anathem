@@ -7,6 +7,7 @@ pub mod edit;
 pub mod evalrun;
 pub mod export;
 pub mod fusion;
+pub mod importar;
 pub mod ingest;
 pub mod logsearch;
 pub mod maint;

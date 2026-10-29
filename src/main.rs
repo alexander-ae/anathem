@@ -133,6 +133,17 @@ enum Cmd {
     History {
         id: i64,
     },
+    /// Importa lo que escribió `mem export`: restaurar, mudar de máquina o
+    /// sincronizar dos computadoras a mano
+    Import {
+        /// Carpeta que escribió `mem export --out`
+        #[arg(long)]
+        desde: PathBuf,
+        /// Importar sobre una base que ya tiene memorias, agregando solo lo
+        /// que falte
+        #[arg(long)]
+        fusionar: bool,
+    },
     /// Comprueba si hay una versión más nueva publicada
     ///
     /// Consulta la red solo cuando lo pedís: anathem no habla con ningún
@@ -483,6 +494,17 @@ fn ejecutar(cli: Cli) -> Result<()> {
                     let vigente = t.vigente.map_or("ninguna".to_string(), |v| v.to_string());
                     println!("{:<ancho_p$}  {:<ancho_t$}  {:>8}  {vigente}", t.project, t.topic, t.total);
                 }
+            }
+        }
+        Cmd::Import { desde, fusionar } => {
+            let conn = anathem::db::open(&path)?;
+            let r = anathem::importar::importar(&conn, &desde, fusionar)?;
+            println!(
+                "importadas {} memorias, {} omitidas por estar ya, {} cadenas de supersession rearmadas",
+                r.insertadas, r.omitidas, r.cadenas
+            );
+            if r.insertadas > 0 {
+                println!("Si tenés paquete de vocabulario, corré `mem reindex` para los vectores.");
             }
         }
         Cmd::Update => {
