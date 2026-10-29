@@ -53,11 +53,11 @@ fn tool_defs() -> Value {
     ])
 }
 
-/// ` [tema: clave]` si la memoria tiene clave de tema, o vacío. Se muestra en
-/// la búsqueda y en `get_memory` porque es la única manera de que el modelo
-/// sepa qué clave reutilizar al guardar la corrección de lo que acaba de
-/// encontrar: sin verla tendría que adivinarla, y una clave adivinada que no
-/// coincide no reemplaza nada.
+/// ` [tema: key]` when the memory has a topic key, or empty. It is shown in
+/// search and in `get_memory` because it is the only way for the model to
+/// know which key to reuse when saving a correction to what it just found:
+/// without seeing it, it would have to guess, and a guessed key that does
+/// not match replaces nothing.
 fn etiqueta_de_tema(conn: &Connection, id: i64) -> String {
     let t: Option<String> = conn
         .query_row("select topic from memories where id = ?1", [id], |r| r.get(0))
@@ -86,13 +86,13 @@ fn call_tool(
             let q = search::Query {
                 text: text.clone(), project: project.clone(),
                 tags: tags_arg,
-                // `limit` sigue pudiendo pisar por llamada el default de
-                // `cfg.candidatos` (20), igual que antes pisaba al 10 fijo.
+                // `limit` can still override `cfg.candidates` (20) per
+                // call, just as it used to override the fixed 10.
                 limit: args["limit"].as_u64().map(|l| l as usize).unwrap_or(cfg.candidates),
                 budget_tokens: budget,
-                // El recorte a `cfg.extracto` caracteres es lo que hace que
-                // entren muchos candidatos breves en el mismo presupuesto de
-                // tokens en vez de pocos fragmentos completos.
+                // Trimming to `cfg.excerpt` characters is what lets many
+                // short candidates fit in the same token budget instead of a
+                // few full snippets.
                 excerpt: Some(cfg.excerpt),
             };
             let hits = search::run(conn, &q, ctx)?;
@@ -118,11 +118,12 @@ fn call_tool(
             if text.trim().is_empty() {
                 return Ok(text_result("No se guardó: el texto está vacío.".into()));
             }
-            // Sin `project`, se deriva del repositorio donde corre el
-            // servidor. El agente lo lanza parado en el proyecto, así que el
-            // directorio de trabajo es la señal correcta — y es mejor que
-            // pedirle al modelo que lo invente, que es como el sistema
-            // anterior terminó con todo en un único contenedor de relleno.
+            // With no `project`, it is derived from the repository the
+            // server runs in. The agent launches it standing in the project,
+            // so the working directory is the right signal — and a better
+            // one than asking the model to invent it, which is how the
+            // previous system ended up with everything in a single filler
+            // container.
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let project = crate::project::resolve(
                 args["project"].as_str().map(str::to_string), &cwd);
@@ -130,14 +131,14 @@ fn call_tool(
                 a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()
             }).unwrap_or_default();
             let project_for_lookup = project.clone();
-            // Una clave vacía (el modelo la manda "por las dudas") es lo
-            // mismo que no mandarla: guardar normal, sin reemplazar nada. La
-            // CLI, en cambio, rechaza `--topic ""`: ahí quien lo escribe lo
-            // puso a propósito (o una variable de shell vacía) y guardar sin
-            // clave en silencio sería ocultarle que no se aplicó.
+            // An empty key (the model sends it "just in case") is the same
+            // as not sending one: save normally, replacing nothing. The CLI,
+            // by contrast, rejects `--topic ""`: there whoever typed it did
+            // so on purpose (or an empty shell variable did), and saving
+            // without a key silently would hide that it was not applied.
             let topic = args["topic"].as_str().map(str::trim).filter(|t| !t.is_empty());
-            // `supersedes` puede llegar como número o como texto ("12"): los
-            // modelos mezclan los dos.
+            // `supersedes` can arrive as a number or as text ("12"): models
+            // mix the two.
             let supersedes = match &args["supersedes"] {
                 Value::Null => None,
                 v => match v.as_i64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok())) {
@@ -152,8 +153,9 @@ fn call_tool(
             let g = match ingest::save_with_topic_by(
                 conn, text, &project, tags_dados, topic, supersedes, agent) {
                 Ok(g) => g,
-                // Un pedido que no se puede cumplir no es un error interno:
-                // el modelo tiene que leer qué corregir, y no se guardó nada.
+                // A request that cannot be fulfilled is not an internal
+                // error: the model has to read what to fix, and nothing was
+                // saved.
                 Err(e) => match e.downcast_ref::<ingest::BadRequest>() {
                     Some(p) => return Ok(text_result(format!("No se guardó: {p}"))),
                     None => return Err(e),
@@ -163,16 +165,16 @@ fn call_tool(
             let title = ingest::title_from(text);
             let aviso_tema = g.describe().map(|m| format!("\n{m}")).unwrap_or_default();
 
-            // `PaqueteVivo` revalidó el paquete al empezar el mensaje, pero
-            // embeber un backlog grande puede llevar minutos y en ese rato
-            // otra terminal instala lo que quiera: por eso `sincronizar`
-            // recibe la identidad y la vuelve a comprobar en cada lote.
+            // `LivePack` revalidated the pack when the message began, but
+            // embedding a large backlog can take minutes and in that time
+            // another terminal can install whatever it likes: that is why
+            // `sync` receives the identity and rechecks it on every batch.
             if let Some((p, identidad)) = ctx.para_escribir() {
                 if crate::vecstore::sync(conn, p, identidad)?.abandonada() {
-                    // El guardado salió bien y eso es lo que el agente tiene
-                    // que oír; el hueco de vectores lo cierra la próxima
-                    // escritura o un `mem reindex`. Devolver un error acá
-                    // sería reportar como fallido un guardado exitoso.
+                    // The save succeeded and that is what the agent needs
+                    // to hear; the vector gap is closed by the next write or
+                    // a `mem reindex`. Returning an error here would report
+                    // a successful save as failed.
                     eprintln!(
                         "anathem: el paquete de vocabulario cambió mientras se indexaba; \
                          se abandonó el lote para no mezclar dos paquetes. Quedan \
@@ -243,7 +245,8 @@ fn call_tool(
     }
 }
 
-/// Procesa una petición. Devuelve `None` para notificaciones (sin `id`).
+/// Handles one request. Returns `None` for notifications (those with no
+/// `id`).
 pub fn handle(
     conn: &Connection,
     ctx: &search::Contexto,
@@ -254,13 +257,13 @@ pub fn handle(
     handle_con_agente(conn, ctx, cfg, req, &mut sin_agente)
 }
 
-/// Igual que `handle`, recordando qué cliente está del otro lado.
+/// Same as `handle`, remembering which client is on the other side.
 ///
-/// El protocolo obliga al cliente a decir quién es en el `initialize`
-/// (`clientInfo.name`), así que saber si esto lo escribió Claude Code o
-/// opencode no cuesta configuración ninguna: alcanza con no tirar ese dato.
-/// `serve` guarda el nombre entre mensajes, porque el `initialize` llega una
-/// sola vez y los `tools/call` vienen después.
+/// The protocol requires the client to say who it is in `initialize`
+/// (`clientInfo.name`), so knowing whether Claude Code or opencode wrote
+/// this costs no configuration at all: it is enough not to throw that away.
+/// `serve` keeps the name between messages, because `initialize` arrives
+/// once and the `tools/call`s come afterwards.
 pub fn handle_con_agente(
     conn: &Connection,
     ctx: &search::Contexto,
@@ -284,9 +287,9 @@ pub fn handle_con_agente(
                     *agent = Some(n.chars().take(60).collect());
                 }
             }
-            // El proyecto se deriva del directorio donde el agente lanzó el
-            // servidor, igual que al guardar: es la señal correcta y no
-            // depende de que el modelo lo adivine.
+            // The project is derived from the directory the agent launched
+            // the server in, same as when saving: it is the right signal and
+            // it does not depend on the model guessing.
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let project = crate::project::resolve(None, &cwd);
             let traspaso = crate::recent::handoff_instructions(
@@ -316,39 +319,39 @@ pub fn handle_con_agente(
     Ok(Some(res))
 }
 
-/// Bucle de servidor sobre stdin/stdout. Todo diagnóstico va a stderr.
+/// The server loop over stdin/stdout. All diagnostics go to stderr.
 ///
-/// El paquete **no** se resuelve una sola vez al arrancar. El servidor vive
-/// horas, y en ese rato otra terminal puede correr `mem model install` o
-/// `mem model remove`: un servidor que se quedara con el paquete del
-/// arranque escribiría vectores del paquete viejo junto a los del nuevo, y
-/// con el formato fijando 256 dimensiones para todo paquete nada en el blob
-/// los distinguiría. `PaqueteVivo` revalida el registro antes de cada
-/// operación que use el paquete —una consulta a `meta`— y solo reabre el
-/// archivo, que cuesta entre 40 y 120 ms y unos 54 MB de heap del
-/// tokenizador, cuando la identidad cambió de verdad.
+/// The pack is **not** resolved once at startup. The server lives for hours,
+/// and in that time another terminal can run `mem model install` or `mem
+/// model remove`: a server holding on to the pack it started with would
+/// write the old pack's vectors next to the new one's, and with the format
+/// fixing 256 dimensions for every pack nothing in the blob would tell them
+/// apart. `LivePack` revalidates the registry before every operation that
+/// uses the pack — one query against `meta` — and only reopens the file,
+/// which costs between 40 and 120 ms and some 54 MB of tokenizer heap, when
+/// the identity really changed.
 ///
-/// Esa apertura tampoco pasa al arrancar ni en cada mensaje: `search_memory`
-/// y `save_memory` son las únicas tools que usan el paquete
-/// (`get_memory`, `list_tags`, `initialize` y `tools/list` no), así que acá
-/// se le pide el paquete a `vivo` solo cuando el mensaje es una llamada a una
-/// de esas dos. Una sesión que nunca busca ni guarda nunca paga ese heap.
+/// That open does not happen at startup or on every message either:
+/// `search_memory` and `save_memory` are the only tools that use the pack
+/// (`get_memory`, `list_tags`, `initialize` and `tools/list` do not), so the
+/// pack is requested from `live` only when the message is a call to one of
+/// those two. A session that never searches or saves never pays that heap.
 pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
     let mut vivo = crate::packstore::LivePack::new_id(dir);
-    // Quién está del otro lado, según el `initialize`. Se recuerda entre
-    // mensajes porque ese handshake llega una vez y los guardados vienen
-    // después.
+    // Who is on the other side, according to `initialize`. It is remembered
+    // between messages because that handshake arrives once and the saves
+    // come afterwards.
     let mut agent: Option<String> = None;
-    // El paquete se abre recién cuando alguien busca o guarda, así que una
-    // sesión que nunca lo use no vería que desapareció. Este chequeo cuesta
-    // un `stat` y cubre ese caso al arrancar.
+    // The pack is opened only when someone searches or saves, so a session
+    // that never uses it would not notice it vanished. This check costs one
+    // `stat` and covers that case at startup.
     crate::packstore::warn_if_file_missing(conn, dir);
     let mut stdout = std::io::stdout();
 
-    // Leer en otro hilo y esperar con plazo. Un `for line in stdin` se queda
-    // bloqueado para siempre entre mensajes, y una sesión quieta es
-    // justamente la que tiene que soltar el paquete: sin despertar, nunca
-    // llegaría a hacerlo.
+    // Read on another thread and wait with a deadline. A `for line in
+    // stdin` stays blocked forever between messages, and a quiet session is
+    // precisely the one that has to release the pack: without waking up, it
+    // would never get to.
     let (tx, rx) = std::sync::mpsc::channel::<std::io::Result<String>>();
     std::thread::spawn(move || {
         let entrada = std::io::stdin();
@@ -360,8 +363,8 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
     });
 
     let limit_ = std::time::Duration::from_secs(cfg.soltar_paquete_tras);
-    // Mirar más seguido que el plazo para no estirarlo al doble, pero no
-    // tanto como para despertar por gusto en una sesión que no hace nada.
+    // Check more often than the deadline so it is not stretched to double,
+    // but not so often that a session doing nothing wakes for no reason.
     let intervalo = if limit_.is_zero() {
         std::time::Duration::from_secs(60)
     } else {
@@ -384,8 +387,8 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
                 }
                 continue;
             }
-            // El hilo lector terminó: se cerró stdin, que es como el cliente
-            // avisa que se va.
+            // The reader thread finished: stdin was closed, which is how
+            // the client says it is leaving.
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
         };
         if line.trim().is_empty() {
