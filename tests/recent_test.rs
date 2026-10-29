@@ -24,7 +24,7 @@ fn mem(dir: &Path, args: &[&str]) -> (bool, String, String) {
 }
 
 /// Sets `created_ts` by hand so ordering and filtering need no waiting.
-fn fechar(conn: &Connection, id: i64, ts: &str) {
+fn set_date(conn: &Connection, id: i64, ts: &str) {
     conn.execute("update memories set created_ts = ?2 where id = ?1", rusqlite::params![id, ts])
         .unwrap();
 }
@@ -63,8 +63,8 @@ fn the_newest_comes_first() {
     let conn = db::open(&d.path().join("mem.db")).unwrap();
     let old = ingest::save_explicit(&conn, "lo primero", "p", vec![]).unwrap().0;
     let new_id = ingest::save_explicit(&conn, "lo segundo", "p", vec![]).unwrap().0;
-    fechar(&conn, old, &hace(7200));
-    fechar(&conn, new_id, &hace(60));
+    set_date(&conn, old, &hace(7200));
+    set_date(&conn, new_id, &hace(60));
 
     let r = recent::list_recent(&conn, Some("p"), None, 10, 120).unwrap();
     let ids: Vec<i64> = r.iter().map(|x| x.id).collect();
@@ -77,8 +77,8 @@ fn the_window_leaves_out_what_came_before() {
     let conn = db::open(&d.path().join("mem.db")).unwrap();
     let dentro = ingest::save_explicit(&conn, "de hace un rato", "p", vec![]).unwrap().0;
     let fuera = ingest::save_explicit(&conn, "de anteayer", "p", vec![]).unwrap().0;
-    fechar(&conn, dentro, &hace(1800));
-    fechar(&conn, fuera, &hace(200_000));
+    set_date(&conn, dentro, &hace(1800));
+    set_date(&conn, fuera, &hace(200_000));
 
     let r = recent::list_recent(&conn, Some("p"), Some(3600), 10, 120).unwrap();
     let ids: Vec<i64> = r.iter().map(|x| x.id).collect();
@@ -110,8 +110,8 @@ fn superseded_and_forgotten_ones_do_not_show_up() {
         ingest::save_with_topic(&conn, "segunda version", "p", vec![], Some("estado"), None)
             .unwrap()
             .id;
-    let olvidada = ingest::save_explicit(&conn, "algo que se olvida", "p", vec![]).unwrap().0;
-    anathem::maint::forget(&conn, olvidada).unwrap();
+    let forgotten_one = ingest::save_explicit(&conn, "algo que se olvida", "p", vec![]).unwrap().0;
+    anathem::maint::forget(&conn, forgotten_one).unwrap();
 
     let r = recent::list_recent(&conn, Some("p"), None, 10, 120).unwrap();
     let ids: Vec<i64> = r.iter().map(|x| x.id).collect();
@@ -126,7 +126,7 @@ fn the_limit_trims_but_keeps_the_newest() {
     let mut ids = Vec::new();
     for i in 0..5 {
         let id = ingest::save_explicit(&conn, &format!("memoria {i}"), "p", vec![]).unwrap().0;
-        fechar(&conn, id, &hace(1000 - i * 100));
+        set_date(&conn, id, &hace(1000 - i * 100));
         ids.push(id);
     }
     let r = recent::list_recent(&conn, Some("p"), None, 2, 120).unwrap();
@@ -214,13 +214,13 @@ fn the_recent_memories_tool_exists_and_answers() {
 
     let lista = serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"});
     let res = mcp::handle(&conn, &ctx, &cfg, &lista).unwrap().unwrap();
-    let nombres: Vec<String> = res["result"]["tools"]
+    let names_: Vec<String> = res["result"]["tools"]
         .as_array()
         .unwrap()
         .iter()
         .map(|t| t["name"].as_str().unwrap().to_string())
         .collect();
-    assert!(nombres.contains(&"recent_memories".to_string()), "tools: {nombres:?}");
+    assert!(names_.contains(&"recent_memories".to_string()), "tools: {names_:?}");
 
     ingest::save_explicit(&conn, "algo reciente del proyecto", "p", vec![]).unwrap();
     let call = serde_json::json!({
@@ -358,7 +358,7 @@ fn a_quiet_project_spends_no_tokens_saying_nothing_happened() {
 
     // Nor with old memories: they fall outside the window.
     let id = ingest::save_explicit(&conn, "algo de la semana pasada", &project_of_cwd(), vec![]).unwrap().0;
-    fechar(&conn, id, &hace(700_000));
+    set_date(&conn, id, &hace(700_000));
     assert_eq!(instructions_for(&conn, &Config::default(), "claude-code"), None);
 }
 
@@ -368,9 +368,9 @@ fn it_can_be_turned_off_entirely() {
     let conn = db::open(&d.path().join("mem.db")).unwrap();
     ingest::save_explicit(&conn, "algo recién guardado", &project_of_cwd(), vec![]).unwrap();
 
-    let apagado = Config { handoff_items: 0, ..Config::default() };
+    let disabled = Config { handoff_items: 0, ..Config::default() };
     assert_eq!(
-        instructions_for(&conn, &apagado, "claude-code"),
+        instructions_for(&conn, &disabled, "claude-code"),
         None,
         "con traspaso_items en 0 no se manda nada"
     );
@@ -473,8 +473,8 @@ fn a_memory_can_neither_inject_lines_nor_take_over_the_prompt() {
     ingest::save_explicit(&conn, &veneno, &project_of_cwd(), vec![]).unwrap();
 
     let txt = instructions_for(&conn, &Config::default(), "claude-code").unwrap();
-    let notas = txt.lines().filter(|l| l.starts_with("- ")).count();
-    assert_eq!(notas, 1, "una memoria tiene que ocupar una sola línea:\n{txt}");
+    let notes_ = txt.lines().filter(|l| l.starts_with("- ")).count();
+    assert_eq!(notes_, 1, "una memoria tiene que ocupar una sola línea:\n{txt}");
     assert!(txt.len() < 1200, "el traspaso no puede ocupar el prompt entero: {} bytes", txt.len());
 }
 

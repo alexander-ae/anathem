@@ -99,20 +99,20 @@ impl Section {
     fn new(title: &'static str) -> Self {
         Section { title, lines: Vec::new() }
     }
-    fn agregar(&mut self, level: Level, text: impl Into<String>) {
+    fn add(&mut self, level: Level, text: impl Into<String>) {
         self.lines.push(Line { level, text: text.into() });
     }
     fn bien(&mut self, text: impl Into<String>) {
-        self.agregar(Level::Good, text);
+        self.add(Level::Good, text);
     }
     fn info(&mut self, text: impl Into<String>) {
-        self.agregar(Level::Info, text);
+        self.add(Level::Info, text);
     }
     fn warning(&mut self, text: impl Into<String>) {
-        self.agregar(Level::Warn, text);
+        self.add(Level::Warn, text);
     }
     fn mal(&mut self, text: impl Into<String>) {
-        self.agregar(Level::Bad, text);
+        self.add(Level::Bad, text);
     }
 }
 
@@ -178,8 +178,8 @@ pub fn diagnose(db: &Path) -> Informe {
     // thing.
     let dir = db.parent().unwrap_or(Path::new("."));
     let mut sections = vec![binary_section()];
-    let (seccion_base, conn) = database_section(db);
-    sections.push(seccion_base);
+    let (database_sec, conn) = database_section(db);
+    sections.push(database_sec);
     if let Some(conn) = &conn {
         sections.push(vector_section(conn, dir));
     }
@@ -577,21 +577,21 @@ fn pack_file_section(s: &mut Section, dir: &Path, name: &str, dims: usize) {
 }
 
 fn coverage(conn: &Connection, s: &mut Section, dims: usize) -> anyhow::Result<()> {
-    let (con, tot) = vecstore::coverage(conn, dims)?;
-    let vectores = entero(conn, "select count(*) from chunk_vectors")? as usize;
-    let inservibles = vectores.saturating_sub(con);
-    let nota = if inservibles > 0 {
-        format!(" ({inservibles} vectores no miden {dims} dimensiones y no se usan)")
+    let (covered, tot) = vecstore::coverage(conn, dims)?;
+    let vectors = entero(conn, "select count(*) from chunk_vectors")? as usize;
+    let unusable = vectors.saturating_sub(covered);
+    let nota = if unusable > 0 {
+        format!(" ({unusable} vectores no miden {dims} dimensiones y no se usan)")
     } else {
         String::new()
     };
-    if con == tot {
-        s.bien(format!("cobertura: {con}/{tot} fragmentos con vector usable{nota}"));
+    if covered == tot {
+        s.bien(format!("cobertura: {covered}/{tot} fragmentos con vector usable{nota}"));
     } else {
         s.mal(format!(
-            "coverage: {con}/{tot} fragmentos con vector usable; faltan {}{nota}. \
+            "coverage: {covered}/{tot} fragmentos con vector usable; faltan {}{nota}. \
              Corré `mem reindex`",
-            tot - con
+            tot - covered
         ));
     }
     Ok(())

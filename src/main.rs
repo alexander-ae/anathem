@@ -534,8 +534,8 @@ fn run(cli: Cli) -> Result<()> {
         }
         Cmd::History { id } => {
             let conn = anathem::db::open(&path)?;
-            let cadena = anathem::maint::history(&conn, id)?;
-            for (i, title, status) in cadena {
+            let chain = anathem::maint::history(&conn, id)?;
+            for (i, title, status) in chain {
                 println!("{i:5}  [{status:10}]  {title}");
             }
         }
@@ -576,14 +576,14 @@ fn run(cli: Cli) -> Result<()> {
                 ModelCmd::Status => match anathem::vecstore::registered_pack(&conn)? {
                     None => println!("sin paquete: la búsqueda usa solo bm25"),
                     Some((name, sha, dims)) => {
-                        let (con, tot) = anathem::vecstore::coverage(&conn, dims)?;
+                        let (covered, tot) = anathem::vecstore::coverage(&conn, dims)?;
                         let pack_path = anathem::packstore::pack_path(&dir, &name);
                         println!("paquete {name} ({dims} dimensiones, sha {})", &sha[..16.min(sha.len())]);
-                        println!("cobertura: {con}/{tot} fragmentos");
+                        println!("cobertura: {covered}/{tot} fragmentos");
                         if !pack_path.exists() {
                             println!("FALTA el archivo {}: la búsqueda está degradada a bm25", pack_path.display());
-                        } else if con < tot {
-                            println!("hay {} fragmentos sin vector usable; corré `mem reindex`", tot - con);
+                        } else if covered < tot {
+                            println!("hay {} fragmentos sin vector usable; corré `mem reindex`", tot - covered);
                         }
                         // `status` reads `meta` directly, without going
                         // through `resolve`, so it is the only command that

@@ -170,7 +170,7 @@ fn call_tool(
             // another terminal can install whatever it likes: that is why
             // `sync` receives the identity and rechecks it on every batch.
             if let Some((p, identity)) = ctx.for_writing() {
-                if crate::vecstore::sync(conn, p, identity)?.abandonada() {
+                if crate::vecstore::sync(conn, p, identity)?.abandoned() {
                     // The save succeeded and that is what the agent needs
                     // to hear; the vector gap is closed by the next write or
                     // a `mem reindex`. Returning an error here would report

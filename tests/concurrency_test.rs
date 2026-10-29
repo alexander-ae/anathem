@@ -4,7 +4,7 @@
 //! its own process, and none of them had two processes in its diff. These
 //! tests spawn real processes: one `mem` per terminal, as in real life.
 
-mod apoyo;
+mod support;
 
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -13,7 +13,7 @@ fn mem(db: &Path, args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_mem")).arg("--db").arg(db).args(args).output().unwrap()
 }
 
-fn lanzar(db: &Path, args: &[&str]) -> std::process::Child {
+fn spawn(db: &Path, args: &[&str]) -> std::process::Child {
     Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--db")
         .arg(db)
@@ -27,7 +27,7 @@ fn lanzar(db: &Path, args: &[&str]) -> std::process::Child {
 /// Seeds vectorless chunks straight into the database, so that no `mem` has
 /// synced them ahead of time. These are the "pending" ones that several
 /// processes will then fight over at once.
-fn seed_chunks_without_vectors(db: &Path, cuantos: usize) {
+fn seed_chunks_without_vectors(db: &Path, how_many: usize) {
     let conn = anathem::db::open(db).unwrap();
     conn.execute(
         "insert into memories (project, title, body, created, updated, source)
@@ -39,7 +39,7 @@ fn seed_chunks_without_vectors(db: &Path, cuantos: usize) {
     // In a single transaction: seeding tens of thousands of chunks one
     // commit per row would take longer than the scenario being measured.
     let tx = conn.unchecked_transaction().unwrap();
-    for i in 0..cuantos {
+    for i in 0..how_many {
         tx.execute(
             "insert into chunks (memory_id, ord, body) values (?1, ?2, ?3)",
             rusqlite::params![id, i as i64, format!("hola mundo numero {i}")],
@@ -65,7 +65,7 @@ fn concurrent_saves_neither_fail_nor_lose_vectors() {
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     assert!(mem(&db, &["init"]).status.success());
     assert!(mem(&db, &["model", "install", r.to_str().unwrap()]).status.success());
 
@@ -73,10 +73,10 @@ fn concurrent_saves_neither_fail_nor_lose_vectors() {
     // "write it" is not instantaneous.
     seed_chunks_without_vectors(&db, 600);
 
-    let hijos: Vec<_> = (0..6)
-        .map(|i| lanzar(&db, &["save", &format!("hola mundo guardado numero {i}")]))
+    let children: Vec<_> = (0..6)
+        .map(|i| spawn(&db, &["save", &format!("hola mundo guardado numero {i}")]))
         .collect();
-    for (i, h) in hijos.into_iter().enumerate() {
+    for (i, h) in children.into_iter().enumerate() {
         let o = h.wait_with_output().unwrap();
         assert!(
             o.status.success(),
@@ -86,10 +86,10 @@ fn concurrent_saves_neither_fail_nor_lose_vectors() {
     }
 
     let conn = rusqlite::Connection::open(&db).unwrap();
-    let guardadas: i64 = conn
+    let saved_ones: i64 = conn
         .query_row("select count(*) from memories where source = 'explicit'", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(guardadas, 6, "se tienen que haber guardado las seis memorias");
+    assert_eq!(saved_ones, 6, "se tienen que haber guardado las seis memorias");
     let sin_vector: i64 = conn
         .query_row(
             "select count(*) from chunks c
@@ -113,7 +113,7 @@ fn search_does_not_fail_even_when_it_cannot_reindex() {
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let a = d.path().join("a.anathem-pack");
-    apoyo::escribir_pack_mini(&a, "mini-es");
+    support::write_pack_mini(&a, "mini-es");
     assert!(mem(&db, &["init"]).status.success());
     assert!(mem(&db, &["save", "hola mundo"]).status.success());
     assert!(mem(&db, &["model", "install", a.to_str().unwrap()]).status.success());
@@ -121,7 +121,7 @@ fn search_does_not_fail_even_when_it_cannot_reindex() {
     // The installed file becomes, in fact, a different pack: the guard
     // trips and the reindex needs to rename it.
     let packs = d.path().join("paquetes");
-    apoyo::escribir_pack_permutado(&packs.join("mini-es.anathem-pack"), "otro-es");
+    support::write_pack_permuted(&packs.join("mini-es.anathem-pack"), "otro-es");
 
     // The rename has to fail, and it has to fail for anyone. This used to
     // be `packs/` in mode 0555, which does not stop root: in CI inside a
@@ -172,17 +172,17 @@ fn two_parallel_searches_both_survive_with_the_guard_tripped() {
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let a = d.path().join("a.anathem-pack");
-    apoyo::escribir_pack_mini(&a, "mini-es");
+    support::write_pack_mini(&a, "mini-es");
     assert!(mem(&db, &["init"]).status.success());
     assert!(mem(&db, &["save", "hola mundo"]).status.success());
     assert!(mem(&db, &["model", "install", a.to_str().unwrap()]).status.success());
-    apoyo::escribir_pack_permutado(
+    support::write_pack_permuted(
         &d.path().join("paquetes").join("mini-es.anathem-pack"),
         "otro-es",
     );
 
-    let hijos: Vec<_> = (0..2).map(|_| lanzar(&db, &["search", "hola"])).collect();
-    for (i, h) in hijos.into_iter().enumerate() {
+    let children: Vec<_> = (0..2).map(|_| spawn(&db, &["search", "hola"])).collect();
+    for (i, h) in children.into_iter().enumerate() {
         let o = h.wait_with_output().unwrap();
         let out = String::from_utf8_lossy(&o.stdout).to_string();
         assert!(
@@ -221,8 +221,8 @@ fn a_concurrent_install_leaves_no_vectors_from_two_packs() {
     let db = d.path().join("mem.db");
     let a = d.path().join("a.anathem-pack");
     let b = d.path().join("b.anathem-pack");
-    apoyo::escribir_pack_mini(&a, "mini-es"); // ▁hola -> eje 0, ▁mundo -> eje 1
-    apoyo::escribir_pack_permutado(&b, "otro-es"); // ▁hola -> eje 3, ▁mundo -> eje 2
+    support::write_pack_mini(&a, "mini-es"); // ▁hola -> eje 0, ▁mundo -> eje 1
+    support::write_pack_permuted(&b, "otro-es"); // ▁hola -> eje 3, ▁mundo -> eje 2
     assert!(mem(&db, &["init"]).status.success());
     // A is installed against an empty database, so nothing ends up indexed:
     // the backlog is seeded afterwards, which is the usual situation
@@ -232,12 +232,12 @@ fn a_concurrent_install_leaves_no_vectors_from_two_packs() {
 
     // Terminal 1: saves a memory, and on finishing drags the whole backlog
     // along with pack A.
-    let guardado = lanzar(&db, &["save", "hola mundo"]);
+    let saved_one = spawn(&db, &["save", "hola mundo"]);
     // Terminal 2: switches the pack while the other one embeds.
     std::thread::sleep(std::time::Duration::from_millis(100));
-    let instalado = lanzar(&db, &["model", "install", b.to_str().unwrap()]);
+    let instalado = spawn(&db, &["model", "install", b.to_str().unwrap()]);
 
-    let o = guardado.wait_with_output().unwrap();
+    let o = saved_one.wait_with_output().unwrap();
     assert!(
         o.status.success(),
         "el `mem save` tiene que salir con 0: la memoria se guardó igual. {}",
@@ -259,25 +259,25 @@ fn a_concurrent_install_leaves_no_vectors_from_two_packs() {
     // two that light up. A single vector with weight there is an A vector
     // living in an index that claims to be B's.
     let mut stmt = conn.prepare("select vec from chunk_vectors").unwrap();
-    let vectores: Vec<Vec<f32>> = stmt
+    let vectors: Vec<Vec<f32>> = stmt
         .query_map([], |r| r.get::<_, Vec<u8>>(0))
         .unwrap()
         .map(|b| {
             b.unwrap().chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect()
         })
         .collect();
-    assert!(!vectores.is_empty(), "el install de B tiene que haber dejado su índice");
-    let intrusos = vectores.iter().filter(|v| v[0] != 0.0 || v[1] != 0.0).count();
+    assert!(!vectors.is_empty(), "el install de B tiene que haber dejado su índice");
+    let intruders = vectors.iter().filter(|v| v[0] != 0.0 || v[1] != 0.0).count();
     assert_eq!(
-        intrusos,
+        intruders,
         0,
-        "{intrusos} de {} vectores son del paquete mini-es en un índice registrado como \
+        "{intruders} de {} vectores son del paquete mini-es en un índice registrado como \
          otro-es: la mezcla que no puede pasar nunca",
-        vectores.len()
+        vectors.len()
     );
 
     // And the acceptable outcome does have to have happened: the index left
     // behind is B's, complete, because nobody interrupted its `sync`.
-    let (con, tot) = anathem::vecstore::coverage(&conn, dims).unwrap();
-    assert_eq!(con, tot, "el paquete que ganó tiene que terminar su propio índice");
+    let (covered, tot) = anathem::vecstore::coverage(&conn, dims).unwrap();
+    assert_eq!(covered, tot, "el paquete que ganó tiene que terminar su propio índice");
 }

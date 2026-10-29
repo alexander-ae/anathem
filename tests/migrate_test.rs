@@ -74,7 +74,7 @@ fn it_reports_curated_failures_for_manual_reimport() {
 }
 
 #[test]
-fn es_idempotente() {
+fn is_idempotent() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let p = Path::new("tests/fixtures/export-sample.jsonl");

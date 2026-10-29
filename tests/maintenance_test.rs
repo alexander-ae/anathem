@@ -59,10 +59,10 @@ fn history_returns_the_supersession_chain() {
     conn.execute("update memories set supersedes_id=?1 where id=?2", [older, newer]).unwrap();
     conn.execute("update memories set status='superseded' where id=?1", [older]).unwrap();
 
-    let cadena = maint::history(&conn, newer).unwrap();
-    assert_eq!(cadena.len(), 2, "cadena: {cadena:?}");
-    assert_eq!(cadena[0].0, newer);
-    assert_eq!(cadena[1].0, older);
+    let chain = maint::history(&conn, newer).unwrap();
+    assert_eq!(chain.len(), 2, "cadena: {chain:?}");
+    assert_eq!(chain[0].0, newer);
+    assert_eq!(chain[1].0, older);
 }
 
 /// An explicit save has to behave the same whether it comes from the CLI or
@@ -70,7 +70,7 @@ fn history_returns_the_supersession_chain() {
 /// derive the title from the first non-empty line. It used to live duplicated
 /// in two places and the CLI branch classified and extracted nothing.
 #[test]
-fn guardar_explicito_clasifica_y_extrae_refs() {
+fn save_explicit_classifies_and_extracts_refs() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let text = "Se decidió revertir: había un bug en los tests de ABC-42 (PR #7).";
@@ -151,7 +151,7 @@ fn the_default_project_is_the_same_in_cli_and_mcp() {
     let _ = s.kill();
 
     let conn = rusqlite::Connection::open(&db).unwrap();
-    let proyectos: Vec<String> = conn
+    let projects: Vec<String> = conn
         .prepare("select project from memories order by id")
         .unwrap()
         .query_map([], |r| r.get(0))
@@ -159,7 +159,7 @@ fn the_default_project_is_the_same_in_cli_and_mcp() {
         .collect::<rusqlite::Result<_>>()
         .unwrap();
     assert_eq!(
-        proyectos,
+        projects,
         vec!["proyecto-esperado".to_string(), "proyecto-esperado".to_string()],
         "la cli y mcp tienen que derivar el mismo proyecto desde el mismo directorio"
     );

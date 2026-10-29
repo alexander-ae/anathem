@@ -70,12 +70,12 @@ pub fn run(
              \n\
              Los `expect_docs` son valores de `memories.ext_id`. Ver README para el detalle.",
             evalset.display()))?;
-    let es: EvalSet = serde_json::from_str(&raw).context("eval set con JSON inválido")?;
+    let set: EvalSet = serde_json::from_str(&raw).context("eval set con JSON inválido")?;
 
     let (mut h5, mut h50) = (0usize, 0usize);
     let (mut rr, mut lat, mut per_case) = (Vec::new(), Vec::new(), Vec::new());
 
-    for c in &es.cases {
+    for c in &set.cases {
         let q = search::Query {
             text: c.query.clone(),
             limit: 50,
@@ -119,11 +119,11 @@ pub fn run(
         });
     }
 
-    let n = es.cases.len().max(1);
+    let n = set.cases.len().max(1);
     Ok(EvalResult {
         system: system.to_string(),
         date: chrono::Local::now().format("%Y-%m-%d").to_string(),
-        n_cases: es.cases.len(),
+        n_cases: set.cases.len(),
         recall_at_5: h5 as f64 / n as f64,
         recall_at_50: h50 as f64 / n as f64,
         mrr: rr.iter().sum::<f64>() / n as f64,

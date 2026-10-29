@@ -1,9 +1,9 @@
-mod apoyo;
+mod support;
 
 use anathem::{db, ingest, model::NewMemory, pack::Pack, search, vecstore};
 use rusqlite::Connection;
 
-fn sembrar(conn: &Connection, body: &str) -> i64 {
+fn seed(conn: &Connection, body: &str) -> i64 {
     ingest::insert(conn, &NewMemory {
         project: "p".into(),
         title: body.chars().take(30).collect(),
@@ -19,7 +19,7 @@ fn fixture() -> (tempfile::TempDir, Connection, Pack) {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let r = dir.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     let p = Pack::open_pack(&r).unwrap();
     (dir, conn, p)
 }
@@ -27,28 +27,28 @@ fn fixture() -> (tempfile::TempDir, Connection, Pack) {
 #[test]
 fn sync_fills_the_gaps_and_is_idempotent() {
     let (_d, conn, p) = fixture();
-    sembrar(&conn, "hola");
-    sembrar(&conn, "mundo");
-    assert_eq!(apoyo::registrar_y_sincronizar(&conn, &p).written(), 2);
-    assert_eq!(apoyo::registrar_y_sincronizar(&conn, &p).written(), 0, "no debe reembeber");
+    seed(&conn, "hola");
+    seed(&conn, "mundo");
+    assert_eq!(support::register_and_sync(&conn, &p).written(), 2);
+    assert_eq!(support::register_and_sync(&conn, &p).written(), 0, "no debe reembeber");
     assert_eq!(vecstore::coverage(&conn, p.dims()).unwrap(), (2, 2));
 }
 
 #[test]
 fn coverage_shows_the_gap_left_by_saves_with_no_pack() {
     let (_d, conn, p) = fixture();
-    sembrar(&conn, "hola");
-    apoyo::registrar_y_sincronizar(&conn, &p);
-    sembrar(&conn, "mundo"); // guardada después, sin sync
+    seed(&conn, "hola");
+    support::register_and_sync(&conn, &p);
+    seed(&conn, "mundo"); // guardada después, sin sync
     assert_eq!(vecstore::coverage(&conn, p.dims()).unwrap(), (1, 2));
 }
 
 #[test]
 fn search_orders_by_cosine() {
     let (_d, conn, p) = fixture();
-    let hola = sembrar(&conn, "hola");
-    let mundo = sembrar(&conn, "mundo");
-    apoyo::registrar_y_sincronizar(&conn, &p);
+    let hola = seed(&conn, "hola");
+    let mundo = seed(&conn, "mundo");
+    support::register_and_sync(&conn, &p);
     let q = search::Query { text: String::new(), ..Default::default() };
     let v = p.embed("hola").unwrap();
     let r = vecstore::search_vectors(&conn, &v, &q, 10).unwrap();
@@ -70,7 +70,7 @@ fn search_respects_the_project_filter() {
         created: "2026-09-01".into(), event_start: None, event_end: None,
         source: "explicit".into(), ext_id: None, tags: vec![], refs: vec![],
     }).unwrap();
-    apoyo::registrar_y_sincronizar(&conn, &p);
+    support::register_and_sync(&conn, &p);
     let q = search::Query { project: Some("uno".into()), ..Default::default() };
     let r = vecstore::search_vectors(&conn, &p.embed("hola").unwrap(), &q, 10).unwrap();
     assert_eq!(r.len(), 1);
@@ -80,8 +80,8 @@ fn search_respects_the_project_filter() {
 #[test]
 fn search_ignores_memories_that_are_not_active() {
     let (_d, conn, p) = fixture();
-    let id = sembrar(&conn, "hola");
-    apoyo::registrar_y_sincronizar(&conn, &p);
+    let id = seed(&conn, "hola");
+    support::register_and_sync(&conn, &p);
     conn.execute("update memories set status='forgotten' where id=?1", [id]).unwrap();
     let r = vecstore::search_vectors(&conn, &p.embed("hola").unwrap(), &search::Query::default(), 10).unwrap();
     assert!(r.is_empty(), "una memoria olvidada no puede salir en la búsqueda vectorial");
@@ -107,8 +107,8 @@ fn the_pack_registry_round_trips() {
 #[test]
 fn forgetting_the_pack_clears_registry_and_vectors() {
     let (_d, conn, p) = fixture();
-    sembrar(&conn, "hola");
-    apoyo::registrar_y_sincronizar(&conn, &p);
+    seed(&conn, "hola");
+    support::register_and_sync(&conn, &p);
     vecstore::register_pack(&conn, "mini-es", "abc", 4).unwrap();
     vecstore::forget_pack(&conn).unwrap();
     assert!(vecstore::registered_pack(&conn).unwrap().is_none());
@@ -210,7 +210,7 @@ fn search_collapses_several_chunks_of_one_memory() {
     let relleno = "mundo ".repeat(100); // 600 caracteres, puro "mundo"
     let goal = "hola ".repeat(50); // 250 caracteres, puro "hola"
     let body = format!("{relleno}{goal}");
-    let id = sembrar(&conn, &body);
+    let id = seed(&conn, &body);
 
     let n_fragmentos: i64 = conn
         .query_row("select count(*) from chunks where memory_id = ?1", [id], |r| r.get(0))
@@ -221,11 +221,11 @@ fn search_collapses_several_chunks_of_one_memory() {
          si el chunking cambia y ahora produce {n_fragmentos}, hay que ajustar el cuerpo de prueba"
     );
 
-    apoyo::registrar_y_sincronizar(&conn, &p);
+    support::register_and_sync(&conn, &p);
 
     // By construction, "hola" appears in only one chunk: the first 500
     // characters fall entirely inside the "mundo" padding.
-    let esperado_id: i64 = conn
+    let expected_id: i64 = conn
         .query_row(
             "select id from chunks where memory_id = ?1 and body like '%hola%'",
             [id],
@@ -235,13 +235,13 @@ fn search_collapses_several_chunks_of_one_memory() {
 
     let q = search::Query::default();
     let r = vecstore::search_vectors(&conn, &p.embed("hola").unwrap(), &q, 10).unwrap();
-    let aciertos: Vec<&vecstore::VectorHit> = r.iter().filter(|a| a.memory_id == id).collect();
-    assert_eq!(aciertos.len(), 1, "la memoria debe aparecer una sola vez, no una por fragmento");
+    let hits_: Vec<&vecstore::VectorHit> = r.iter().filter(|a| a.memory_id == id).collect();
+    assert_eq!(hits_.len(), 1, "la memoria debe aparecer una sola vez, no una por fragmento");
     assert_eq!(
-        aciertos[0].chunk_id, esperado_id,
+        hits_[0].chunk_id, expected_id,
         "debe quedarse con el fragmento más parecido, no con cualquiera"
     );
-    assert!(aciertos[0].cosine > 0.0, "el fragmento elegido debe tener coseno positivo con \"hola\"");
+    assert!(hits_[0].cosine > 0.0, "el fragmento elegido debe tener coseno positivo con \"hola\"");
 }
 
 #[test]
@@ -263,11 +263,11 @@ fn registered_pack_propagates_real_errors_instead_of_swallowing_them() {
 /// Puts `how_many` vectorless chunks into a filler memory, in a single
 /// transaction. They are the "backlog" that takes a while to embed and during
 /// which the pack can change underneath.
-fn sembrar_pendientes(conn: &Connection, cuantos: usize) {
-    let id = sembrar(conn, "relleno");
+fn seed_pending(conn: &Connection, how_many: usize) {
+    let id = seed(conn, "relleno");
     conn.execute("delete from chunks where memory_id = ?1", [id]).unwrap();
     let tx = conn.unchecked_transaction().unwrap();
-    for i in 0..cuantos {
+    for i in 0..how_many {
         tx.execute(
             "insert into chunks (memory_id, ord, body) values (?1, ?2, ?3)",
             rusqlite::params![id, i as i64, format!("hola mundo numero {i}")],
@@ -286,11 +286,11 @@ fn sync_writes_not_one_vector_under_a_stale_identity() {
     // even raise an error. With equal dimensions — the real case — nothing
     // tells them apart afterwards.
     let (_d, conn, p) = fixture();
-    sembrar(&conn, "hola");
-    let caducada = ("mini-es".to_string(), "sha-de-a".to_string(), p.dims());
+    seed(&conn, "hola");
+    let stale = ("mini-es".to_string(), "sha-de-a".to_string(), p.dims());
     vecstore::register_pack(&conn, "otro-es", "sha-de-b", p.dims()).unwrap();
 
-    let r = vecstore::sync(&conn, &p, &caducada).unwrap();
+    let r = vecstore::sync(&conn, &p, &stale).unwrap();
 
     assert_eq!(
         r,
@@ -319,7 +319,7 @@ fn sync_abandons_midway_when_the_pack_changes_between_batches() {
     // like someone else's `adopt_pack` winning the lock right there.
     let (_d, conn, p) = fixture();
     let total = 300usize; // más de un lote (el lote son 256)
-    sembrar_pendientes(&conn, total);
+    seed_pending(&conn, total);
     let identity = ("mini-es".to_string(), "sha-de-a".to_string(), p.dims());
     vecstore::register_pack(&conn, &identity.0, &identity.1, identity.2).unwrap();
     conn.execute_batch(
@@ -332,7 +332,7 @@ fn sync_abandons_midway_when_the_pack_changes_between_batches() {
 
     let r = vecstore::sync(&conn, &p, &identity).unwrap();
 
-    assert!(r.abandonada(), "el cambio de paquete a mitad de camino tiene que abandonar: {r:?}");
+    assert!(r.abandoned(), "el cambio de paquete a mitad de camino tiene que abandonar: {r:?}");
     let written: i64 =
         conn.query_row("select count(*) from chunk_vectors", [], |r| r.get(0)).unwrap();
     assert_eq!(written as usize, r.written(), "lo reportado y lo escrito tienen que coincidir");
@@ -376,7 +376,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
     let query_ = vec![1.0f32, 0.0, 0.0, 0.0];
     assert_eq!(query_.len(), dims);
 
-    let con_proyecto = anathem::search::Query {
+    let with_project = anathem::search::Query {
         text: "nota".into(),
         project: Some("uno".into()),
         tags: vec![],
@@ -384,10 +384,10 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         budget_tokens: 10_000,
         excerpt: None,
     };
-    let r = anathem::vecstore::search_vectors(&conn, &query_, &con_proyecto, 50).unwrap();
+    let r = anathem::vecstore::search_vectors(&conn, &query_, &with_project, 50).unwrap();
     assert_eq!(r.len(), 1, "el filtro de proyecto tiene que valer también acá: {r:?}");
 
-    let con_tag = anathem::search::Query {
+    let with_tag = anathem::search::Query {
         text: "nota".into(),
         project: None,
         tags: vec!["beta".into()],
@@ -395,7 +395,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         budget_tokens: 10_000,
         excerpt: None,
     };
-    let r = anathem::vecstore::search_vectors(&conn, &query_, &con_tag, 50).unwrap();
+    let r = anathem::vecstore::search_vectors(&conn, &query_, &with_tag, 50).unwrap();
     assert_eq!(r.len(), 1, "el filtro de tags tiene que valer también acá: {r:?}");
 
     // And with no filters, both of them.

@@ -1,4 +1,4 @@
-mod apoyo;
+mod support;
 
 use std::process::Command;
 
@@ -15,7 +15,7 @@ fn mem(dir: &std::path::Path, args: &[&str]) -> std::process::Output {
 fn install_registers_the_pack_and_reports_it() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     mem(d.path(), &["save", "hola mundo"]);
 
     let o = mem(d.path(), &["model", "install", r.to_str().unwrap()]);
@@ -31,7 +31,7 @@ fn install_registers_the_pack_and_reports_it() {
 fn install_rejects_a_sha256_that_does_not_match() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     std::fs::write(
         d.path().join("mini.anathem-pack.sha256"),
         "0000000000000000000000000000000000000000000000000000000000000000  mini.anathem-pack\n",
@@ -64,7 +64,7 @@ fn status_with_no_pack_says_so_and_does_not_fail() {
 fn removing_the_pack_falls_back_to_bm25_without_breaking_search() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     mem(d.path(), &["save", "hola mundo"]);
     mem(d.path(), &["model", "install", r.to_str().unwrap()]);
 
@@ -83,7 +83,7 @@ fn removing_the_pack_falls_back_to_bm25_without_breaking_search() {
 fn a_missing_pack_file_degrades_search_to_bm25() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     mem(d.path(), &["save", "hola mundo"]);
     mem(d.path(), &["model", "install", r.to_str().unwrap()]);
     std::fs::remove_file(d.path().join("paquetes").join("mini-es.anathem-pack")).unwrap();
@@ -95,9 +95,9 @@ fn a_missing_pack_file_degrades_search_to_bm25() {
 
 /// A variant of the fixture with a different name and different dimensions,
 /// to force the mismatch.
-fn escribir_pack_ancho(pack_path: &std::path::Path, name: &str) {
+fn write_pack_wide(pack_path: &std::path::Path, name: &str) {
     // Same tokenizer, but 8 dimensions instead of 4.
-    let tok = apoyo::TOKENIZER_MINI.as_bytes();
+    let tok = support::TOKENIZER_MINI.as_bytes();
     let dims = 8usize;
     let rows: [[u8; 8]; 4] = [
         [0, 0, 0, 0, 0, 0, 0, 0],
@@ -125,8 +125,8 @@ fn switching_packs_rebuilds_the_index_instead_of_mixing() {
     let d = tempfile::tempdir().unwrap();
     let a = d.path().join("a.anathem-pack");
     let b = d.path().join("b.anathem-pack");
-    apoyo::escribir_pack_mini(&a, "mini-es");
-    escribir_pack_ancho(&b, "ancho-es");
+    support::write_pack_mini(&a, "mini-es");
+    write_pack_wide(&b, "ancho-es");
     mem(d.path(), &["save", "hola mundo"]);
 
     mem(d.path(), &["model", "install", a.to_str().unwrap()]);
@@ -151,12 +151,12 @@ fn a_pack_swapped_by_hand_triggers_the_reindex() {
     // different pack. Search cannot use the old vectors.
     let d = tempfile::tempdir().unwrap();
     let a = d.path().join("a.anathem-pack");
-    apoyo::escribir_pack_mini(&a, "mini-es");
+    support::write_pack_mini(&a, "mini-es");
     mem(d.path(), &["save", "hola mundo"]);
     mem(d.path(), &["model", "install", a.to_str().unwrap()]);
 
     let instalado = d.path().join("paquetes").join("mini-es.anathem-pack");
-    escribir_pack_ancho(&instalado, "mini-es"); // mismo name, otras dimensiones
+    write_pack_wide(&instalado, "mini-es"); // mismo name, otras dimensiones
 
     let o = mem(d.path(), &["search", "hola"]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
@@ -176,12 +176,12 @@ fn a_name_mismatch_leaves_the_registry_consistent_with_disk() {
     // because nothing in the blob's length gives it away.
     let d = tempfile::tempdir().unwrap();
     let a = d.path().join("a.anathem-pack");
-    apoyo::escribir_pack_mini(&a, "mini-es");
+    support::write_pack_mini(&a, "mini-es");
     mem(d.path(), &["save", "hola mundo"]);
     mem(d.path(), &["model", "install", a.to_str().unwrap()]);
 
     let instalado = d.path().join("paquetes").join("mini-es.anathem-pack");
-    apoyo::escribir_pack_mini(&instalado, "otro-es"); // mismas dims, otro name
+    support::write_pack_mini(&instalado, "otro-es"); // mismas dims, otro name
 
     let o1 = mem(d.path(), &["search", "hola"]);
     assert!(o1.status.success(), "{}", String::from_utf8_lossy(&o1.stderr));
@@ -220,7 +220,7 @@ fn reinstalling_from_the_installed_path_does_not_destroy_the_pack() {
     // gives nothing away. Unrecoverable without an external copy.
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     mem(d.path(), &["save", "hola mundo"]);
     let o = mem(d.path(), &["model", "install", r.to_str().unwrap()]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
@@ -268,9 +268,9 @@ fn a_pack_that_recognizes_nothing_is_rejected_without_touching_the_current_one()
     // worked before even checking that the new one was any good.
     let d = tempfile::tempdir().unwrap();
     let bueno = d.path().join("bueno.anathem-pack");
-    apoyo::escribir_pack_mini(&bueno, "mini-es");
+    support::write_pack_mini(&bueno, "mini-es");
     let nulo = d.path().join("nulo.anathem-pack");
-    apoyo::escribir_pack_nulo(&nulo, "nulo-es");
+    support::write_pack_null(&nulo, "nulo-es");
 
     mem(d.path(), &["save", "hola mundo"]);
     let o = mem(d.path(), &["model", "install", bueno.to_str().unwrap()]);
@@ -299,7 +299,7 @@ fn status_does_not_count_vectors_search_discards_as_covered() {
     // visible reported perfect health precisely when the gap was total.
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     mem(d.path(), &["save", "hola mundo"]);
     mem(d.path(), &["model", "install", r.to_str().unwrap()]);
 
@@ -344,14 +344,14 @@ fn an_install_cut_short_after_the_rename_does_not_keep_querying_the_old_build() 
     let db = d.path().join("mem.db");
     let old = d.path().join("viejo.anathem-pack");
     let new_id = d.path().join("nuevo.anathem-pack");
-    apoyo::escribir_pack_mini(&old, "mini-es"); // ▁hola -> eje 0
-    apoyo::escribir_pack_permutado(&new_id, "mini-es"); // mismo name y dims, ▁hola -> eje 3
+    support::write_pack_mini(&old, "mini-es"); // ▁hola -> eje 0
+    support::write_pack_permuted(&new_id, "mini-es"); // mismo name y dims, ▁hola -> eje 3
 
     mem(d.path(), &["save", "hola mundo"]);
     assert!(mem(d.path(), &["model", "install", old.to_str().unwrap()]).status.success());
     {
         let conn = rusqlite::Connection::open(&db).unwrap();
-        let v = apoyo::leer_vector(&conn, "select vec from chunk_vectors");
+        let v = support::read_vector(&conn, "select vec from chunk_vectors");
         assert!(v[0] > 0.5, "precondición: el índice es del build viejo, salió {v:?}");
         // Killing the process exactly between the rename and the
         // `adopt_pack` is not something a test can ask for. Instead the
@@ -388,7 +388,7 @@ fn an_install_cut_short_after_the_rename_does_not_keep_querying_the_old_build() 
     );
 
     let conn = rusqlite::Connection::open(&db).unwrap();
-    let v = apoyo::leer_vector(&conn, "select vec from chunk_vectors");
+    let v = support::read_vector(&conn, "select vec from chunk_vectors");
     assert!(
         v[3] > 0.5,
         "se está consultando con el paquete nuevo contra vectores del viejo: {v:?}"
@@ -408,7 +408,7 @@ fn a_complete_install_leaves_no_mark_behind() {
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     mem(d.path(), &["save", "hola mundo"]);
     assert!(mem(d.path(), &["model", "install", r.to_str().unwrap()]).status.success());
 
@@ -430,7 +430,7 @@ fn an_install_failing_before_touching_the_file_leaves_no_mark() {
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     mem(d.path(), &["save", "hola mundo"]);
 
     let packs = d.path().join("paquetes");

@@ -91,17 +91,17 @@ fn search_memory_respects_the_requested_limit() {
     // off.
     let (_d, conn) = fixture_with_several();
     let ctx = search::SearchContext::bm25_only();
-    let pedir = |n: u64| {
+    let ask_for = |n: u64| {
         let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
             "params":{"name":"search_memory","arguments":{"query":"memoria relleno","limit":n,"budget":100000}}});
         let r = mcp::handle(&conn, &ctx, &Config::default(), &req).unwrap().unwrap();
         r["result"]["content"][0]["text"].as_str().unwrap()
             .lines().filter(|l| l.starts_with("[id:")).count()
     };
-    let pocos = pedir(2);
-    let muchos = pedir(8);
-    assert_eq!(pocos, 2, "con limit 2 tienen que volver 2");
-    assert!(muchos > pocos, "con limit 8 tienen que volver más: {muchos} vs {pocos}");
+    let few = ask_for(2);
+    let many = ask_for(8);
+    assert_eq!(few, 2, "con limit 2 tienen que volver 2");
+    assert!(many > few, "con limit 8 tienen que volver más: {many} vs {few}");
 }
 
 fn fixture_with_several() -> (tempfile::TempDir, rusqlite::Connection) {

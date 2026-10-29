@@ -93,12 +93,12 @@ fn link_refuses_to_close_a_two_step_cycle() {
     );
 
     // debe sobrevivir exactamente una versión activa
-    let activos: i64 = conn.query_row(
+    let active_ones: i64 = conn.query_row(
         "select count(*) from memories where id in (?1, ?2) and status = 'active'",
         [siete, ocho],
         |r| r.get(0),
     ).unwrap();
-    assert_eq!(activos, 1, "el ciclo dejó sin ninguna versión activa (o dos)");
+    assert_eq!(active_ones, 1, "el ciclo dejó sin ninguna versión activa (o dos)");
 }
 
 // -- I3: candidates() by id, not by content, with a case that tells them apart --

@@ -145,7 +145,7 @@ fn pinned_survives_the_candidate_trim() {
     );
 }
 
-mod apoyo;
+mod support;
 
 #[test]
 fn with_no_pack_the_result_is_the_usual_one() {
@@ -163,20 +163,20 @@ fn with_a_pack_what_bm25_misses_shows_up() {
     let dir = tempfile::tempdir().unwrap();
     let conn = anathem::db::open(&dir.path().join("t.db")).unwrap();
     let r = dir.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     let p = anathem::pack::Pack::open_pack(&r).unwrap();
     seed(&conn, "x", "p", "hola");
     seed(&conn, "y", "p", "mundo");
-    apoyo::registrar_y_sincronizar(&conn, &p);
+    support::register_and_sync(&conn, &p);
 
     let q = search::Query { text: "hola".into(), ..Default::default() };
     let solo = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(solo.len(), 1, "bm25 solo encuentra la que comparte la palabra");
 
     let ctx = search::SearchContext::for_reading(Some(&p), 0.25);
-    let con = search::run(&conn, &q, &ctx).unwrap();
-    assert_eq!(con.len(), 2, "la fusión debe traer también la vectorial");
-    assert_eq!(con[0].ext_id.as_deref(), Some("x"), "la exacta sigue primera");
+    let covered = search::run(&conn, &q, &ctx).unwrap();
+    assert_eq!(covered.len(), 2, "la fusión debe traer también la vectorial");
+    assert_eq!(covered[0].ext_id.as_deref(), Some("x"), "la exacta sigue primera");
 }
 
 #[test]
@@ -184,12 +184,12 @@ fn pinned_memories_still_come_first_under_fusion() {
     let dir = tempfile::tempdir().unwrap();
     let conn = anathem::db::open(&dir.path().join("t.db")).unwrap();
     let r = dir.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     let p = anathem::pack::Pack::open_pack(&r).unwrap();
     seed(&conn, "x", "p", "hola");
-    let fijada = seed(&conn, "y", "p", "mundo");
-    anathem::maint::pin(&conn, fijada, true).unwrap();
-    apoyo::registrar_y_sincronizar(&conn, &p);
+    let pinned_one = seed(&conn, "y", "p", "mundo");
+    anathem::maint::pin(&conn, pinned_one, true).unwrap();
+    support::register_and_sync(&conn, &p);
 
     let q = search::Query { text: "hola".into(), ..Default::default() };
     let ctx = search::SearchContext::for_reading(Some(&p), 0.25);
@@ -207,11 +207,11 @@ fn a_query_with_no_known_tokens_yields_no_spurious_results() {
     let dir = tempfile::tempdir().unwrap();
     let conn = anathem::db::open(&dir.path().join("t.db")).unwrap();
     let r = dir.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     let p = anathem::pack::Pack::open_pack(&r).unwrap();
     seed(&conn, "x", "p", "hola");
     seed(&conn, "y", "p", "mundo");
-    apoyo::registrar_y_sincronizar(&conn, &p);
+    support::register_and_sync(&conn, &p);
 
     let q = search::Query { text: "xyz".into(), ..Default::default() };
     let ctx = search::SearchContext::for_reading(Some(&p), 0.25);
@@ -253,10 +253,10 @@ fn the_excerpt_lets_more_candidates_fit_in_the_same_budget() {
         excerpt: None,
         ..Default::default()
     };
-    let con_recorte = search::Query { excerpt: Some(20), ..sin_recorte.clone() };
+    let with_trim = search::Query { excerpt: Some(20), ..sin_recorte.clone() };
 
     let hits_sin = search::run_explained(&conn, &sin_recorte, &ctx).unwrap();
-    let hits_con = search::run_explained(&conn, &con_recorte, &ctx).unwrap();
+    let hits_con = search::run_explained(&conn, &with_trim, &ctx).unwrap();
 
     assert!(
         hits_con.len() > hits_sin.len(),

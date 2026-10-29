@@ -163,9 +163,9 @@ impl Pack {
                 continue;
             }
             let a = self.table_start + i * self.dims;
-            let fila = &self.mapping[a..a + self.dims];
+            let row = &self.mapping[a..a + self.dims];
             for d in 0..self.dims {
-                v[d] += fila[d] as f32 * self.scales[d] + self.mins[d];
+                v[d] += row[d] as f32 * self.scales[d] + self.mins[d];
             }
             used += 1;
         }

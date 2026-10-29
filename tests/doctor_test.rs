@@ -2,7 +2,7 @@
 //! hand. These tests invoke the real binary, because what matters is what
 //! whoever runs it sees — and the exit code they get.
 
-mod apoyo;
+mod support;
 
 use rusqlite::Connection;
 use std::path::Path;
@@ -40,7 +40,7 @@ fn mem(db: &Path, args: &[&str]) -> Salida {
 
 /// A database with three memories: A and B share a topic key (A ends up
 /// superseded, B current) and C stands alone, with an explicit tag.
-fn base_sana(dir: &Path) -> std::path::PathBuf {
+fn healthy_database(dir: &Path) -> std::path::PathBuf {
     let db = dir.join("mem.db");
     assert!(mem(&db, &["init"]).ok());
     for args in [
@@ -56,7 +56,7 @@ fn base_sana(dir: &Path) -> std::path::PathBuf {
 
 /// Opens the database in order to sabotage it, with foreign keys off: the
 /// only way to manufacture the damage the cascade would prevent.
-fn sabotear(db: &Path) -> Connection {
+fn sabotage(db: &Path) -> Connection {
     let c = Connection::open(db).unwrap();
     c.execute_batch("pragma foreign_keys = off;").unwrap();
     c
@@ -64,13 +64,13 @@ fn sabotear(db: &Path) -> Connection {
 
 fn install_pack(dir: &Path, db: &Path) {
     let pack = dir.join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&pack, "mini-es");
+    support::write_pack_mini(&pack, "mini-es");
     let o = mem(db, &["model", "install", pack.to_str().unwrap()]);
     assert!(o.ok(), "{}", o.todo());
 }
 
 #[test]
-fn version_imprime_nombre_version_y_commit() {
+fn version_prints_name_version_and_commit() {
     let d = tempfile::tempdir().unwrap();
     let o = mem(&d.path().join("mem.db"), &["--version"]);
     assert!(o.ok(), "{}", o.todo());
@@ -82,7 +82,7 @@ fn version_imprime_nombre_version_y_commit() {
 #[test]
 fn a_healthy_database_exits_zero_and_reports_the_counts() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "una base sana no es un problema (salió {:?}): {}", o.codigo, o.todo());
     assert!(
@@ -101,7 +101,7 @@ fn a_healthy_database_exits_zero_and_reports_the_counts() {
 #[test]
 fn no_pack_is_information_and_not_a_problem() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
     assert!(o.stdout.contains("sin paquete"), "{}", o.stdout);
@@ -121,10 +121,10 @@ fn a_freshly_created_database_does_not_break_the_diagnostic() {
 #[test]
 fn it_detects_an_out_of_sync_fts5_index_and_exits_nonzero() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     // Removes a row from the index without touching `chunks`: what would
     // happen if a write path skipped the triggers.
-    let c = sabotear(&db);
+    let c = sabotage(&db);
     c.execute(
         "insert into chunks_fts(chunks_fts, rowid, body)
          select 'delete', id, body from chunks where id = (select min(id) from chunks)",
@@ -142,7 +142,7 @@ fn it_detects_an_out_of_sync_fts5_index_and_exits_nonzero() {
 #[test]
 fn a_broken_config_is_reported_and_the_diagnostic_survives() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     std::fs::write(d.path().join("config.json"), "{ esto no es json").unwrap();
 
     let o = mem(&db, &["doctor"]);
@@ -156,7 +156,7 @@ fn a_broken_config_is_reported_and_the_diagnostic_survives() {
 #[test]
 fn a_config_with_an_invalid_value_says_which_one() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     std::fs::write(d.path().join("config.json"), r#"{"candidates": 0}"#).unwrap();
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
@@ -166,7 +166,7 @@ fn a_config_with_an_invalid_value_says_which_one() {
 #[test]
 fn a_valid_config_shows_the_effective_values() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     std::fs::write(d.path().join("config.json"), r#"{"candidates": 7}"#).unwrap();
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
@@ -179,7 +179,7 @@ fn a_valid_config_shows_the_effective_values() {
 #[test]
 fn a_broken_tags_json_is_reported_and_the_diagnostic_survives() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     std::fs::write(d.path().join("tags.json"), "[{\"tag\": \"x\", \"pattern\": \"(\"}]").unwrap();
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
@@ -191,7 +191,7 @@ fn a_broken_tags_json_is_reported_and_the_diagnostic_survives() {
 #[test]
 fn a_registered_pack_whose_file_is_missing_is_detected() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     install_pack(d.path(), &db);
     std::fs::remove_file(d.path().join("paquetes").join("mini-es.anathem-pack")).unwrap();
 
@@ -204,7 +204,7 @@ fn a_registered_pack_whose_file_is_missing_is_detected() {
 #[test]
 fn an_installed_and_complete_pack_comes_out_clean() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     install_pack(d.path(), &db);
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
@@ -216,9 +216,9 @@ fn an_installed_and_complete_pack_comes_out_clean() {
 #[test]
 fn coverage_gaps_are_detected() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     install_pack(d.path(), &db);
-    let c = sabotear(&db);
+    let c = sabotage(&db);
     c.execute(
         "delete from chunk_vectors where chunk_id = (select min(id) from chunks)",
         [],
@@ -235,9 +235,9 @@ fn coverage_gaps_are_detected() {
 #[test]
 fn a_vector_of_the_wrong_length_does_not_count_as_coverage() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     install_pack(d.path(), &db);
-    let c = sabotear(&db);
+    let c = sabotage(&db);
     c.execute(
         "update chunk_vectors set vec = zeroblob(8)
           where chunk_id = (select min(id) from chunks)",
@@ -254,8 +254,8 @@ fn a_vector_of_the_wrong_length_does_not_count_as_coverage() {
 #[test]
 fn a_supersession_chain_to_a_missing_memory_is_detected() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
-    let c = sabotear(&db);
+    let db = healthy_database(d.path());
+    let c = sabotage(&db);
     c.execute("update memories set supersedes_id = 9999 where id = 3", []).unwrap();
     drop(c);
 
@@ -268,9 +268,9 @@ fn a_supersession_chain_to_a_missing_memory_is_detected() {
 #[test]
 fn two_active_memories_under_one_topic_key_are_detected() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     // An old database, from before the unique index, could be violating it.
-    let c = sabotear(&db);
+    let c = sabotage(&db);
     c.execute("drop index idx_mem_topic_activa", []).unwrap();
     c.execute("update memories set status = 'active' where id = 1", []).unwrap();
     drop(c);
@@ -283,9 +283,9 @@ fn two_active_memories_under_one_topic_key_are_detected() {
 #[test]
 fn chunks_without_a_memory_and_vectors_without_a_chunk_are_detected() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     install_pack(d.path(), &db);
-    let c = sabotear(&db);
+    let c = sabotage(&db);
     c.execute("insert into chunks (memory_id, ord, body) values (777, 0, 'huerfano')", [])
         .unwrap();
     c.execute("insert into chunk_vectors (chunk_id, vec) values (888, zeroblob(16))", [])
@@ -301,7 +301,7 @@ fn chunks_without_a_memory_and_vectors_without_a_chunk_are_detected() {
 #[test]
 fn leftover_stray_files_are_a_warning_and_not_a_problem() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     install_pack(d.path(), &db);
     std::fs::write(
         d.path().join("paquetes").join("mini-es.anathem-pack.reemplazando-4242"),
@@ -342,7 +342,7 @@ fn a_missing_database_does_not_claim_everything_is_fine() {
 #[test]
 fn the_summary_tells_all_clear_from_no_problems_but_warnings() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     std::fs::create_dir(d.path().join("paquetes")).unwrap();
     std::fs::write(d.path().join("paquetes").join("x.anathem-pack.reemplazando-1"), b"r").unwrap();
     let o = mem(&db, &["doctor"]);
@@ -367,8 +367,8 @@ fn a_file_that_is_not_a_database_is_reported_without_crashing() {
 #[test]
 fn a_database_predating_topic_keys_does_not_break_the_diagnostic() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
-    let c = sabotear(&db);
+    let db = healthy_database(d.path());
+    let c = sabotage(&db);
     c.execute_batch(
         "drop index idx_mem_topic_activa;
          drop index idx_mem_project_topic;
@@ -394,7 +394,7 @@ fn a_database_predating_topic_keys_does_not_break_the_diagnostic() {
 /// What does get checked is what matters: `mem.db`, byte for byte. Were
 /// doctor to checkpoint the WAL — the first thing a diagnostic that "fixes"
 /// would do — the main file would change and the test would see it.
-fn instantanea(dir: &Path) -> std::collections::BTreeMap<String, u64> {
+fn snapshot(dir: &Path) -> std::collections::BTreeMap<String, u64> {
     use std::hash::{Hash, Hasher};
     fn sqlite_helper(rel: &str) -> bool {
         rel.ends_with("-wal") || rel.ends_with("-shm")
@@ -424,10 +424,10 @@ fn instantanea(dir: &Path) -> std::collections::BTreeMap<String, u64> {
 #[test]
 fn the_diagnostic_is_read_only_even_with_a_damaged_database() {
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     install_pack(d.path(), &db);
     // Everything broken at once: the moment when "fixing" would be most tempting.
-    let c = sabotear(&db);
+    let c = sabotage(&db);
     c.execute("update memories set supersedes_id = 9999 where id = 3", []).unwrap();
     c.execute(
         "insert into chunks_fts(chunks_fts, rowid, body)
@@ -440,20 +440,20 @@ fn the_diagnostic_is_read_only_even_with_a_damaged_database() {
     std::fs::write(d.path().join("config.json"), "roto").unwrap();
     std::fs::write(d.path().join("paquetes").join("x.anathem-pack.reemplazando-1"), b"r").unwrap();
 
-    let antes = instantanea(d.path());
+    let before = snapshot(d.path());
     // If the auxiliary-file filter swallowed too much, the test would pass
     // having checked nothing. The main file being in the fingerprint is the
     // precondition for anything below to mean something.
-    assert!(antes.contains_key("mem.db"), "la huella no incluye la base: {antes:?}");
+    assert!(before.contains_key("mem.db"), "la huella no incluye la base: {before:?}");
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
-    let despues = instantanea(d.path());
-    let cambios: Vec<_> = antes
+    let after = snapshot(d.path());
+    let changes: Vec<_> = before
         .keys()
-        .chain(despues.keys())
-        .filter(|k| antes.get(*k) != despues.get(*k))
+        .chain(after.keys())
+        .filter(|k| before.get(*k) != after.get(*k))
         .collect();
-    assert!(cambios.is_empty(), "doctor modificó el directorio de la base: {cambios:?}");
+    assert!(changes.is_empty(), "doctor modificó el directorio de la base: {changes:?}");
 }
 
 #[test]
@@ -461,7 +461,7 @@ fn it_sees_writes_from_a_live_connection_that_has_not_checkpointed() {
     // With the MCP server open, the last thing saved may live only in the
     // `-wal`. A diagnostic that ignored it would show a stale picture.
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     let viva = Connection::open(&db).unwrap();
     viva.execute_batch("pragma journal_mode = wal; pragma wal_autocheckpoint = 0;").unwrap();
     viva.execute(
@@ -480,7 +480,7 @@ fn a_path_with_spaces_and_symbols_works() {
     let d = tempfile::tempdir().unwrap();
     let carpeta = d.path().join("mi base #1 (copia)%");
     std::fs::create_dir(&carpeta).unwrap();
-    let db = base_sana(&carpeta);
+    let db = healthy_database(&carpeta);
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
     assert!(o.stdout.contains("2 activas"), "{}", o.stdout);
@@ -490,23 +490,23 @@ fn a_path_with_spaces_and_symbols_works() {
 fn a_database_predating_the_vector_layer_is_information_not_three_problems() {
     // Same case as a database predating topic keys: it is not broken, it
     // migrates itself on the next write.
-    for tablas in [
+    for tables in [
         &["chunk_vectors", "meta"][..],
         &["chunk_vectors"][..],
         &["meta"][..],
     ] {
         let d = tempfile::tempdir().unwrap();
-        let db = base_sana(d.path());
-        let c = sabotear(&db);
-        for t in tablas {
+        let db = healthy_database(d.path());
+        let c = sabotage(&db);
+        for t in tables {
             c.execute(&format!("drop table {t}"), []).unwrap();
         }
         drop(c);
         let o = mem(&db, &["doctor"]);
-        assert!(o.ok(), "sin {tablas:?}: {}", o.todo());
-        assert!(!o.stdout.contains('✗'), "sin {tablas:?}: {}", o.stdout);
-        assert!(o.stdout.contains("anterior a la capa vectorial"), "sin {tablas:?}: {}", o.stdout);
-        assert!(o.stdout.contains("2 activas"), "sin {tablas:?}: {}", o.stdout);
+        assert!(o.ok(), "sin {tables:?}: {}", o.todo());
+        assert!(!o.stdout.contains('✗'), "sin {tables:?}: {}", o.stdout);
+        assert!(o.stdout.contains("anterior a la capa vectorial"), "sin {tables:?}: {}", o.stdout);
+        assert!(o.stdout.contains("2 activas"), "sin {tables:?}: {}", o.stdout);
         // And it really does migrate itself: the next write leaves it healthy.
         assert!(mem(&db, &["save", "otra", "--project", "p"]).ok());
         let o = mem(&db, &["doctor"]);
@@ -519,7 +519,7 @@ fn a_doctor_failure_exits_2_and_problems_exit_1() {
     // With no HOME and no --db, the default path cannot be resolved: doctor
     // never gets to run. A script has to be able to tell that from "found
     // problems" (1).
-    let correr = |args: &[&str]| {
+    let run_ = |args: &[&str]| {
         Command::new(env!("CARGO_BIN_EXE_mem"))
             .args(args)
             .env_remove("HOME")
@@ -527,15 +527,15 @@ fn a_doctor_failure_exits_2_and_problems_exit_1() {
             .output()
             .unwrap()
     };
-    let o = correr(&["doctor"]);
+    let o = run_(&["doctor"]);
     assert_eq!(o.status.code(), Some(2), "{}", String::from_utf8_lossy(&o.stderr));
     assert!(String::from_utf8_lossy(&o.stderr).contains("HOME"));
     // Every other command keeps its usual 1.
-    assert_eq!(correr(&["init"]).status.code(), Some(1));
+    assert_eq!(run_(&["init"]).status.code(), Some(1));
 
     // And with real problems it is still 1.
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
+    let db = healthy_database(d.path());
     std::fs::write(d.path().join("config.json"), "roto").unwrap();
     assert_eq!(mem(&db, &["doctor"]).codigo, Some(1));
 }
@@ -546,8 +546,8 @@ fn the_fts5_index_is_compared_by_ids_and_not_only_by_count() {
     // rows: id 1 is taken out of the index and a 99 that does not exist in
     // `chunks` is put in. A comparison of counts would say "in sync".
     let d = tempfile::tempdir().unwrap();
-    let db = base_sana(d.path());
-    let c = sabotear(&db);
+    let db = healthy_database(d.path());
+    let c = sabotage(&db);
     c.execute(
         "insert into chunks_fts(chunks_fts, rowid, body)
          select 'delete', id, body from chunks where id = 1",

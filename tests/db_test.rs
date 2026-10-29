@@ -9,7 +9,7 @@ fn it_opens_and_creates_the_schema() {
     let path = dir.path().join("t.db");
     let conn = db::open(&path).unwrap();
 
-    let tablas: Vec<String> = conn
+    let tables: Vec<String> = conn
         .prepare("select name from sqlite_master where type in ('table','view') order by name")
         .unwrap()
         .query_map([], |r| r.get(0))
@@ -18,7 +18,7 @@ fn it_opens_and_creates_the_schema() {
         .collect();
 
     for t in ["memories", "memory_tags", "memory_refs", "chunks", "chunks_fts", "search_log"] {
-        assert!(tablas.contains(&t.to_string()), "falta la tabla {t}; hay {tablas:?}");
+        assert!(tables.contains(&t.to_string()), "falta la tabla {t}; hay {tables:?}");
     }
 }
 

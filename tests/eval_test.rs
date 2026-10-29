@@ -18,8 +18,8 @@ fn it_computes_metrics_over_a_known_fixture() {
         }).unwrap();
     }
 
-    let es = dir.path().join("evalset.json");
-    let mut f = std::fs::File::create(&es).unwrap();
+    let evalset = dir.path().join("evalset.json");
+    let mut f = std::fs::File::create(&evalset).unwrap();
     write!(f, r#"{{
       "corpus": "x", "created": "2026-09-21",
       "cases": [
@@ -28,7 +28,7 @@ fn it_computes_metrics_over_a_known_fixture() {
         {{"id":"q3","query":"algo que no existe en ningun documento","expect_docs":["c"],"kind":"factual"}}
       ]}}"#).unwrap();
 
-    let r = evalrun::run(&conn, &es, "anathem bm25", &search::SearchContext::bm25_only()).unwrap();
+    let r = evalrun::run(&conn, &evalset, "anathem bm25", &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(r.n_cases, 3);
     // q1 and q2 hit at rank 1; q3 does not hit
     assert!((r.recall_at_5 - 2.0 / 3.0).abs() < 1e-9, "recall@5 = {}", r.recall_at_5);
@@ -67,12 +67,12 @@ fn a_hit_without_an_ext_id_is_not_dropped_from_the_rank_count() {
         tags: vec![], refs: vec![],
     }).unwrap();
 
-    let es = dir.path().join("evalset.json");
-    std::fs::write(&es, r#"{"corpus":"x","created":"2026-09-21","cases":[
+    let evalset = dir.path().join("evalset.json");
+    std::fs::write(&evalset, r#"{"corpus":"x","created":"2026-09-21","cases":[
         {"id":"q1","query":"gato","expect_docs":["x"],"kind":"factual"}
     ]}"#).unwrap();
 
-    let r = evalrun::run(&conn, &es, "anathem bm25", &search::SearchContext::bm25_only()).unwrap();
+    let r = evalrun::run(&conn, &evalset, "anathem bm25", &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(r.per_case.len(), 1);
     // The hit with no ext_id takes rank 1 without ever matching; the target
     // shows up at rank 2, not rank 1.
@@ -89,9 +89,9 @@ fn a_hit_without_an_ext_id_is_not_dropped_from_the_rank_count() {
 fn it_serializes_to_the_shared_format() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
-    let es = dir.path().join("evalset.json");
-    std::fs::write(&es, r#"{"corpus":"x","created":"2026-09-21","cases":[{"id":"q1","query":"nada","expect_docs":["z"],"kind":"factual"}]}"#).unwrap();
-    let r = evalrun::run(&conn, &es, "anathem bm25", &search::SearchContext::bm25_only()).unwrap();
+    let evalset = dir.path().join("evalset.json");
+    std::fs::write(&evalset, r#"{"corpus":"x","created":"2026-09-21","cases":[{"id":"q1","query":"nada","expect_docs":["z"],"kind":"factual"}]}"#).unwrap();
+    let r = evalrun::run(&conn, &evalset, "anathem bm25", &search::SearchContext::bm25_only()).unwrap();
     let j: serde_json::Value = serde_json::to_value(&r).unwrap();
     for k in ["system", "n_cases", "recall_at_5", "recall_at_50", "mrr", "p50_ms", "per_case"] {
         assert!(j.get(k).is_some(), "falta la clave {k} en {j}");

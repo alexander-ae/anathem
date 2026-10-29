@@ -111,6 +111,6 @@ fn remote_name(config: &Path) -> Option<String> {
 
 /// The project to use: the caller's, or the detected one, or the generic
 /// fallback. An explicit `--project` always wins.
-pub fn resolve(pedido: Option<String>, cwd: &Path) -> String {
-    pedido.unwrap_or_else(|| detect(cwd).unwrap_or_else(|| NO_PROJECT.to_string()))
+pub fn resolve(requested: Option<String>, cwd: &Path) -> String {
+    requested.unwrap_or_else(|| detect(cwd).unwrap_or_else(|| NO_PROJECT.to_string()))
 }

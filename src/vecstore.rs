@@ -127,7 +127,7 @@ pub fn mark_install(conn: &Connection, name: &str) -> Result<()> {
     Ok(())
 }
 
-/// El nombre del paquete cuya instalación quedó a medias, si quedó alguna.
+/// The name of the pack whose install was left half done, if any was.
 pub fn pending_install(conn: &Connection) -> Result<Option<String>> {
     match conn.query_row("select value from meta where key = ?1", [INSTALANDO], |r| {
         r.get::<_, String>(0)
@@ -213,7 +213,7 @@ impl SyncOutcome {
         }
     }
 
-    pub fn abandonada(self) -> bool {
+    pub fn abandoned(self) -> bool {
         matches!(self, SyncOutcome::Abandoned(_))
     }
 }
@@ -266,9 +266,9 @@ pub fn sync(conn: &Connection, pack: &Pack, expected: &PackIdentity) -> Result<S
         if pending.is_empty() {
             break;
         }
-        let mut vectores: Vec<(i64, Vec<u8>)> = Vec::with_capacity(pending.len());
+        let mut vectors: Vec<(i64, Vec<u8>)> = Vec::with_capacity(pending.len());
         for (id, body) in &pending {
-            vectores.push((*id, a_blob(&pack.embed(body)?)));
+            vectors.push((*id, a_blob(&pack.embed(body)?)));
         }
         let tx = escritura(conn)?;
         // With the write lock already held: is the pack this batch was
@@ -278,7 +278,7 @@ pub fn sync(conn: &Connection, pack: &Pack, expected: &PackIdentity) -> Result<S
         if registered_pack(&tx)?.as_ref() != Some(expected) {
             return Ok(SyncOutcome::Abandoned(total));
         }
-        for (id, blob) in &vectores {
+        for (id, blob) in &vectors {
             // Two things may have happened since the `select` above, and
             // neither is a fault of whoever saved a memory:
             //
@@ -315,13 +315,13 @@ pub fn sync(conn: &Connection, pack: &Pack, expected: &PackIdentity) -> Result<S
 /// diagnostic that exists to make the gap visible said 2/2 while vector
 /// search returned absolutely nothing.
 pub fn coverage(conn: &Connection, dims: usize) -> Result<(usize, usize)> {
-    let con: i64 = conn.query_row(
+    let covered: i64 = conn.query_row(
         "select count(*) from chunk_vectors where length(vec) = ?1",
         [(dims * 4) as i64],
         |r| r.get(0),
     )?;
     let tot: i64 = conn.query_row("select count(*) from chunks", [], |r| r.get(0))?;
-    Ok((con as usize, tot as usize))
+    Ok((covered as usize, tot as usize))
 }
 
 /// The `limit` memories most similar to `query`, under the same filters the
@@ -351,8 +351,8 @@ pub fn search_vectors(
     })?;
 
     let mut mejor: HashMap<i64, (i64, f32)> = HashMap::new();
-    for fila in rows {
-        let (mid, cid, blob) = fila?;
+    for row in rows {
+        let (mid, cid, blob) = row?;
         let v = from_blob(&blob);
         if v.len() != query_.len() {
             continue; // dimensiones distintas: vector de otro paquete

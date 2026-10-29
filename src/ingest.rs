@@ -263,12 +263,12 @@ pub fn save_with_topic_by(
     };
     let explicit_one: Option<(i64, String)> = match supersedes {
         Some(sid) => {
-            let fila: Option<(String, String)> = tx
+            let row: Option<(String, String)> = tx
                 .query_row("select status, title from memories where id = ?1", [sid], |r| {
                     Ok((r.get(0)?, r.get(1)?))
                 })
                 .optional()?;
-            match fila {
+            match row {
                 None => return Err(BadRequest(format!("no existe la memoria id:{sid}")).into()),
                 Some((st, _)) if st != "active" => {
                     return Err(BadRequest(format!(

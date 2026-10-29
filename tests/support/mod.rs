@@ -40,13 +40,13 @@ pub const TOKENIZER_CON_AGREGADO_FUERA_DE_RANGO: &str = r#"{
 /// out by hand. `n_tokens` comes from the length of `rows`, which is exactly
 /// the field that has to be put out of step to test `Pack::open_pack`'s
 /// validation.
-pub fn escribir_pack_filas(pack_path: &Path, name: &str, dims: usize, rows: &[Vec<u8>]) {
-    escribir_pack_con_tokenizador(pack_path, name, dims, rows, TOKENIZER_MINI);
+pub fn write_pack_rows(pack_path: &Path, name: &str, dims: usize, rows: &[Vec<u8>]) {
+    write_pack_with_tokenizer(pack_path, name, dims, rows, TOKENIZER_MINI);
 }
 
 /// `write_pack_rows` choosing the embedded tokenizer as well, so the
 /// relation between table and vocabulary can be put out of step.
-pub fn escribir_pack_con_tokenizador(
+pub fn write_pack_with_tokenizer(
     pack_path: &Path,
     name: &str,
     dims: usize,
@@ -80,8 +80,8 @@ pub fn escribir_pack_con_tokenizador(
 ///
 /// Rows: `<unk>`=[0,0,0,0], `▁hola`=[10,0,0,0], `▁mundo`=[0,10,0,0],
 /// `s`=[0,0,10,0].
-pub fn escribir_pack_mini(pack_path: &Path, name: &str) {
-    escribir_pack_filas(
+pub fn write_pack_mini(pack_path: &Path, name: &str) {
+    write_pack_rows(
         pack_path,
         name,
         4,
@@ -96,8 +96,8 @@ pub fn escribir_pack_mini(pack_path: &Path, name: &str) {
 /// since it fixes 256 dimensions for every pack, the blobs of two different
 /// packs are exactly the same size and nothing tells them apart short of
 /// looking at where they point.
-pub fn escribir_pack_permutado(pack_path: &Path, name: &str) {
-    escribir_pack_filas(
+pub fn write_pack_permuted(pack_path: &Path, name: &str) {
+    write_pack_rows(
         pack_path,
         name,
         4,
@@ -107,18 +107,18 @@ pub fn escribir_pack_permutado(pack_path: &Path, name: &str) {
 
 /// A pack whose table is all zeros: it opens, installs and produces nothing
 /// but null vectors.
-pub fn escribir_pack_nulo(pack_path: &Path, name: &str) {
-    escribir_pack_filas(pack_path, name, 4, &vec![vec![0u8; 4]; 4]);
+pub fn write_pack_null(pack_path: &Path, name: &str) {
+    write_pack_rows(pack_path, name, 4, &vec![vec![0u8; 4]; 4]);
 }
 
 /// Reads a vector from `chunk_vectors` as a `Vec<f32>`.
-pub fn leer_vector(conn: &rusqlite::Connection, sql: &str) -> Vec<f32> {
+pub fn read_vector(conn: &rusqlite::Connection, sql: &str) -> Vec<f32> {
     let blob: Vec<u8> = conn.query_row(sql, [], |r| r.get(0)).unwrap();
     blob.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect()
 }
 
 /// Rewrites a single byte of the file, so as to build corrupt packs.
-pub fn corromper(pack_path: &Path, offset: usize, value: u8) {
+pub fn corrupt_byte(pack_path: &Path, offset: usize, value: u8) {
     let mut b = std::fs::read(pack_path).unwrap();
     b[offset] = value;
     std::fs::write(pack_path, b).unwrap();
@@ -130,7 +130,7 @@ pub fn corromper(pack_path: &Path, offset: usize, value: u8) {
 /// each batch's transaction, that it is still the current one. Registering
 /// first is not test ceremony: in real life vectors only exist once a pack is
 /// installed, and `install` leaves the registry set before syncing.
-pub fn registrar_y_sincronizar(
+pub fn register_and_sync(
     conn: &rusqlite::Connection,
     p: &anathem::pack::Pack,
 ) -> anathem::vecstore::SyncOutcome {

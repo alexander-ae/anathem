@@ -295,8 +295,8 @@ pub fn run_explained(
                 cosines.insert(a.memory_id, a.cosine);
                 orden_vec.push(a.memory_id);
                 if !best.contains_key(&a.memory_id) {
-                    if let Some(par) = hit_from_chunk(conn, a.chunk_id)? {
-                        best.insert(a.memory_id, par);
+                    if let Some(pair) = hit_from_chunk(conn, a.chunk_id)? {
+                        best.insert(a.memory_id, pair);
                     }
                 }
             }

@@ -1,4 +1,4 @@
-mod apoyo;
+mod support;
 
 use anathem::pack::Pack;
 
@@ -10,7 +10,7 @@ fn cos(a: &[f32], b: &[f32]) -> f32 {
 fn it_opens_and_reports_its_metadata() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     let p = Pack::open_pack(&r).unwrap();
     assert_eq!(p.name(), "mini-es");
     assert_eq!(p.dims(), 4);
@@ -20,7 +20,7 @@ fn it_opens_and_reports_its_metadata() {
 fn a_single_token_yields_its_axis() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     let p = Pack::open_pack(&r).unwrap();
     let v = p.embed("hola").unwrap();
     assert!((v[0] - 1.0).abs() < 1e-5, "esperaba el eje 0, salió {v:?}");
@@ -28,10 +28,10 @@ fn a_single_token_yields_its_axis() {
 }
 
 #[test]
-fn dos_tokens_promedian_sus_filas() {
+fn two_tokens_average_their_rows() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     let p = Pack::open_pack(&r).unwrap();
     let v = p.embed("hola mundo").unwrap();
     let expected = 1.0f32 / 2f32.sqrt();
@@ -45,7 +45,7 @@ fn the_suffix_is_re_segmented_instead_of_falling_back_to_unknown() {
     // property that lets the vocabulary be trimmed without losing quality.
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     let p = Pack::open_pack(&r).unwrap();
     let v = p.embed("mundos").unwrap();
     assert!(v[1] > 0.1 && v[2] > 0.1, "esperaba mezcla de ▁mundo y s, salió {v:?}");
@@ -55,7 +55,7 @@ fn the_suffix_is_re_segmented_instead_of_falling_back_to_unknown() {
 fn empty_text_yields_a_null_vector_without_failing() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     let p = Pack::open_pack(&r).unwrap();
     let v = p.embed("").unwrap();
     assert_eq!(v.len(), 4);
@@ -75,8 +75,8 @@ fn it_rejects_a_file_without_the_magic() {
 fn it_rejects_a_version_it_does_not_understand() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
-    apoyo::corromper(&r, 4, 99); // el primer byte de la versión
+    support::write_pack_mini(&r, "mini-es");
+    support::corrupt_byte(&r, 4, 99); // el primer byte de la versión
     let e = Pack::open_pack(&r).unwrap_err().to_string();
     assert!(e.contains("versión"), "el error debe nombrar la versión: {e}");
 }
@@ -85,7 +85,7 @@ fn it_rejects_a_version_it_does_not_understand() {
 fn it_rejects_a_truncated_file() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     let b = std::fs::read(&r).unwrap();
     std::fs::write(&r, &b[..b.len() - 5]).unwrap();
     let e = Pack::open_pack(&r).unwrap_err().to_string();
@@ -103,10 +103,10 @@ fn it_rejects_a_corrupt_tokenizer_length_without_panicking() {
     // value.
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     let base = 20 + "mini-es".len(); // desplazamiento del campo tok_len (u64 LE)
     for i in 0..8 {
-        apoyo::corromper(&r, base + i, 0xFF);
+        support::corrupt_byte(&r, base + i, 0xFF);
     }
     let e = Pack::open_pack(&r).unwrap_err().to_string();
     assert!(e.contains("tokenizador"), "el error debe nombrar la causa: {e}");
@@ -117,11 +117,11 @@ fn it_rejects_a_corrupt_tokenizer_length_without_panicking() {
 fn the_sha256_is_stable_and_changes_with_the_content() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
-    apoyo::escribir_pack_mini(&r, "mini-es");
+    support::write_pack_mini(&r, "mini-es");
     let a = anathem::pack::sha256(&r).unwrap();
     assert_eq!(a, anathem::pack::sha256(&r).unwrap());
     assert_eq!(a.len(), 64);
-    apoyo::corromper(&r, 40, 7);
+    support::corrupt_byte(&r, 40, 7);
     assert_ne!(a, anathem::pack::sha256(&r).unwrap());
 }
 
@@ -135,7 +135,7 @@ fn it_rejects_a_table_smaller_than_the_vocabulary() {
     // inconsistency is caught on open, once, and naming the file.
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("corto.anathem-pack");
-    apoyo::escribir_pack_filas(&r, "corto-es", 4, &[vec![0, 0, 0, 0], vec![10, 0, 0, 0]]);
+    support::write_pack_rows(&r, "corto-es", 4, &[vec![0, 0, 0, 0], vec![10, 0, 0, 0]]);
     let e = Pack::open_pack(&r).unwrap_err().to_string();
     assert!(e.contains("tokenizador"), "el error debe explicar la incoherencia: {e}");
     assert!(e.contains("corto.anathem-pack"), "el error debe nombrar el archivo: {e}");
@@ -153,12 +153,12 @@ fn it_accepts_an_added_token_whose_id_is_outside_the_table() {
     // added ids falling outside the table are skipped by `embed`.
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("agregados.anathem-pack");
-    apoyo::escribir_pack_con_tokenizador(
+    support::write_pack_with_tokenizer(
         &r,
         "agregados-es",
         4,
         &[vec![0, 0, 0, 0], vec![10, 0, 0, 0], vec![0, 10, 0, 0], vec![0, 0, 10, 0]],
-        apoyo::TOKENIZER_CON_AGREGADO_FUERA_DE_RANGO,
+        support::TOKENIZER_CON_AGREGADO_FUERA_DE_RANGO,
     );
     let p = Pack::open_pack(&r).expect("un added_token fuera de rango no invalida la tabla");
     assert_eq!(p.name(), "agregados-es");

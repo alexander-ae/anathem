@@ -69,10 +69,10 @@ fn the_search_budget_can_be_raised() {
         let body = format!("memoria numero {i} sobre cacheo de propiedades y {}", "relleno ".repeat(60));
         mem(&["save", &body, "--project", "p"]);
     }
-    let apretado = mem(&["search", "cacheo propiedades", "--limit", "8"]);
-    let holgado = mem(&["search", "cacheo propiedades", "--limit", "8", "--budget", "100000"]);
+    let tight = mem(&["search", "cacheo propiedades", "--limit", "8"]);
+    let roomy = mem(&["search", "cacheo propiedades", "--limit", "8", "--budget", "100000"]);
     let n = |o: &std::process::Output| String::from_utf8_lossy(&o.stdout)
         .lines().filter(|l| l.trim_start().starts_with(char::is_numeric) && l.contains('.')).count();
-    assert!(n(&holgado) > n(&apretado),
-        "con más presupuesto tienen que entrar más resultados: {} vs {}", n(&holgado), n(&apretado));
+    assert!(n(&roomy) > n(&tight),
+        "con más presupuesto tienen que entrar más resultados: {} vs {}", n(&roomy), n(&tight));
 }

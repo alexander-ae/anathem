@@ -1,6 +1,6 @@
 //! The MCP server lives for hours; the pack can change underneath it.
 
-mod apoyo;
+mod support;
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -26,8 +26,8 @@ fn the_server_does_not_mix_vectors_when_the_pack_changes_underneath() {
     let db = d.path().join("mem.db");
     let a = d.path().join("a.anathem-pack");
     let b = d.path().join("b.anathem-pack");
-    apoyo::escribir_pack_mini(&a, "mini-es"); // "▁mundo" -> eje 1
-    apoyo::escribir_pack_permutado(&b, "otro-es"); // "▁mundo" -> eje 2
+    support::write_pack_mini(&a, "mini-es"); // "▁mundo" -> eje 1
+    support::write_pack_permuted(&b, "otro-es"); // "▁mundo" -> eje 2
 
     assert!(mem(&db, &["init"]).status.success());
     assert!(mem(&db, &["save", "hola"]).status.success());
@@ -69,7 +69,7 @@ fn the_server_does_not_mix_vectors_when_the_pack_changes_underneath() {
     hijo.wait().unwrap();
 
     let conn = rusqlite::Connection::open(&db).unwrap();
-    let v = apoyo::leer_vector(
+    let v = support::read_vector(
         &conn,
         "select v.vec from chunk_vectors v
            join chunks c on c.id = v.chunk_id
@@ -90,7 +90,7 @@ fn the_server_stops_using_the_pack_once_it_is_removed() {
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let a = d.path().join("a.anathem-pack");
-    apoyo::escribir_pack_mini(&a, "mini-es");
+    support::write_pack_mini(&a, "mini-es");
     assert!(mem(&db, &["init"]).status.success());
     assert!(mem(&db, &["save", "hola"]).status.success());
     assert!(mem(&db, &["model", "install", a.to_str().unwrap()]).status.success());

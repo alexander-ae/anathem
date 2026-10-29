@@ -244,17 +244,17 @@ fn editing_the_body_recomputes_the_title() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let id = seed(&conn, "encabezado viejo\n\ncuerpo original");
-    let antes: String = conn
+    let before: String = conn
         .query_row("select title from memories where id=?1", [id], |r| r.get(0))
         .unwrap();
-    assert_eq!(antes, "t", "el helper siembra un título arbitrario, a propósito");
+    assert_eq!(before, "t", "el helper siembra un título arbitrario, a propósito");
 
     anathem::edit::replace_body(&conn, id, "encabezado nuevo\n\notro cuerpo").unwrap();
 
-    let despues: String = conn
+    let after: String = conn
         .query_row("select title from memories where id=?1", [id], |r| r.get(0))
         .unwrap();
-    assert_eq!(despues, "encabezado nuevo", "el título quedó desactualizado");
+    assert_eq!(after, "encabezado nuevo", "el título quedó desactualizado");
 }
 
 #[test]
@@ -282,12 +282,12 @@ fn export_preserves_everything_needed_to_migrate() {
     let out_text = dir.path().join("out");
     anathem::export::to_markdown(&conn, &out_text).unwrap();
     let parse = |id: i64| -> String {
-        let mut encontrado = None;
+        let mut found = None;
         for e in walk(&out_text) {
             let s = std::fs::read_to_string(&e).unwrap();
-            if s.contains(&format!("\nid: {id}\n")) { encontrado = Some(s); }
+            if s.contains(&format!("\nid: {id}\n")) { found = Some(s); }
         }
-        encontrado.unwrap_or_else(|| panic!("no se exportó la memoria {id}"))
+        found.unwrap_or_else(|| panic!("no se exportó la memoria {id}"))
     };
 
     let v = parse(older);

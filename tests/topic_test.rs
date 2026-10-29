@@ -129,7 +129,7 @@ fn topics_lists_project_count_and_current() {
     mem_ok(d.path(), &["save", "Sin clave, no figura", "--project", "p"]);
 
     let out = mem_ok(d.path(), &["topics"]);
-    let fila = |key: &str| -> Vec<String> {
+    let row = |key: &str| -> Vec<String> {
         out.lines()
             .find(|l| l.split_whitespace().nth(1) == Some(key))
             .unwrap_or_else(|| panic!("falta la clave {key} en:\n{out}"))
@@ -137,8 +137,8 @@ fn topics_lists_project_count_and_current() {
             .map(str::to_string)
             .collect()
     };
-    assert_eq!(fila("pagos"), ["p", "pagos", "2", "2"], "{out}");
-    assert_eq!(fila("base"), ["q", "base", "1", "3"], "{out}");
+    assert_eq!(row("pagos"), ["p", "pagos", "2", "2"], "{out}");
+    assert_eq!(row("base"), ["q", "base", "1", "3"], "{out}");
     assert_eq!(out.lines().count(), 3, "cabecera y dos claves, nada más: {out}");
 }
 
@@ -293,7 +293,7 @@ fn concurrent_saves_under_one_key_all_succeed_and_leave_a_single_active() {
     mem_ok(d.path(), &["init"]);
 
     const N: usize = 12;
-    let hijos: Vec<_> = (0..N)
+    let children: Vec<_> = (0..N)
         .map(|i| {
             Command::new(env!("CARGO_BIN_EXE_mem"))
                 .arg("--db")
@@ -306,7 +306,7 @@ fn concurrent_saves_under_one_key_all_succeed_and_leave_a_single_active() {
                 .unwrap()
         })
         .collect();
-    for (i, h) in hijos.into_iter().enumerate() {
+    for (i, h) in children.into_iter().enumerate() {
         let o = h.wait_with_output().unwrap();
         assert!(
             o.status.success(),
@@ -318,14 +318,14 @@ fn concurrent_saves_under_one_key_all_succeed_and_leave_a_single_active() {
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let total: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
     assert_eq!(total, N as i64, "se perdió algún guardado");
-    let activas: i64 = conn
+    let active_ones: i64 = conn
         .query_row(
             "select count(*) from memories where project='p' and topic='pagos' and status='active'",
             [],
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(activas, 1, "tiene que quedar exactamente una activa por clave");
+    assert_eq!(active_ones, 1, "tiene que quedar exactamente una activa por clave");
 }
 
 // -- MCP ---------------------------------------------------------------------
@@ -362,10 +362,10 @@ fn save_memory_without_a_topic_or_with_an_empty_one_supersedes_nothing() {
     call(&conn, "save_memory", serde_json::json!({
         "text": "Otro dato sobre pagos", "project": "p", "topic": ""}));
 
-    let activas: i64 = conn
+    let active_ones: i64 = conn
         .query_row("select count(*) from memories where status = 'active'", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(activas, 3);
+    assert_eq!(active_ones, 3);
 }
 
 #[test]
@@ -545,16 +545,16 @@ fn export_keeps_the_topic_key() {
     let out_text = d.path().join("out");
     mem_ok(d.path(), &["export", "--out", out_text.to_str().unwrap()]);
 
-    let mut con_tema = 0;
+    let mut with_topic = 0;
     for f in std::fs::read_dir(out_text.join("p")).unwrap() {
         let txt = std::fs::read_to_string(f.unwrap().path()).unwrap();
         if txt.contains("topic: \"pagos\"") {
-            con_tema += 1;
+            with_topic += 1;
         } else {
             assert!(!txt.contains("topic:"), "sin clave no se emite el campo: {txt}");
         }
     }
-    assert_eq!(con_tema, 1);
+    assert_eq!(with_topic, 1);
 }
 
 // -- a database predating this change -----------------------------------------
@@ -647,7 +647,7 @@ create trigger if not exists chunks_au after update on chunks begin
 end;
 "#;
 
-fn base_anterior(dir: &Path) {
+fn older_database(dir: &Path) {
     let conn = rusqlite::Connection::open(dir.join("mem.db")).unwrap();
     conn.execute_batch(ESQUEMA_ANTERIOR).unwrap();
     conn.execute(
@@ -667,7 +667,7 @@ fn base_anterior(dir: &Path) {
 #[test]
 fn an_older_database_still_opens_and_keeps_its_memories() {
     let d = tempfile::tempdir().unwrap();
-    base_anterior(d.path());
+    older_database(d.path());
 
     let out = mem_ok(d.path(), &["search", "postgres"]);
     assert!(out.contains("La base es Postgres"), "{out}");
@@ -681,7 +681,7 @@ fn an_older_database_still_opens_and_keeps_its_memories() {
 #[test]
 fn an_older_database_accepts_saving_with_a_key_and_listing_topics() {
     let d = tempfile::tempdir().unwrap();
-    base_anterior(d.path());
+    older_database(d.path());
 
     mem_ok(d.path(), &["save", "La base es MySQL", "--project", "p", "--topic", "base"]);
     let out = mem_ok(d.path(), &["save", "La base es Oracle", "--project", "p", "--topic", "base"]);
@@ -757,7 +757,7 @@ fn reviving_a_forgotten_one_when_a_current_exists_fails_instead_of_leaving_two_a
 #[test]
 fn an_older_database_gets_the_unique_index_too() {
     let d = tempfile::tempdir().unwrap();
-    base_anterior(d.path());
+    older_database(d.path());
     let conn = db::open(&d.path().join("mem.db")).unwrap();
     row_with_key(&conn, "p", Some("k"), "active").unwrap();
     assert!(row_with_key(&conn, "p", Some("k"), "active").is_err());

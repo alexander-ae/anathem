@@ -37,19 +37,19 @@ fn vmrss_kb(pid: u32) -> u64 {
 }
 
 #[cfg(target_os = "linux")]
-fn enviar(entry: &mut impl Write, json: &str) {
+fn send_(entry: &mut impl Write, json: &str) {
     writeln!(entry, "{json}").unwrap();
 }
 
 #[cfg(target_os = "linux")]
-fn leer_linea(out_text: &mut impl BufRead) -> String {
+fn read_line(out_text: &mut impl BufRead) -> String {
     let mut line_ = String::new();
     out_text.read_line(&mut line_).unwrap();
     line_
 }
 
 #[cfg(target_os = "linux")]
-fn matar(mut hijo: Child) {
+fn kill_(mut hijo: Child) {
     let _ = hijo.kill();
     let _ = hijo.wait();
 }
@@ -83,12 +83,12 @@ fn the_server_opens_the_pack_only_on_the_first_search() {
     let mut entry = hijo.stdin.take().unwrap();
     let mut out_text = BufReader::new(hijo.stdout.take().unwrap());
 
-    enviar(&mut entry, r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
-    let resp = leer_linea(&mut out_text);
+    send_(&mut entry, r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
+    let resp = read_line(&mut out_text);
     assert!(resp.contains("protocolVersion"), "el servidor no arrancó: {resp}");
 
-    enviar(&mut entry, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#);
-    let resp = leer_linea(&mut out_text);
+    send_(&mut entry, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#);
+    let resp = read_line(&mut out_text);
     assert!(resp.contains("search_memory"), "tools/list no respondió bien: {resp}");
 
     // With a pack installed, `initialize` and `tools/list` do not need it:
@@ -104,11 +104,11 @@ fn the_server_opens_the_pack_only_on_the_first_search() {
          hiciera falta"
     );
 
-    enviar(
+    send_(
         &mut entry,
         r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search_memory","arguments":{"query":"hola"}}}"#,
     );
-    let resp = leer_linea(&mut out_text);
+    let resp = read_line(&mut out_text);
     assert!(resp.contains("\"content\""), "la búsqueda no respondió bien: {resp}");
 
     let rss_despues = vmrss_kb(pid);
@@ -118,7 +118,7 @@ fn the_server_opens_the_pack_only_on_the_first_search() {
          del tokenizador (~54 MB); antes: {rss_antes} kB, después: {rss_despues} kB"
     );
 
-    matar(hijo);
+    kill_(hijo);
 }
 
 /// Companion to the test above for platforms without `/proc`: it does not

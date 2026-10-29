@@ -220,7 +220,7 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
 fn reconcile(
     conn: &Connection,
     dir: &Path,
-    ruta_actual: &Path,
+    current_path: &Path,
     p: Pack,
 ) -> Result<(Pack, PackIdentity)> {
     // The rest of the code assumes the path↔name convention. If the real
@@ -233,20 +233,20 @@ fn reconcile(
     let name = p.name().to_string();
     let dims = p.dims();
     let target = pack_path(dir, &name);
-    let hubo_rename = target != ruta_actual;
+    let hubo_rename = target != current_path;
     let p = if hubo_rename {
         drop(p);
-        std::fs::rename(ruta_actual, &target).with_context(|| {
+        std::fs::rename(current_path, &target).with_context(|| {
             format!(
                 "no se pudo renombrar {} a {} al reindexar",
-                ruta_actual.display(),
+                current_path.display(),
                 target.display()
             )
         })?;
         match Pack::open_pack(&target) {
             Ok(p) => p,
             Err(e) => {
-                let _ = std::fs::rename(&target, ruta_actual);
+                let _ = std::fs::rename(&target, current_path);
                 return Err(e).with_context(|| {
                     format!(
                         "el rename a {} salió bien pero el paquete no se pudo reabrir",
@@ -258,11 +258,11 @@ fn reconcile(
     } else {
         p
     };
-    let adopcion = pack::sha256(&target).and_then(|sha| {
+    let adoption = pack::sha256(&target).and_then(|sha| {
         vecstore::adopt_pack(conn, &name, &sha, dims)?;
         Ok((name.clone(), sha, dims))
     });
-    let identity = match adopcion {
+    let identity = match adoption {
         Ok(i) => i,
         Err(e) => {
             if hubo_rename {
@@ -270,7 +270,7 @@ fn reconcile(
                 // undoing the rename, for the same Windows reason that
                 // forced reopening it above.
                 drop(p);
-                let _ = std::fs::rename(&target, ruta_actual);
+                let _ = std::fs::rename(&target, current_path);
             }
             return Err(e);
         }
@@ -285,7 +285,7 @@ fn reconcile(
     // pack that is not the registered one. It fails, which in `resolve_inner`
     // means degrading to bm25 this once; the next resolution finds the new
     // pack and starts clean.
-    if vecstore::sync(conn, &p, &identity)?.abandonada() {
+    if vecstore::sync(conn, &p, &identity)?.abandoned() {
         bail!(
             "otro proceso cambió el paquete de vocabulario mientras se reindexaba con {}",
             name
@@ -464,7 +464,7 @@ pub fn install(conn: &Connection, dir: &Path, file: &Path) -> Result<Installed> 
     // process is indexing its own — but it has to be said, because the index
     // was left incomplete and `model status` is the only place that shows.
     let s = vecstore::sync(conn, &p, &(name.clone(), sha, dims))?;
-    Ok(Installed { name, dims, chunks: s.written(), displaced: s.abandonada() })
+    Ok(Installed { name, dims, chunks: s.written(), displaced: s.abandoned() })
 }
 
 /// Removes the pack and its vectors. Returns the name of the one that was
@@ -725,7 +725,7 @@ mod tests {
     /// cannot import it.
     fn write_test_pack(pack_path: &Path, name: &str) {
         let dims = 4usize;
-        let fila = [0u8, 0, 0, 0];
+        let row = [0u8, 0, 0, 0];
         let tok = MINIMAL_TOKENIZER.as_bytes();
         let mut b: Vec<u8> = Vec::new();
         b.extend_from_slice(b"ANPK");
@@ -742,7 +742,7 @@ mod tests {
         for _ in 0..dims {
             b.extend_from_slice(&0.0f32.to_le_bytes()); // mínimos
         }
-        b.extend_from_slice(&fila);
+        b.extend_from_slice(&row);
         std::fs::write(pack_path, b).unwrap();
     }
 
@@ -830,23 +830,23 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let dir = d.path();
         std::fs::create_dir_all(packs_dir(dir)).unwrap();
-        let ruta_vieja = pack_path(dir, "viejo-es");
+        let old_path = pack_path(dir, "viejo-es");
         // The file lives under the name "viejo-es" but declares itself
         // "nuevo-es": exactly the case that forces reconcile to rename
         // it.
-        write_test_pack(&ruta_vieja, "nuevo-es");
+        write_test_pack(&old_path, "nuevo-es");
 
         let conn = crate::db::open(&dir.join("mem.db")).unwrap();
         vecstore::register_pack(&conn, "viejo-es", "sha-viejo", 4).unwrap();
 
-        let p = Pack::open_pack(&ruta_vieja).unwrap(); // mmap abierto sobre ruta_vieja
+        let p = Pack::open_pack(&old_path).unwrap(); // mmap abierto sobre ruta_vieja
 
-        let (p2, identity) = reconcile(&conn, dir, &ruta_vieja, p)
+        let (p2, identity) = reconcile(&conn, dir, &old_path, p)
             .expect("reconciliar tiene que poder renombrar el archivo que tiene mapeado");
 
         assert_eq!(identity.0, "nuevo-es");
         assert_eq!(p2.name(), "nuevo-es");
-        assert!(!ruta_vieja.exists(), "el archivo con el nombre viejo tiene que haberse ido");
+        assert!(!old_path.exists(), "el archivo con el nombre viejo tiene que haberse ido");
         assert!(
             pack_path(dir, "nuevo-es").exists(),
             "el archivo tiene que vivir ahora en el nombre nuevo"
