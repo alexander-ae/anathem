@@ -158,8 +158,9 @@ búsqueda es solo léxica. El instalador lo baja solo; a mano se instala con
 | `unpin <id>` | Quita el pin | `mem unpin 17` |
 | `forget <id>` | Saca una memoria de la búsqueda sin borrar la fila | `mem forget 88` |
 | `history <id>` | Muestra la cadena de supersession de una memoria, de la más nueva a la más vieja | `mem history 42` |
+| `recent` | Qué se guardó últimamente, de más nuevo a más viejo, y qué agente lo guardó. Es lo contrario de `search`, que ordena por relevancia. `--desde` acepta `6h`, `90m`, `2d` o `todo`; por defecto 24h | `mem recent --desde 6h` |
 | `eval --evalset <json>` | Corre el harness de evaluación | `mem eval --evalset eval/evalset.json --out eval/results/anathem-bm25.json` |
-| `serve` | Arranca el servidor MCP sobre stdio (4 tools: `search_memory`, `save_memory`, `get_memory`, `list_tags`) | `mem serve` |
+| `serve` | Arranca el servidor MCP sobre stdio (5 tools: `search_memory`, `save_memory`, `get_memory`, `list_tags`, `recent_memories`) | `mem serve` |
 | `model install <archivo>` | Instala un paquete de vocabulario (`.anathem-pack`) y reindexa todos los fragmentos | `mem model install mini-es.anathem-pack` |
 | `model status` | Muestra el paquete activo, sus dimensiones y la cobertura de vectores | `mem model status` |
 | `model remove` | Quita los vectores **y borra el archivo del paquete**; la búsqueda vuelve a ser solo bm25 | `mem model remove` |
@@ -233,6 +234,42 @@ funciona aunque git no esté instalado y no cuesta un subproceso por guardado.
 **La búsqueda NO filtra por proyecto sola.** Se pasa `--project` cuando se
 quiere acotar. Filtrar por defecto escondería memorias sin avisar, que es
 peor que traer alguna de más.
+
+## Pasarle el trabajo de un agente a otro
+
+Si trabajás con más de un agente —Claude Code y opencode, por ejemplo— cada uno
+arranca sin saber qué hizo el anterior. `mem recent` contesta eso: lo último
+que se guardó en el proyecto, de más nuevo a más viejo, con quién lo guardó.
+
+```
+$ mem recent --desde 6h
+2026-10-29T10:11  [opencode]  [tema: estado-del-refactor]
+  id:128  Quedó a medias la migración de los tests de integración
+  Los de `auth` ya pasan; faltan los de `billing`, que dependen del fixture viejo.
+```
+
+El nombre del agente no hay que configurarlo. El protocolo MCP obliga al
+cliente a identificarse en el `initialize` (`clientInfo.name`), así que anathem
+ya lo recibe: lo único que hacía falta era no tirarlo. Lo guardado desde la
+CLI no tiene agente, porque ahí no hay ninguno, y aparece como `—`.
+
+Para que el traspaso sirva, al cerrar conviene dejar una memoria con clave de
+tema, que reemplaza a la anterior en vez de acumular:
+
+```
+mem save "Quedó a medias la migración de los tests" --topic estado-del-refactor
+```
+
+**Es opcional y aditivo.** Las dos columnas que esto agrega (`agente` y
+`creado_ts`) son nulas en todo lo anterior, y una base donde nadie use `recent`
+se comporta igual que antes. Lo que deliberadamente **no** hace es capturar
+sola cada cosa que el agente toca: eso es lo que hacía supermemory, y en este
+mismo corpus medimos que el 56% de lo que guardaba así era ruido. El agente
+decide qué vale la pena dejar escrito.
+
+Para saber qué **archivos** tocó el otro agente, `git diff` es mejor que
+cualquier memoria. Lo que anathem aporta es el **por qué**: qué intentó, qué
+descartó y con qué quedó a medias.
 
 ## Taxonomía de tags
 

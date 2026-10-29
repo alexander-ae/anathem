@@ -15,6 +15,7 @@ pub mod model;
 pub mod pack;
 pub mod paquete;
 pub mod proyecto;
+pub mod reciente;
 pub mod search;
 pub mod supersede;
 pub mod tags;

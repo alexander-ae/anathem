@@ -109,16 +109,60 @@ pub fn open(path: &Path) -> Result<Connection> {
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
     conn.execute_batch(SCHEMA)?;
     agregar_columna_topic(&conn)?;
+    agregar_columnas_de_traspaso(&conn)?;
     Ok(conn)
 }
 
-fn tiene_columna_topic(conn: &Connection) -> Result<bool> {
+fn tiene_columna(conn: &Connection, nombre: &str) -> Result<bool> {
     let n: i64 = conn.query_row(
-        "select count(*) from pragma_table_info('memories') where name = 'topic'",
-        [],
+        "select count(*) from pragma_table_info('memories') where name = ?1",
+        [nombre],
         |r| r.get(0),
     )?;
     Ok(n > 0)
+}
+
+fn tiene_columna_topic(conn: &Connection) -> Result<bool> {
+    tiene_columna(conn, "topic")
+}
+
+/// Agrega una columna que puede faltar en una base vieja, tolerando que otro
+/// proceso gane la carrera. Mismo razonamiento que `agregar_columna_topic`:
+/// la CLI y el servidor MCP pueden abrir la misma base a la vez, los dos ven
+/// la columna ausente, y el segundo `alter` falla con "duplicate column
+/// name". Si tras fallar la columna ya está, el resultado es el que se quería.
+fn agregar_columna(conn: &Connection, nombre: &str, tipo: &str) -> Result<()> {
+    if tiene_columna(conn, nombre)? {
+        return Ok(());
+    }
+    let sql = format!("alter table memories add column {nombre} {tipo}");
+    if let Err(e) = conn.execute(&sql, []) {
+        if !tiene_columna(conn, nombre)? {
+            return Err(e.into());
+        }
+    }
+    Ok(())
+}
+
+/// Las dos columnas que hacen posible contar qué pasó últimamente y quién lo
+/// escribió. Son opcionales en el sentido fuerte: una base donde nadie las
+/// use se comporta igual que antes, y las memorias viejas las tienen nulas.
+///
+/// `creado_ts` existe porque `created` guarda solo la fecha. Para saber qué
+/// hizo el otro agente hace un rato, un día de resolución no alcanza.
+///
+/// `agente` lo llena el servidor MCP con el nombre que el cliente manda en el
+/// `initialize`; lo guardado desde la CLI queda sin agente, que es la verdad.
+fn agregar_columnas_de_traspaso(conn: &Connection) -> Result<()> {
+    agregar_columna(conn, "agente", "text")?;
+    agregar_columna(conn, "creado_ts", "text")?;
+    // Sirve a la consulta de `mem recent`, que filtra por proyecto y ordena
+    // por fecha descendente.
+    conn.execute(
+        "create index if not exists idx_mem_project_creado on memories(project, creado_ts)",
+        [],
+    )?;
+    Ok(())
 }
 
 /// Una base creada antes de las claves de tema no tiene `memories.topic`, y

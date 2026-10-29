@@ -37,6 +37,12 @@ fn tool_defs() -> Value {
           "tags": {"type": "array", "items": {"type": "string"}},
           "topic": {"type": "string", "description": "Clave de tema, opcional. Ponela si el asunto va a seguir evolucionando: reemplaza a la memoria activa con la misma clave en el mismo proyecto. Frase corta y estable que nombra el asunto, p. ej. `politica-de-ramas`."},
           "supersedes": {"type": "integer", "description": "Id de una memoria concreta y activa que esta corrige y reemplaza, opcional. Es la que dejará de aparecer en las búsquedas. Usalo para corregir algo ya guardado, tenga o no clave de tema."}}}},
+      {"name": "recent_memories",
+       "description": "Qué se guardó últimamente en este proyecto, de más nuevo a más viejo, con quién lo guardó. Sirve para retomar un trabajo o para ver qué dejó otro agente; para buscar por tema, usar search_memory, que ordena por relevancia y no por fecha.",
+       "inputSchema": {"type": "object", "properties": {
+          "project": {"type": "string"},
+          "since": {"type": "string", "description": "Ventana hacia atrás: 6h, 90m, 2d. Por defecto 24h."},
+          "limit": {"type": "integer", "description": "Máximo de memorias; por defecto 15."}}}},
       {"name": "get_memory",
        "description": "Devuelve el cuerpo completo de una memoria por su id.",
        "inputSchema": {"type": "object", "required": ["id"], "properties": {
@@ -65,6 +71,7 @@ fn call_tool(
     cfg: &Config,
     name: &str,
     args: &Value,
+    agente: Option<&str>,
 ) -> Result<Value> {
     match name {
         "search_memory" => {
@@ -142,7 +149,8 @@ fn call_tool(
                     }
                 },
             };
-            let g = match ingest::guardar_con_tema(conn, text, &project, tags_dados, topic, supersedes) {
+            let g = match ingest::guardar_con_tema_de(
+                conn, text, &project, tags_dados, topic, supersedes, agente) {
                 Ok(g) => g,
                 // Un pedido que no se puede cumplir no es un error interno:
                 // el modelo tiene que leer qué corregir, y no se guardó nada.
@@ -189,6 +197,21 @@ fn call_tool(
                 "Guardada como id:{id} [{}] {title}{aviso_tema}{aviso}", tag_list.join(", ")
             )))
         }
+        "recent_memories" => {
+            let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let project = crate::proyecto::resolver(
+                args["project"].as_str().map(str::to_string), &cwd);
+            let ventana = match args["since"].as_str() {
+                Some(s) => match crate::reciente::duracion_en_segundos(s) {
+                    Ok(v) => Some(v),
+                    Err(e) => return Ok(text_result(format!("No se pudo listar: {e}"))),
+                },
+                None => Some(24 * 3600),
+            };
+            let limite = args["limit"].as_u64().map(|l| l as usize).unwrap_or(15);
+            let items = crate::reciente::listar(conn, Some(&project), ventana, limite, cfg.extracto)?;
+            Ok(text_result(crate::reciente::formatear(&items, false)))
+        }
         "get_memory" => {
             let id = args["id"].as_i64().unwrap_or(-1);
             let row: rusqlite::Result<(String, String, String)> = conn.query_row(
@@ -227,6 +250,24 @@ pub fn handle(
     cfg: &Config,
     req: &Value,
 ) -> Result<Option<Value>> {
+    let mut sin_agente = None;
+    handle_con_agente(conn, ctx, cfg, req, &mut sin_agente)
+}
+
+/// Igual que `handle`, recordando qué cliente está del otro lado.
+///
+/// El protocolo obliga al cliente a decir quién es en el `initialize`
+/// (`clientInfo.name`), así que saber si esto lo escribió Claude Code o
+/// opencode no cuesta configuración ninguna: alcanza con no tirar ese dato.
+/// `serve` guarda el nombre entre mensajes, porque el `initialize` llega una
+/// sola vez y los `tools/call` vienen después.
+pub fn handle_con_agente(
+    conn: &Connection,
+    ctx: &search::Contexto,
+    cfg: &Config,
+    req: &Value,
+    agente: &mut Option<String>,
+) -> Result<Option<Value>> {
     let method = req["method"].as_str().unwrap_or_default();
     let id = req.get("id").cloned();
 
@@ -236,17 +277,25 @@ pub fn handle(
     let id = id.unwrap();
 
     let res = match method {
-        "initialize" => ok(&id, json!({
+        "initialize" => {
+            if let Some(n) = req["params"]["clientInfo"]["name"].as_str() {
+                let n = n.trim();
+                if !n.is_empty() {
+                    *agente = Some(n.chars().take(60).collect());
+                }
+            }
+            ok(&id, json!({
             "protocolVersion": PROTOCOL,
             "capabilities": {"tools": {}},
             "serverInfo": {"name": "anathem", "version": env!("CARGO_PKG_VERSION")}
-        })),
+            }))
+        }
         "tools/list" => ok(&id, json!({"tools": tool_defs()})),
         "tools/call" => {
             let name = req["params"]["name"].as_str().unwrap_or_default();
             let empty = json!({});
             let args = req["params"].get("arguments").unwrap_or(&empty);
-            match call_tool(conn, ctx, cfg, name, args) {
+            match call_tool(conn, ctx, cfg, name, args, agente.as_deref()) {
                 Ok(v) => ok(&id, v),
                 Err(e) => err(&id, -32603, &format!("error interno: {e}")),
             }
@@ -275,6 +324,10 @@ pub fn handle(
 /// de esas dos. Una sesión que nunca busca ni guarda nunca paga ese heap.
 pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
     let mut vivo = crate::paquete::PaqueteVivo::nuevo(dir);
+    // Quién está del otro lado, según el `initialize`. Se recuerda entre
+    // mensajes porque ese handshake llega una vez y los guardados vienen
+    // después.
+    let mut agente: Option<String> = None;
     // El paquete se abre recién cuando alguien busca o guarda, así que una
     // sesión que nunca lo use no vería que desapareció. Este chequeo cuesta
     // un `stat` y cubre ese caso al arrancar.
@@ -303,7 +356,7 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
         } else {
             search::Contexto::de_servidor(None, cfg.peso_bm25)
         };
-        if let Some(res) = handle(conn, &ctx, cfg, &req)? {
+        if let Some(res) = handle_con_agente(conn, &ctx, cfg, &req, &mut agente)? {
             writeln!(stdout, "{}", serde_json::to_string(&res)?)?;
             stdout.flush()?;
         }

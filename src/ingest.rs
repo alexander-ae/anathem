@@ -10,23 +10,34 @@ const VALID_REF_KINDS: [&str; 3] = ["ticket", "pr", "sha"];
 
 pub fn insert(conn: &Connection, m: &NewMemory) -> Result<i64> {
     let tx = conn.unchecked_transaction()?;
-    let id = insertar(&tx, m)?;
+    let id = insertar(&tx, m, None)?;
     tx.commit()?;
     Ok(id)
+}
+
+/// Marca de tiempo con hora para `memories.creado_ts`.
+///
+/// `created` guarda solo la fecha y así se queda: lo usa el export, el nombre
+/// de archivo de cada memoria y la migración desde otros sistemas. Esta es una
+/// columna aparte, para poder contestar "qué pasó hace un rato" sin tocar nada
+/// de lo anterior.
+fn ahora_con_hora() -> String {
+    chrono::Local::now().to_rfc3339()
 }
 
 /// El insert en sí, sin abrir ni cerrar transacción: quien llama pone el
 /// límite. `insert` lo envuelve en la suya; el guardado con clave de tema lo
 /// corre dentro de la que también cubre el supersede, para que ambas cosas
 /// ocurran juntas o ninguna.
-fn insertar(tx: &Connection, m: &NewMemory) -> Result<i64> {
+fn insertar(tx: &Connection, m: &NewMemory, agente: Option<&str>) -> Result<i64> {
     tx.execute(
         "insert into memories
            (project, title, body, created, updated, event_start, event_end,
-            source, ext_id)
-         values (?1, ?2, ?3, ?4, ?4, ?5, ?6, ?7, ?8)",
+            source, ext_id, agente, creado_ts)
+         values (?1, ?2, ?3, ?4, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![m.project, m.title, m.body, m.created,
-                m.event_start, m.event_end, m.source, m.ext_id],
+                m.event_start, m.event_end, m.source, m.ext_id,
+                agente, ahora_con_hora()],
     )?;
     let id = tx.last_insert_rowid();
 
@@ -186,6 +197,26 @@ pub fn guardar_con_tema(
     topic: Option<&str>,
     supersedes: Option<i64>,
 ) -> Result<Guardado> {
+    guardar_con_tema_de(conn, texto, project, tags_dados, topic, supersedes, None)
+}
+
+/// Igual que `guardar_con_tema`, anotando qué agente lo guardó.
+///
+/// Existe como función aparte y no como un parámetro más de la otra para no
+/// tocar sus veinte y pico de sitios de llamada, casi todos tests: el agente
+/// solo lo conoce el servidor MCP, que es el único que lee el `clientInfo`
+/// del `initialize`. Lo guardado desde la CLI no tiene agente, y está bien
+/// que así sea.
+#[allow(clippy::too_many_arguments)]
+pub fn guardar_con_tema_de(
+    conn: &Connection,
+    texto: &str,
+    project: &str,
+    tags_dados: Vec<String>,
+    topic: Option<&str>,
+    supersedes: Option<i64>,
+    agente: Option<&str>,
+) -> Result<Guardado> {
     let topic = topic.map(normalizar_tema).transpose()?;
     let tags = if tags_dados.is_empty() {
         crate::tags::classify(texto).map_err(|e| anyhow::anyhow!(e))?
@@ -206,7 +237,9 @@ pub fn guardar_con_tema(
     };
 
     if topic.is_none() && supersedes.is_none() {
-        let id = insert(conn, &m)?;
+        let tx = conn.unchecked_transaction()?;
+        let id = insertar(&tx, &m, agente)?;
+        tx.commit()?;
         return Ok(Guardado {
             id, project: project.to_string(), tags, topic: None,
             reemplazada: None, clave_nueva: false, otras_claves: Vec::new(),
@@ -260,7 +293,7 @@ pub fn guardar_con_tema(
 
     let clave_nueva = topic.is_some() && vigente.is_none();
     let objetivo = explicita.or(vigente);
-    let id = insertar(&tx, &m)?;
+    let id = insertar(&tx, &m, agente)?;
     if let Some((vieja, _)) = &objetivo {
         crate::supersede::link(&tx, id, *vieja)?;
     }
