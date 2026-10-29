@@ -4,7 +4,7 @@ use anathem::model::NewMemory;
 use rusqlite;
 
 #[test]
-fn abre_y_crea_esquema() {
+fn it_opens_and_creates_the_schema() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("t.db");
     let conn = db::open(&path).unwrap();
@@ -39,7 +39,7 @@ fn open_es_idempotente() {
 }
 
 #[test]
-fn borrar_una_memoria_se_lleva_sus_vectores() {
+fn deleting_a_memory_takes_its_vectors_with_it() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let id = ingest::insert(&conn, &NewMemory {
@@ -66,7 +66,7 @@ fn borrar_una_memoria_se_lleva_sus_vectores() {
 }
 
 #[test]
-fn meta_guarda_pares_clave_valor() {
+fn meta_stores_key_value_pairs() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     conn.execute("insert into meta (key, value) values ('pack_nombre','en-es')", []).unwrap();

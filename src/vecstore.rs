@@ -46,7 +46,7 @@ fn a_blob(v: &[f32]) -> Vec<u8> {
     b
 }
 
-fn de_blob(b: &[u8]) -> Vec<f32> {
+fn from_blob(b: &[u8]) -> Vec<f32> {
     b.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect()
 }
 
@@ -353,7 +353,7 @@ pub fn search_vectors(
     let mut mejor: HashMap<i64, (i64, f32)> = HashMap::new();
     for fila in rows {
         let (mid, cid, blob) = fila?;
-        let v = de_blob(&blob);
+        let v = from_blob(&blob);
         if v.len() != query_.len() {
             continue; // dimensiones distintas: vector de otro paquete
         }

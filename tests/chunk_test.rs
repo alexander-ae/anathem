@@ -1,7 +1,7 @@
 use anathem::{chunk, db, ingest, model::NewMemory};
 
 #[test]
-fn texto_corto_da_un_chunk() {
+fn short_text_yields_one_chunk() {
     let c = chunk::split("hola mundo", 500, 400);
     assert_eq!(c, vec!["hola mundo".to_string()]);
 }
@@ -16,7 +16,7 @@ fn respeta_tamano_y_paso() {
 }
 
 #[test]
-fn no_parte_caracteres_multibyte() {
+fn it_does_not_split_multibyte_characters() {
     let text: String = std::iter::repeat('ñ').take(600).collect();
     let c = chunk::split(&text, 500, 400);
     assert_eq!(c[0].chars().count(), 500);
@@ -24,7 +24,7 @@ fn no_parte_caracteres_multibyte() {
 }
 
 #[test]
-fn texto_vacio_no_da_chunks() {
+fn empty_text_yields_no_chunks() {
     assert!(chunk::split("", 500, 400).is_empty());
 }
 
@@ -70,7 +70,7 @@ fn ingesta_crea_memoria_chunks_tags_y_refs() {
 }
 
 #[test]
-fn ref_con_kind_invalido_falla_en_vez_de_ignorarse_en_silencio() {
+fn a_ref_with_an_invalid_kind_fails_instead_of_being_ignored() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let m = NewMemory {
@@ -98,7 +98,7 @@ fn ref_con_kind_invalido_falla_en_vez_de_ignorarse_en_silencio() {
 }
 
 #[test]
-fn refs_validos_duplicados_insertan_limpio() {
+fn duplicate_valid_refs_insert_cleanly() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let m = NewMemory {

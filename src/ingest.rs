@@ -367,13 +367,13 @@ impl Saved {
                 if self.other_keys.is_empty() {
                     msg.push_str(&format!(" No hay otras claves de tema en {}.", self.project));
                 } else {
-                    let hay_mas = self.other_keys.len() > MAX_KEYS_LISTED;
+                    let has_more = self.other_keys.len() > MAX_KEYS_LISTED;
                     let lista: Vec<&str> = self.other_keys.iter()
                         .take(MAX_KEYS_LISTED).map(String::as_str).collect();
                     msg.push_str(&format!(
                         " Claves que ya existen en {}: {}{}. Si querías actualizar una de ellas, \
                          la clave no coincidió: guardá de nuevo con la exacta.",
-                        self.project, lista.join(", "), if hay_mas { ", …" } else { "" }
+                        self.project, lista.join(", "), if has_more { ", …" } else { "" }
                     ));
                 }
                 Some(msg)

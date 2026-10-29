@@ -11,7 +11,7 @@ fn mem(db: &Path, args: &[&str]) -> std::process::Output {
 }
 
 #[test]
-fn el_servidor_no_mezcla_vectores_si_cambia_el_paquete_debajo() {
+fn the_server_does_not_mix_vectors_when_the_pack_changes_underneath() {
     // `mem serve` abría el paquete una vez al arrancar y no volvía a mirar
     // el registro nunca más. Un `mem model install` desde otra terminal
     // —dos comandos de primera clase— dejaba al servidor escribiendo
@@ -83,7 +83,7 @@ fn el_servidor_no_mezcla_vectores_si_cambia_el_paquete_debajo() {
 }
 
 #[test]
-fn el_servidor_deja_de_usar_el_paquete_cuando_lo_quitan() {
+fn the_server_stops_using_the_pack_once_it_is_removed() {
     // El otro lado del mismo agujero: `mem model remove` desde otra
     // terminal borra los vectores y el registro, y el servidor seguía
     // escribiendo vectores de un paquete que la base ya no reconoce.

@@ -1,6 +1,6 @@
 use anathem::{config::Config, db, ingest, mcp, model::NewMemory, search};
 
-fn conn_con_datos() -> (tempfile::TempDir, rusqlite::Connection) {
+fn conn_with_data() -> (tempfile::TempDir, rusqlite::Connection) {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     ingest::insert(&conn, &NewMemory {
@@ -16,7 +16,7 @@ fn conn_con_datos() -> (tempfile::TempDir, rusqlite::Connection) {
 
 #[test]
 fn initialize_devuelve_capabilities() {
-    let (_d, conn) = conn_con_datos();
+    let (_d, conn) = conn_with_data();
     let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}});
     let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
     assert_eq!(res["jsonrpc"], "2.0");
@@ -25,8 +25,8 @@ fn initialize_devuelve_capabilities() {
 }
 
 #[test]
-fn tools_list_expone_las_cuatro() {
-    let (_d, conn) = conn_con_datos();
+fn tools_list_exposes_all_four() {
+    let (_d, conn) = conn_with_data();
     let req = serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"});
     let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
     let names: Vec<String> = res["result"]["tools"].as_array().unwrap().iter()
@@ -37,8 +37,8 @@ fn tools_list_expone_las_cuatro() {
 }
 
 #[test]
-fn search_memory_devuelve_resultados() {
-    let (_d, conn) = conn_con_datos();
+fn search_memory_returns_results() {
+    let (_d, conn) = conn_with_data();
     let req = serde_json::json!({"jsonrpc":"2.0","id":3,"method":"tools/call",
         "params":{"name":"search_memory","arguments":{"query":"cache staleness"}}});
     let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
@@ -48,7 +48,7 @@ fn search_memory_devuelve_resultados() {
 
 #[test]
 fn save_memory_persiste() {
-    let (_d, conn) = conn_con_datos();
+    let (_d, conn) = conn_with_data();
     let req = serde_json::json!({"jsonrpc":"2.0","id":4,"method":"tools/call",
         "params":{"name":"save_memory","arguments":{
             "text":"El job programado del hub sincroniza 12 servicios.","project":"acme-billing"}}});
@@ -59,23 +59,23 @@ fn save_memory_persiste() {
 }
 
 #[test]
-fn metodo_desconocido_devuelve_error_jsonrpc() {
-    let (_d, conn) = conn_con_datos();
+fn an_unknown_method_returns_a_jsonrpc_error() {
+    let (_d, conn) = conn_with_data();
     let req = serde_json::json!({"jsonrpc":"2.0","id":5,"method":"no/existe"});
     let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
     assert_eq!(res["error"]["code"], -32601);
 }
 
 #[test]
-fn notificacion_no_produce_respuesta() {
-    let (_d, conn) = conn_con_datos();
+fn a_notification_produces_no_response() {
+    let (_d, conn) = conn_with_data();
     let req = serde_json::json!({"jsonrpc":"2.0","method":"notifications/initialized"});
     assert!(mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().is_none(), "una notificación no lleva respuesta");
 }
 
 #[test]
-fn la_busqueda_queda_en_el_log() {
-    let (_d, conn) = conn_con_datos();
+fn the_search_is_recorded_in_the_log() {
+    let (_d, conn) = conn_with_data();
     let req = serde_json::json!({"jsonrpc":"2.0","id":6,"method":"tools/call",
         "params":{"name":"search_memory","arguments":{"query":"cache"}}});
     mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap();
@@ -84,11 +84,11 @@ fn la_busqueda_queda_en_el_log() {
 }
 
 #[test]
-fn search_memory_respeta_el_limite_pedido() {
+fn search_memory_respects_the_requested_limit() {
     // Sin `limit` no hay forma de pedirle al servidor más candidatos de los
     // diez por defecto, que es el parámetro que hace falta poder mover para
     // evaluar si conviene devolver más y más cortos.
-    let (_d, conn) = fixture_con_varias();
+    let (_d, conn) = fixture_with_several();
     let ctx = search::SearchContext::bm25_only();
     let pedir = |n: u64| {
         let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
@@ -103,7 +103,7 @@ fn search_memory_respeta_el_limite_pedido() {
     assert!(muchos > pocos, "con limit 8 tienen que volver más: {muchos} vs {pocos}");
 }
 
-fn fixture_con_varias() -> (tempfile::TempDir, rusqlite::Connection) {
+fn fixture_with_several() -> (tempfile::TempDir, rusqlite::Connection) {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     for i in 0..8 {
@@ -119,7 +119,7 @@ fn fixture_con_varias() -> (tempfile::TempDir, rusqlite::Connection) {
 }
 
 #[test]
-fn search_memory_devuelve_veinte_candidatos_por_defecto() {
+fn search_memory_returns_twenty_candidates_by_default() {
     // Sin `limit` explícito, la tool tiene que usar `Config::default().candidatos`
     // (20) y no los 10 de antes: es la mitad del cambio de diseño (candidatos
     // más numerosos, extracto más corto, mismo presupuesto).

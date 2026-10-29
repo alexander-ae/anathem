@@ -55,7 +55,7 @@ fn matar(mut hijo: Child) {
 
 #[test]
 #[cfg(target_os = "linux")]
-fn el_servidor_abre_el_paquete_recien_en_la_primera_busqueda() {
+fn the_server_opens_the_pack_only_on_the_first_search() {
     if !Path::new(PAQUETE_REAL).exists() {
         eprintln!(
             "se salta: no está {PAQUETE_REAL} (paquete real del banco de pruebas, \
@@ -124,7 +124,7 @@ fn el_servidor_abre_el_paquete_recien_en_la_primera_busqueda() {
 /// del conteo de tests, solo dice por qué no corre.
 #[test]
 #[cfg(not(target_os = "linux"))]
-fn el_servidor_abre_el_paquete_recien_en_la_primera_busqueda() {
+fn the_server_opens_the_pack_only_on_the_first_search() {
     eprintln!(
         "se salta en esta plataforma: mide memoria real vía /proc/<pid>/status, \
          que solo existe en Linux."
@@ -133,7 +133,7 @@ fn el_servidor_abre_el_paquete_recien_en_la_primera_busqueda() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn avisa_al_arrancar_si_el_paquete_registrado_desaparecio() {
+fn it_warns_on_startup_when_the_registered_pack_is_gone() {
     // La apertura perezosa hace que una sesión que solo lista tags nunca
     // abra el paquete, y por lo tanto nunca descubra que falta. Comprobar
     // que el archivo exista cuesta un `stat`, así que ese caso se detecta

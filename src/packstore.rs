@@ -160,21 +160,21 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     // The sha is not verified here: hashing 22 MB on every startup would
     // penalise whoever did install the pack. It is verified once, on
     // install.
-    let ruta_registrada = pack_path(dir, &name);
-    if !ruta_registrada.exists() {
+    let registered_path = pack_path(dir, &name);
+    if !registered_path.exists() {
         return Ok(Resolved::degraded(format!(
             "aviso: el paquete {name} está registrado pero falta {}; \
              se busca solo con bm25. Reinstalalo con `mem model install`.",
-            ruta_registrada.display()
+            registered_path.display()
         )));
     }
-    let p = match Pack::open_pack(&ruta_registrada) {
+    let p = match Pack::open_pack(&registered_path) {
         Ok(p) => p,
         Err(e) => {
             return Ok(Resolved::degraded(format!(
                 "aviso: el paquete {name} en {} no se pudo abrir ({e}); \
                  se busca solo con bm25. Reinstalalo con `mem model install`.",
-                ruta_registrada.display()
+                registered_path.display()
             )))
         }
     };
@@ -199,7 +199,7 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
             p.dims()
         )
     };
-    match reconcile(conn, dir, &ruta_registrada, p) {
+    match reconcile(conn, dir, &registered_path, p) {
         Ok((p, id)) => Ok(Resolved::with_pack(p, id, Some(warning))),
         Err(e) => Ok(Resolved::degraded(format!(
             "{warning}\naviso: no se pudo reindexar ({e}); se busca solo con bm25 \
@@ -723,7 +723,7 @@ mod tests {
     /// because that helper lives in the integration crate: this module's
     /// unit tests, which need to reach `reconcile` since it is private,
     /// cannot import it.
-    fn escribir_pack_de_prueba(pack_path: &Path, name: &str) {
+    fn write_test_pack(pack_path: &Path, name: &str) {
         let dims = 4usize;
         let fila = [0u8, 0, 0, 0];
         let tok = MINIMAL_TOKENIZER.as_bytes();
@@ -767,7 +767,7 @@ mod tests {
     }
 
     #[test]
-    fn reemplazar_sobre_destino_existente_deja_el_contenido_del_origen() {
+    fn replacing_an_existing_target_leaves_the_source_content() {
         let d = tempfile::tempdir().unwrap();
         let source = d.path().join("origen");
         let target = d.path().join("destino");
@@ -782,7 +782,7 @@ mod tests {
     }
 
     #[test]
-    fn reemplazar_sin_destino_previo_tambien_funciona() {
+    fn replacing_with_no_previous_target_works_too() {
         let d = tempfile::tempdir().unwrap();
         let source = d.path().join("origen");
         let target = d.path().join("destino");
@@ -794,7 +794,7 @@ mod tests {
     }
 
     #[test]
-    fn reemplazar_si_el_segundo_rename_falla_el_destino_viejo_sigue_sirviendo() {
+    fn if_the_second_rename_fails_the_old_target_still_works() {
         // The source does not exist, so the first rename (target ->
         // sibling) succeeds but the second (source -> target) fails with a
         // real error — not a process hang, the same kind of failure an
@@ -821,7 +821,7 @@ mod tests {
     // --- blocker 3: reconciling with the mmap still open -----------------
 
     #[test]
-    fn reconciliar_renombra_un_archivo_con_el_mmap_todavia_abierto() {
+    fn reconcile_renames_a_file_with_the_mmap_still_open() {
         // Reproduces the exact shape of the Windows problem: open the Pack
         // — which maps the file into memory — and hand THAT same `Pack`, in
         // the same process, to `reconcile` so it renames the file it has
@@ -834,7 +834,7 @@ mod tests {
         // The file lives under the name "viejo-es" but declares itself
         // "nuevo-es": exactly the case that forces reconcile to rename
         // it.
-        escribir_pack_de_prueba(&ruta_vieja, "nuevo-es");
+        write_test_pack(&ruta_vieja, "nuevo-es");
 
         let conn = crate::db::open(&dir.join("mem.db")).unwrap();
         vecstore::register_pack(&conn, "viejo-es", "sha-viejo", 4).unwrap();
@@ -856,9 +856,9 @@ mod tests {
     // --- releasing the pack after a while unused -------------------------
 
     /// Prepares a `LivePack` with the pack already open.
-    fn vivo_con_paquete(dir: &Path) -> (rusqlite::Connection, LivePack) {
+    fn live_pack_with_a_pack(dir: &Path) -> (rusqlite::Connection, LivePack) {
         std::fs::create_dir_all(packs_dir(dir)).unwrap();
-        escribir_pack_de_prueba(&pack_path(dir, "es"), "es");
+        write_test_pack(&pack_path(dir, "es"), "es");
         let conn = crate::db::open(&dir.join("mem.db")).unwrap();
         let sha = crate::pack::sha256(&pack_path(dir, "es")).unwrap();
         vecstore::register_pack(&conn, "es", &sha, 4).unwrap();
@@ -868,9 +868,9 @@ mod tests {
     }
 
     #[test]
-    fn el_paquete_se_suelta_tras_estar_inactivo_y_vuelve_al_usarlo() {
+    fn the_pack_is_released_when_idle_and_comes_back_on_use() {
         let d = tempfile::tempdir().unwrap();
-        let (conn, mut v) = vivo_con_paquete(d.path());
+        let (conn, mut v) = live_pack_with_a_pack(d.path());
 
         // A deadline that has not elapsed does not release it.
         assert!(!v.release_if_idle(std::time::Duration::from_secs(3600)));
@@ -891,18 +891,18 @@ mod tests {
     }
 
     #[test]
-    fn con_el_plazo_en_cero_no_se_suelta_nunca() {
+    fn with_the_deadline_at_zero_it_is_never_released() {
         let d = tempfile::tempdir().unwrap();
-        let (_conn, mut v) = vivo_con_paquete(d.path());
+        let (_conn, mut v) = live_pack_with_a_pack(d.path());
         std::thread::sleep(std::time::Duration::from_millis(20));
         assert!(!v.release_if_idle(std::time::Duration::ZERO));
         assert!(v.has_open_pack(), "cero significa no soltarlo nunca");
     }
 
     #[test]
-    fn usarlo_corre_el_reloj_de_la_inactividad() {
+    fn using_it_resets_the_idle_clock() {
         let d = tempfile::tempdir().unwrap();
-        let (conn, mut v) = vivo_con_paquete(d.path());
+        let (conn, mut v) = live_pack_with_a_pack(d.path());
         std::thread::sleep(std::time::Duration::from_millis(30));
         // Using it right before checking the deadline: it has no longer
         // been idle for 20 ms.

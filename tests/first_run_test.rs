@@ -17,7 +17,7 @@ fn mem(db: &std::path::Path, args: &[&str]) -> (String, String, bool) {
 /// Buscar en una base vacía debe DECIRLO. Antes no imprimía nada, así que
 /// era indistinguible de un binario roto.
 #[test]
-fn buscar_sin_resultados_lo_dice() {
+fn a_search_with_no_results_says_so() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("m.db");
     mem(&db, &["init"]);
@@ -29,7 +29,7 @@ fn buscar_sin_resultados_lo_dice() {
 /// `eval` sin eval set debe explicar qué es y cómo armarlo, no devolver un
 /// error de archivo no encontrado.
 #[test]
-fn eval_sin_set_explica_que_hace_falta() {
+fn eval_without_a_set_explains_what_is_missing() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("m.db");
     mem(&db, &["init"]);
@@ -43,7 +43,7 @@ fn eval_sin_set_explica_que_hace_falta() {
 
 /// El ciclo mínimo del primer día: guardar algo y encontrarlo.
 #[test]
-fn el_ciclo_minimo_funciona_sin_configurar_nada() {
+fn the_minimal_cycle_works_with_nothing_configured() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("m.db");
     mem(&db, &["init"]);
@@ -55,7 +55,7 @@ fn el_ciclo_minimo_funciona_sin_configurar_nada() {
 }
 
 #[test]
-fn el_presupuesto_de_la_busqueda_se_puede_subir() {
+fn the_search_budget_can_be_raised() {
     // Sin esto no hay forma de inspeccionar más candidatos de los que entran
     // en el contexto de un agente, que es justo lo que hace falta para medir
     // si conviene devolver más y más cortos.

@@ -24,7 +24,7 @@ fn fixture() -> (tempfile::TempDir, Connection) {
 }
 
 #[test]
-fn encuentra_por_termino() {
+fn it_finds_by_term() {
     let (_d, conn) = fixture();
     let q = search::Query { text: "cache staleness".into(), ..Default::default() };
     let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
@@ -33,7 +33,7 @@ fn encuentra_por_termino() {
 }
 
 #[test]
-fn filtra_por_proyecto() {
+fn it_filters_by_project() {
     let (_d, conn) = fixture();
     let q = search::Query {
         text: "design system".into(),
@@ -44,7 +44,7 @@ fn filtra_por_proyecto() {
 }
 
 #[test]
-fn deduplica_por_memoria() {
+fn it_deduplicates_by_memory() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     // cuerpo largo => varios chunks, todos con la misma palabra
@@ -56,7 +56,7 @@ fn deduplica_por_memoria() {
 }
 
 #[test]
-fn excluye_las_superseded() {
+fn it_excludes_superseded_ones() {
     let (_d, conn) = fixture();
     conn.execute("update memories set status='superseded' where ext_id='a'", []).unwrap();
     let q = search::Query { text: "cache staleness".into(), ..Default::default() };
@@ -65,7 +65,7 @@ fn excluye_las_superseded() {
 }
 
 #[test]
-fn respeta_el_presupuesto_de_tokens() {
+fn it_respects_the_token_budget() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     for i in 0..20 {
@@ -79,7 +79,7 @@ fn respeta_el_presupuesto_de_tokens() {
 }
 
 #[test]
-fn las_pinned_van_primero() {
+fn pinned_ones_come_first() {
     let (_d, conn) = fixture();
     conn.execute("update memories set pinned=1 where ext_id='b'", []).unwrap();
     let q = search::Query {
@@ -92,7 +92,7 @@ fn las_pinned_van_primero() {
 }
 
 #[test]
-fn el_orden_es_deterministico_ante_empates_de_bm25() {
+fn the_order_is_deterministic_on_bm25_ties() {
     // Regresión del hallazgo C: `best` era un HashMap y `into_values()` no
     // garantiza orden; sin un tiebreak final tras el score, dos memorias con
     // bm25 empatado podían salir en orden distinto entre corridas. Sembramos
@@ -113,7 +113,7 @@ fn el_orden_es_deterministico_ante_empates_de_bm25() {
 }
 
 #[test]
-fn pinned_sobrevive_el_recorte_de_candidatos() {
+fn pinned_survives_the_candidate_trim() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
 
@@ -146,7 +146,7 @@ fn pinned_sobrevive_el_recorte_de_candidatos() {
 mod apoyo;
 
 #[test]
-fn sin_paquete_el_resultado_es_el_de_siempre() {
+fn with_no_pack_the_result_is_the_usual_one() {
     let (_d, conn) = fixture();
     let q = search::Query { text: "cache staleness".into(), ..Default::default() };
     let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
@@ -154,7 +154,7 @@ fn sin_paquete_el_resultado_es_el_de_siempre() {
 }
 
 #[test]
-fn con_paquete_aparece_lo_que_bm25_no_encuentra() {
+fn with_a_pack_what_bm25_misses_shows_up() {
     // El fixture mini solo conoce "hola", "mundo" y "s". Una memoria cuyo
     // cuerpo es "mundo" no matchea la consulta "hola" por bm25, pero sí se
     // parece por vector, así que la fusión tiene que sacarla a la superficie.
@@ -178,7 +178,7 @@ fn con_paquete_aparece_lo_que_bm25_no_encuentra() {
 }
 
 #[test]
-fn las_memorias_fijadas_siguen_primero_con_fusion() {
+fn pinned_memories_still_come_first_under_fusion() {
     let dir = tempfile::tempdir().unwrap();
     let conn = anathem::db::open(&dir.path().join("t.db")).unwrap();
     let r = dir.path().join("mini.anathem-pack");
@@ -196,7 +196,7 @@ fn las_memorias_fijadas_siguen_primero_con_fusion() {
 }
 
 #[test]
-fn consulta_sin_tokens_conocidos_no_da_resultados_espurios() {
+fn a_query_with_no_known_tokens_yields_no_spurious_results() {
     // Ronda de arreglos 1: el tokenizador mini solo conoce "hola" y "mundo";
     // todo lo demás cae en <unk>, cuya fila es el vector nulo. Sin el chequeo
     // de norma cero, el coseno del vector nulo contra todo es 0 y
@@ -235,7 +235,7 @@ fn fixture_cuerpos_largos() -> (tempfile::TempDir, Connection) {
 }
 
 #[test]
-fn el_extracto_deja_entrar_mas_candidatos_en_el_mismo_presupuesto() {
+fn the_excerpt_lets_more_candidates_fit_in_the_same_budget() {
     // Éste es el test que prueba que el recorte ocurre ANTES de contar el
     // costo contra el presupuesto, dentro de `run_explained`, y no después:
     // si se recortara al final (p.ej. en `mcp.rs`), el presupuesto ya habría
@@ -267,7 +267,7 @@ fn el_extracto_deja_entrar_mas_candidatos_en_el_mismo_presupuesto() {
 }
 
 #[test]
-fn el_extracto_recorta_el_fragmento_a_n_caracteres() {
+fn the_excerpt_trims_the_chunk_to_n_characters() {
     let (_d, conn) = fixture_cuerpos_largos();
     let ctx = search::SearchContext::bm25_only();
     let q = search::Query {
@@ -290,7 +290,7 @@ fn el_extracto_recorta_el_fragmento_a_n_caracteres() {
 }
 
 #[test]
-fn el_extracto_no_parte_un_caracter_multibyte() {
+fn the_excerpt_does_not_split_a_multibyte_character() {
     // El corpus es en español y tiene acentos: un recorte por bytes cortaría
     // un carácter UTF-8 a la mitad (p.ej. partir "ñ" o "á" en dos bytes que ya
     // no forman un carácter válido). `String` en Rust no puede contener bytes
@@ -325,7 +325,7 @@ fn el_extracto_no_parte_un_caracter_multibyte() {
 }
 
 #[test]
-fn extracto_none_deja_el_fragmento_completo_como_antes() {
+fn excerpt_none_leaves_the_whole_chunk_as_before() {
     let (_d, conn) = fixture();
     let q_viejo = search::Query { text: "cache staleness".into(), ..Default::default() };
     let q_explicito = search::Query { text: "cache staleness".into(), excerpt: None, ..Default::default() };

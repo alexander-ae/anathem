@@ -25,7 +25,7 @@ fn fixture() -> (tempfile::TempDir, Connection, Pack) {
 }
 
 #[test]
-fn sincronizar_llena_los_huecos_y_es_idempotente() {
+fn sync_fills_the_gaps_and_is_idempotent() {
     let (_d, conn, p) = fixture();
     sembrar(&conn, "hola");
     sembrar(&conn, "mundo");
@@ -35,7 +35,7 @@ fn sincronizar_llena_los_huecos_y_es_idempotente() {
 }
 
 #[test]
-fn cobertura_muestra_el_hueco_de_lo_guardado_sin_paquete() {
+fn coverage_shows_the_gap_left_by_saves_with_no_pack() {
     let (_d, conn, p) = fixture();
     sembrar(&conn, "hola");
     apoyo::registrar_y_sincronizar(&conn, &p);
@@ -44,7 +44,7 @@ fn cobertura_muestra_el_hueco_de_lo_guardado_sin_paquete() {
 }
 
 #[test]
-fn buscar_ordena_por_coseno() {
+fn search_orders_by_cosine() {
     let (_d, conn, p) = fixture();
     let hola = sembrar(&conn, "hola");
     let mundo = sembrar(&conn, "mundo");
@@ -58,7 +58,7 @@ fn buscar_ordena_por_coseno() {
 }
 
 #[test]
-fn buscar_respeta_el_filtro_de_proyecto() {
+fn search_respects_the_project_filter() {
     let (_d, conn, p) = fixture();
     let a = ingest::insert(&conn, &NewMemory {
         project: "uno".into(), title: "t".into(), body: "hola".into(),
@@ -78,7 +78,7 @@ fn buscar_respeta_el_filtro_de_proyecto() {
 }
 
 #[test]
-fn buscar_ignora_las_memorias_no_activas() {
+fn search_ignores_memories_that_are_not_active() {
     let (_d, conn, p) = fixture();
     let id = sembrar(&conn, "hola");
     apoyo::registrar_y_sincronizar(&conn, &p);
@@ -88,7 +88,7 @@ fn buscar_ignora_las_memorias_no_activas() {
 }
 
 #[test]
-fn el_registro_del_paquete_va_y_vuelve() {
+fn the_pack_registry_round_trips() {
     let (_d, conn, _p) = fixture();
     assert!(vecstore::registered_pack(&conn).unwrap().is_none());
     vecstore::register_pack(&conn, "en-es", "abc123", 256).unwrap();
@@ -105,7 +105,7 @@ fn el_registro_del_paquete_va_y_vuelve() {
 }
 
 #[test]
-fn olvidar_el_paquete_borra_registro_y_vectores() {
+fn forgetting_the_pack_clears_registry_and_vectors() {
     let (_d, conn, p) = fixture();
     sembrar(&conn, "hola");
     apoyo::registrar_y_sincronizar(&conn, &p);
@@ -125,7 +125,7 @@ fn olvidar_el_paquete_borra_registro_y_vectores() {
 #[ignore = "el cuerpo real usa PermissionsExt y un $EDITOR de shell (shebang), \
             ninguno de los dos existe en Windows; ver la versión unix de \
             este test, un poco más abajo en este archivo"]
-fn editar_una_memoria_invalida_sus_vectores() {
+fn editing_a_memory_invalidates_its_vectors() {
     unimplemented!(
         "esta prueba no puede correr en Windows: depende de PermissionsExt \
          y de un $EDITOR de mentira que es un script de shell"
@@ -142,7 +142,7 @@ fn editar_una_memoria_invalida_sus_vectores() {
 // qué en vez de desaparecer de la compilación en silencio.
 #[cfg(unix)]
 #[test]
-fn editar_una_memoria_invalida_sus_vectores() {
+fn editing_a_memory_invalidates_its_vectors() {
     // rechunk borra los fragmentos y el cascade se lleva los vectores. Esa
     // mitad siempre anduvo; la que faltaba es que alguien reconstruya los
     // nuevos.
@@ -199,7 +199,7 @@ fn editar_una_memoria_invalida_sus_vectores() {
 }
 
 #[test]
-fn buscar_colapsa_varios_fragmentos_de_la_misma_memoria() {
+fn search_collapses_several_chunks_of_one_memory() {
     // `sembrar` usa cuerpos de 4-5 caracteres, que siempre caben en un solo
     // fragmento (CHUNK_SIZE=500) y nunca ejercitan el colapso por máximo en
     // `buscar` (el `mejor.entry(mid).or_insert(...)`). Esta memoria es
@@ -246,7 +246,7 @@ fn buscar_colapsa_varios_fragmentos_de_la_misma_memoria() {
 }
 
 #[test]
-fn pack_registrado_propaga_errores_reales_en_vez_de_silenciarlos() {
+fn registered_pack_propagates_real_errors_instead_of_swallowing_them() {
     // `.ok()` sobre `query_row` convertiría cualquier error real de sqlite
     // (tabla ausente, base corrupta) en `None`, indistinguible de "no hay
     // paquete registrado": la búsqueda degradaría a bm25 en silencio y nadie
@@ -279,7 +279,7 @@ fn sembrar_pendientes(conn: &Connection, cuantos: usize) {
 }
 
 #[test]
-fn sincronizar_no_escribe_un_solo_vector_con_una_identidad_caducada() {
+fn sync_writes_not_one_vector_under_a_stale_identity() {
     // El caso mínimo del defecto: quien llama resolvió el paquete A y, para
     // cuando terminó de embeber, la base ya está registrada con B. Sin la
     // comprobación dentro de la transacción de escritura, los vectores de A
@@ -306,7 +306,7 @@ fn sincronizar_no_escribe_un_solo_vector_con_una_identidad_caducada() {
 }
 
 #[test]
-fn sincronizar_abandona_a_mitad_de_camino_si_el_paquete_cambia_entre_lotes() {
+fn sync_abandons_midway_when_the_pack_changes_between_batches() {
     // El caso que de verdad pasa: el backlog es grande, el primer lote se
     // escribe con el paquete correcto y en el medio otra terminal corre
     // `mem model install`. Los lotes siguientes seguían escribiéndose con el
@@ -349,7 +349,7 @@ fn sincronizar_abandona_a_mitad_de_camino_si_el_paquete_cambia_entre_lotes() {
 /// no devuelva lo que bm25 descarta, que es lo que esa duplicación iba a
 /// costar el día que los dos lados se separaran.
 #[test]
-fn el_lado_vectorial_respeta_los_mismos_filtros_que_el_lexico() {
+fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     let conn = anathem::db::open(&db).unwrap();

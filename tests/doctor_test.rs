@@ -62,7 +62,7 @@ fn sabotear(db: &Path) -> Connection {
     c
 }
 
-fn instalar_paquete(dir: &Path, db: &Path) {
+fn install_pack(dir: &Path, db: &Path) {
     let pack = dir.join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&pack, "mini-es");
     let o = mem(db, &["model", "install", pack.to_str().unwrap()]);
@@ -80,7 +80,7 @@ fn version_imprime_nombre_version_y_commit() {
 }
 
 #[test]
-fn base_sana_sale_con_cero_y_reporta_los_conteos() {
+fn a_healthy_database_exits_zero_and_reports_the_counts() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     let o = mem(&db, &["doctor"]);
@@ -99,7 +99,7 @@ fn base_sana_sale_con_cero_y_reporta_los_conteos() {
 }
 
 #[test]
-fn sin_paquete_es_informacion_y_no_un_problema() {
+fn no_pack_is_information_and_not_a_problem() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     let o = mem(&db, &["doctor"]);
@@ -109,7 +109,7 @@ fn sin_paquete_es_informacion_y_no_un_problema() {
 }
 
 #[test]
-fn base_recien_creada_no_rompe_el_diagnostico() {
+fn a_freshly_created_database_does_not_break_the_diagnostic() {
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     mem(&db, &["init"]);
@@ -119,7 +119,7 @@ fn base_recien_creada_no_rompe_el_diagnostico() {
 }
 
 #[test]
-fn detecta_el_indice_fts5_desincronizado_y_sale_distinto_de_cero() {
+fn it_detects_an_out_of_sync_fts5_index_and_exits_nonzero() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     // Saca una fila del índice sin tocar `chunks`: lo que pasaría si un
@@ -140,7 +140,7 @@ fn detecta_el_indice_fts5_desincronizado_y_sale_distinto_de_cero() {
 }
 
 #[test]
-fn config_roto_se_reporta_y_el_diagnostico_no_se_cae() {
+fn a_broken_config_is_reported_and_the_diagnostic_survives() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     std::fs::write(d.path().join("config.json"), "{ esto no es json").unwrap();
@@ -154,7 +154,7 @@ fn config_roto_se_reporta_y_el_diagnostico_no_se_cae() {
 }
 
 #[test]
-fn config_con_un_valor_invalido_dice_cual_es() {
+fn a_config_with_an_invalid_value_says_which_one() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     std::fs::write(d.path().join("config.json"), r#"{"candidates": 0}"#).unwrap();
@@ -164,7 +164,7 @@ fn config_con_un_valor_invalido_dice_cual_es() {
 }
 
 #[test]
-fn config_valido_muestra_los_valores_efectivos() {
+fn a_valid_config_shows_the_effective_values() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     std::fs::write(d.path().join("config.json"), r#"{"candidates": 7}"#).unwrap();
@@ -177,7 +177,7 @@ fn config_valido_muestra_los_valores_efectivos() {
 }
 
 #[test]
-fn tags_json_roto_se_reporta_y_el_diagnostico_no_se_cae() {
+fn a_broken_tags_json_is_reported_and_the_diagnostic_survives() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     std::fs::write(d.path().join("tags.json"), "[{\"tag\": \"x\", \"pattern\": \"(\"}]").unwrap();
@@ -189,10 +189,10 @@ fn tags_json_roto_se_reporta_y_el_diagnostico_no_se_cae() {
 }
 
 #[test]
-fn paquete_registrado_cuyo_archivo_falta_se_detecta() {
+fn a_registered_pack_whose_file_is_missing_is_detected() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
-    instalar_paquete(d.path(), &db);
+    install_pack(d.path(), &db);
     std::fs::remove_file(d.path().join("paquetes").join("mini-es.anathem-pack")).unwrap();
 
     let o = mem(&db, &["doctor"]);
@@ -202,10 +202,10 @@ fn paquete_registrado_cuyo_archivo_falta_se_detecta() {
 }
 
 #[test]
-fn paquete_instalado_y_completo_sale_bien() {
+fn an_installed_and_complete_pack_comes_out_clean() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
-    instalar_paquete(d.path(), &db);
+    install_pack(d.path(), &db);
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
     assert!(o.stdout.contains("mini-es"), "{}", o.stdout);
@@ -214,10 +214,10 @@ fn paquete_instalado_y_completo_sale_bien() {
 }
 
 #[test]
-fn huecos_de_cobertura_se_detectan() {
+fn coverage_gaps_are_detected() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
-    instalar_paquete(d.path(), &db);
+    install_pack(d.path(), &db);
     let c = sabotear(&db);
     c.execute(
         "delete from chunk_vectors where chunk_id = (select min(id) from chunks)",
@@ -233,10 +233,10 @@ fn huecos_de_cobertura_se_detectan() {
 }
 
 #[test]
-fn un_vector_de_largo_equivocado_no_cuenta_como_cobertura() {
+fn a_vector_of_the_wrong_length_does_not_count_as_coverage() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
-    instalar_paquete(d.path(), &db);
+    install_pack(d.path(), &db);
     let c = sabotear(&db);
     c.execute(
         "update chunk_vectors set vec = zeroblob(8)
@@ -252,7 +252,7 @@ fn un_vector_de_largo_equivocado_no_cuenta_como_cobertura() {
 }
 
 #[test]
-fn cadena_de_supersession_hacia_una_memoria_inexistente_se_detecta() {
+fn a_supersession_chain_to_a_missing_memory_is_detected() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     let c = sabotear(&db);
@@ -266,7 +266,7 @@ fn cadena_de_supersession_hacia_una_memoria_inexistente_se_detecta() {
 }
 
 #[test]
-fn dos_activas_con_la_misma_clave_de_tema_se_detectan() {
+fn two_active_memories_under_one_topic_key_are_detected() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     // Una base vieja, de antes del índice único, podría tenerlo violado.
@@ -281,10 +281,10 @@ fn dos_activas_con_la_misma_clave_de_tema_se_detectan() {
 }
 
 #[test]
-fn fragmentos_sin_memoria_y_vectores_sin_fragmento_se_detectan() {
+fn chunks_without_a_memory_and_vectors_without_a_chunk_are_detected() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
-    instalar_paquete(d.path(), &db);
+    install_pack(d.path(), &db);
     let c = sabotear(&db);
     c.execute("insert into chunks (memory_id, ord, body) values (777, 0, 'huerfano')", [])
         .unwrap();
@@ -299,10 +299,10 @@ fn fragmentos_sin_memoria_y_vectores_sin_fragmento_se_detectan() {
 }
 
 #[test]
-fn archivos_laterales_sobrantes_son_un_aviso_y_no_un_problema() {
+fn leftover_stray_files_are_a_warning_and_not_a_problem() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
-    instalar_paquete(d.path(), &db);
+    install_pack(d.path(), &db);
     std::fs::write(
         d.path().join("paquetes").join("mini-es.anathem-pack.reemplazando-4242"),
         b"resto",
@@ -314,7 +314,7 @@ fn archivos_laterales_sobrantes_son_un_aviso_y_no_un_problema() {
 }
 
 #[test]
-fn base_que_no_existe_todavia_no_rompe_ni_se_crea() {
+fn a_database_that_does_not_exist_yet_neither_breaks_nor_is_created() {
     let d = tempfile::tempdir().unwrap();
     let carpeta = d.path().join("nueva");
     let db = carpeta.join("mem.db");
@@ -326,7 +326,7 @@ fn base_que_no_existe_todavia_no_rompe_ni_se_crea() {
 }
 
 #[test]
-fn base_inexistente_no_afirma_que_todo_esta_en_orden() {
+fn a_missing_database_does_not_claim_everything_is_fine() {
     // Con un `--db` mal escrito, un script de verificación pasaría en verde
     // sin haber comprobado nada. El código de salida puede ser 0, pero el
     // texto no puede decir que revisó lo que no existe.
@@ -340,7 +340,7 @@ fn base_inexistente_no_afirma_que_todo_esta_en_orden() {
 }
 
 #[test]
-fn el_resumen_distingue_todo_en_orden_de_sin_problemas_con_avisos() {
+fn the_summary_tells_all_clear_from_no_problems_but_warnings() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     std::fs::create_dir(d.path().join("paquetes")).unwrap();
@@ -353,7 +353,7 @@ fn el_resumen_distingue_todo_en_orden_de_sin_problemas_con_avisos() {
 }
 
 #[test]
-fn un_archivo_que_no_es_una_base_se_reporta_y_no_se_cae() {
+fn a_file_that_is_not_a_database_is_reported_without_crashing() {
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
     std::fs::write(&db, b"esto no es sqlite, ni de cerca, ni un poquito").unwrap();
@@ -365,7 +365,7 @@ fn un_archivo_que_no_es_una_base_se_reporta_y_no_se_cae() {
 }
 
 #[test]
-fn una_base_anterior_a_las_claves_de_tema_no_rompe_el_diagnostico() {
+fn a_database_predating_topic_keys_does_not_break_the_diagnostic() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
     let c = sabotear(&db);
@@ -395,19 +395,19 @@ fn una_base_anterior_a_las_claves_de_tema_no_rompe_el_diagnostico() {
 /// "arregla"— el archivo principal cambiaría y el test lo vería.
 fn instantanea(dir: &Path) -> std::collections::BTreeMap<String, u64> {
     use std::hash::{Hash, Hasher};
-    fn auxiliar_de_sqlite(rel: &str) -> bool {
+    fn sqlite_helper(rel: &str) -> bool {
         rel.ends_with("-wal") || rel.ends_with("-shm")
     }
-    fn recorrer(dir: &Path, base: &Path, v: &mut std::collections::BTreeMap<String, u64>) {
+    fn walk(dir: &Path, base: &Path, v: &mut std::collections::BTreeMap<String, u64>) {
         for e in std::fs::read_dir(dir).unwrap() {
             let p = e.unwrap().path();
             let rel = p.strip_prefix(base).unwrap().to_string_lossy().to_string();
-            if auxiliar_de_sqlite(&rel) {
+            if sqlite_helper(&rel) {
                 continue;
             }
             if p.is_dir() {
                 v.insert(format!("{rel}/"), 0);
-                recorrer(&p, base, v);
+                walk(&p, base, v);
             } else {
                 let mut h = std::collections::hash_map::DefaultHasher::new();
                 std::fs::read(&p).unwrap().hash(&mut h);
@@ -416,15 +416,15 @@ fn instantanea(dir: &Path) -> std::collections::BTreeMap<String, u64> {
         }
     }
     let mut v = std::collections::BTreeMap::new();
-    recorrer(dir, dir, &mut v);
+    walk(dir, dir, &mut v);
     v
 }
 
 #[test]
-fn el_diagnostico_es_de_solo_lectura_aun_con_la_base_danada() {
+fn the_diagnostic_is_read_only_even_with_a_damaged_database() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
-    instalar_paquete(d.path(), &db);
+    install_pack(d.path(), &db);
     // Todo roto a la vez: es cuando más tentador sería "arreglar".
     let c = sabotear(&db);
     c.execute("update memories set supersedes_id = 9999 where id = 3", []).unwrap();
@@ -456,7 +456,7 @@ fn el_diagnostico_es_de_solo_lectura_aun_con_la_base_danada() {
 }
 
 #[test]
-fn ve_lo_escrito_por_una_conexion_viva_que_aun_no_consolido_el_wal() {
+fn it_sees_writes_from_a_live_connection_that_has_not_checkpointed() {
     // Con el servidor MCP abierto, lo último que se guardó puede estar solo
     // en el `-wal`. Un diagnóstico que lo ignorara mostraría una foto vieja.
     let d = tempfile::tempdir().unwrap();
@@ -475,7 +475,7 @@ fn ve_lo_escrito_por_una_conexion_viva_que_aun_no_consolido_el_wal() {
 }
 
 #[test]
-fn una_ruta_con_espacios_y_simbolos_funciona() {
+fn a_path_with_spaces_and_symbols_works() {
     let d = tempfile::tempdir().unwrap();
     let carpeta = d.path().join("mi base #1 (copia)%");
     std::fs::create_dir(&carpeta).unwrap();
@@ -486,7 +486,7 @@ fn una_ruta_con_espacios_y_simbolos_funciona() {
 }
 
 #[test]
-fn una_base_anterior_a_la_capa_vectorial_es_informacion_y_no_tres_problemas() {
+fn a_database_predating_the_vector_layer_is_information_not_three_problems() {
     // Mismo caso que una base anterior a las claves de tema: no está rota,
     // se migra sola en la próxima escritura.
     for tablas in [
@@ -514,7 +514,7 @@ fn una_base_anterior_a_la_capa_vectorial_es_informacion_y_no_tres_problemas() {
 }
 
 #[test]
-fn un_fallo_de_doctor_sale_con_2_y_los_problemas_con_1() {
+fn a_doctor_failure_exits_2_and_problems_exit_1() {
     // Sin HOME y sin --db, la ruta por defecto no se puede resolver: doctor no
     // llega a correr. Un script tiene que poder distinguir eso de "encontró
     // problemas" (1).
@@ -540,7 +540,7 @@ fn un_fallo_de_doctor_sale_con_2_y_los_problemas_con_1() {
 }
 
 #[test]
-fn el_indice_fts5_se_compara_por_ids_y_no_solo_por_cantidad() {
+fn the_fts5_index_is_compared_by_ids_and_not_only_by_count() {
     // Mismo conteo de filas en `chunks` y en el índice, pero no las mismas:
     // se saca el id 1 del índice y se mete un 99 que no existe en `chunks`.
     // Una comparación de conteos diría "sincronizado".

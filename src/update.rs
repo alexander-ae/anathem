@@ -109,7 +109,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn se_lee_la_etiqueta_de_la_respuesta() {
+    fn the_tag_is_read_from_the_response() {
         let j = r#"{"name":"v0.3.0","tag_name":"v0.3.0","description":"algo"}"#;
         assert_eq!(latest_published(j).unwrap(), "0.3.0");
         // Without the leading `v` too.
@@ -118,13 +118,13 @@ mod tests {
     }
 
     #[test]
-    fn una_respuesta_sin_etiqueta_falla_y_lo_dice() {
+    fn a_response_without_a_tag_fails_and_says_so() {
         let e = latest_published(r#"{"message":"404 Not Found"}"#).unwrap_err().to_string();
         assert!(e.contains("tag_name"), "{e}");
     }
 
     #[test]
-    fn las_versiones_se_comparan_por_numero_y_no_como_texto() {
+    fn versions_compare_numerically_and_not_as_text() {
         assert!(is_newer("0.2.0", "0.1.0"));
         assert!(is_newer("1.0.0", "0.9.9"));
         // The case that breaks alphabetical comparison.

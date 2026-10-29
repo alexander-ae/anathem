@@ -35,7 +35,7 @@ const PAGOS_VIEJO: &str = "El proveedor de pagos es Stripe";
 const PAGOS_NUEVO: &str = "El proveedor de pagos es Adyen desde octubre";
 
 #[test]
-fn guardar_dos_veces_con_la_misma_clave_deja_la_primera_superseded_y_la_segunda_activa() {
+fn saving_twice_under_one_key_leaves_the_first_superseded_and_the_second_active() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
     mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
@@ -50,7 +50,7 @@ fn guardar_dos_veces_con_la_misma_clave_deja_la_primera_superseded_y_la_segunda_
 }
 
 #[test]
-fn la_vieja_deja_de_aparecer_en_la_busqueda_y_la_nueva_si() {
+fn the_older_one_stops_showing_in_search_and_the_newer_one_does() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
     mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
@@ -61,7 +61,7 @@ fn la_vieja_deja_de_aparecer_en_la_busqueda_y_la_nueva_si() {
 }
 
 #[test]
-fn history_sobre_la_nueva_muestra_la_cadena_hasta_la_vieja() {
+fn history_on_the_newer_one_shows_the_chain_back_to_the_older() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
     mem_ok(d.path(), &["save", "El proveedor de pagos es Adyen", "--project", "p", "--topic", "pagos"]);
@@ -76,7 +76,7 @@ fn history_sobre_la_nueva_muestra_la_cadena_hasta_la_vieja() {
 }
 
 #[test]
-fn la_misma_clave_en_dos_proyectos_no_se_pisa() {
+fn the_same_key_in_two_projects_does_not_collide() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", "La base de a es Postgres", "--project", "a", "--topic", "base-de-datos"]);
     mem_ok(d.path(), &["save", "La base de b es MySQL", "--project", "b", "--topic", "base-de-datos"]);
@@ -86,7 +86,7 @@ fn la_misma_clave_en_dos_proyectos_no_se_pisa() {
 }
 
 #[test]
-fn sin_clave_de_tema_guardar_dos_veces_deja_las_dos_activas() {
+fn without_a_topic_key_saving_twice_leaves_both_active() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p"]);
     mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p"]);
@@ -98,7 +98,7 @@ fn sin_clave_de_tema_guardar_dos_veces_deja_las_dos_activas() {
 }
 
 #[test]
-fn guardar_con_una_clave_nueva_simplemente_guarda() {
+fn saving_under_a_new_key_simply_saves() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", "Otro hecho", "--project", "p", "--topic", "otro"]);
     let out = mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
@@ -110,7 +110,7 @@ fn guardar_con_una_clave_nueva_simplemente_guarda() {
 }
 
 #[test]
-fn al_reemplazar_la_salida_dice_a_que_memoria_reemplazo_con_su_id() {
+fn on_replacing_the_output_names_the_superseded_memory_by_id() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
     let out = mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
@@ -121,7 +121,7 @@ fn al_reemplazar_la_salida_dice_a_que_memoria_reemplazo_con_su_id() {
 }
 
 #[test]
-fn topics_lista_proyecto_cantidad_y_vigente() {
+fn topics_lists_project_count_and_current() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
     mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
@@ -143,7 +143,7 @@ fn topics_lista_proyecto_cantidad_y_vigente() {
 }
 
 #[test]
-fn topics_dice_que_no_hay_vigente_si_la_unica_se_olvido() {
+fn topics_says_there_is_no_current_one_when_the_only_one_was_forgotten() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
     mem_ok(d.path(), &["forget", "1"]);
@@ -153,7 +153,7 @@ fn topics_dice_que_no_hay_vigente_si_la_unica_se_olvido() {
 }
 
 #[test]
-fn si_la_vigente_se_olvido_la_clave_vuelve_a_guardar_sin_reemplazar() {
+fn once_the_current_one_is_forgotten_the_key_saves_again_without_superseding() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
     mem_ok(d.path(), &["forget", "1"]);
@@ -165,7 +165,7 @@ fn si_la_vigente_se_olvido_la_clave_vuelve_a_guardar_sin_reemplazar() {
 }
 
 #[test]
-fn una_clave_vacia_se_rechaza_y_no_guarda_nada() {
+fn an_empty_key_is_rejected_and_nothing_is_saved() {
     let d = tempfile::tempdir().unwrap();
     let (ok, _, err) = mem(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "  "]);
     assert!(!ok, "una clave vacía tiene que fallar");
@@ -176,7 +176,7 @@ fn una_clave_vacia_se_rechaza_y_no_guarda_nada() {
 }
 
 #[test]
-fn la_clave_se_recorta_asi_que_con_espacios_alrededor_es_el_mismo_tema() {
+fn the_key_is_trimmed_so_surrounding_spaces_mean_the_same_topic() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
     mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", " pagos "]);
@@ -184,7 +184,7 @@ fn la_clave_se_recorta_asi_que_con_espacios_alrededor_es_el_mismo_tema() {
 }
 
 #[test]
-fn mayusculas_y_espacios_internos_no_hacen_otro_tema() {
+fn case_and_inner_spaces_do_not_make_another_topic() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "proveedor de pagos"]);
     let out = mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "  Proveedor   DE\tPagos "]);
@@ -196,7 +196,7 @@ fn mayusculas_y_espacios_internos_no_hacen_otro_tema() {
 }
 
 #[test]
-fn una_clave_nueva_lista_las_que_ya_existen_en_el_proyecto() {
+fn a_new_key_lists_the_ones_already_in_the_project() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", "El stack es React", "--project", "p", "--topic", "stack-del-frontend"]);
     mem_ok(d.path(), &["save", "Otra cosa", "--project", "p", "--topic", "politica-de-ramas"]);
@@ -211,14 +211,14 @@ fn una_clave_nueva_lista_las_que_ya_existen_en_el_proyecto() {
 }
 
 #[test]
-fn si_no_hay_otras_claves_el_mensaje_lo_dice() {
+fn when_there_are_no_other_keys_the_message_says_so() {
     let d = tempfile::tempdir().unwrap();
     let out = mem_ok(d.path(), &["save", "Primera", "--project", "p", "--topic", "unica"]);
     assert!(out.contains("No hay otras claves"), "{out}");
 }
 
 #[test]
-fn al_reemplazar_no_se_listan_otras_claves() {
+fn on_superseding_no_other_keys_are_listed() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", "Uno", "--project", "p", "--topic", "a"]);
     mem_ok(d.path(), &["save", "Dos", "--project", "p", "--topic", "b"]);
@@ -230,7 +230,7 @@ fn al_reemplazar_no_se_listan_otras_claves() {
 // -- la capa vectorial ------------------------------------------------------
 
 #[test]
-fn la_busqueda_vectorial_tampoco_devuelve_la_memoria_reemplazada() {
+fn vector_search_does_not_return_the_superseded_memory_either() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
     let older = ingest::save_with_topic(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
@@ -257,7 +257,7 @@ fn la_busqueda_vectorial_tampoco_devuelve_la_memoria_reemplazada() {
 // -- el guardado lo hace una sola transacción --------------------------------
 
 #[test]
-fn si_el_enlace_falla_no_queda_la_memoria_nueva_a_medias() {
+fn when_the_link_fails_the_new_memory_is_not_left_half_written() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
     let primera = ingest::save_with_topic(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
@@ -282,7 +282,7 @@ fn si_el_enlace_falla_no_queda_la_memoria_nueva_a_medias() {
 // -- varios procesos a la vez -------------------------------------------------
 
 #[test]
-fn varios_save_con_la_misma_clave_a_la_vez_tienen_exito_y_dejan_una_sola_activa() {
+fn concurrent_saves_under_one_key_all_succeed_and_leave_a_single_active() {
     // Con una transacción diferida, cada proceso lee la vigente con un lock
     // de lectura y después intenta subirlo a escritura: SQLite no espera, falla
     // al instante con `database is locked` (los que pierden la carrera salen
@@ -329,7 +329,7 @@ fn varios_save_con_la_misma_clave_a_la_vez_tienen_exito_y_dejan_una_sola_activa(
 
 // -- MCP ---------------------------------------------------------------------
 
-fn llamar(conn: &rusqlite::Connection, tool: &str, args: serde_json::Value) -> String {
+fn call(conn: &rusqlite::Connection, tool: &str, args: serde_json::Value) -> String {
     let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
         "params":{"name":tool,"arguments":args}});
     let res = mcp::handle(conn, &search::SearchContext::bm25_only(), &Config::default(), &req)
@@ -339,12 +339,12 @@ fn llamar(conn: &rusqlite::Connection, tool: &str, args: serde_json::Value) -> S
 }
 
 #[test]
-fn save_memory_con_topic_reemplaza_e_informa_a_cual() {
+fn save_memory_with_a_topic_supersedes_and_says_which() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    llamar(&conn, "save_memory", serde_json::json!({
+    call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_VIEJO, "project": "p", "topic": "pagos"}));
-    let out = llamar(&conn, "save_memory", serde_json::json!({
+    let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "topic": "pagos"}));
 
     assert!(out.contains("reemplaza a la memoria 1"), "{out}");
@@ -353,12 +353,12 @@ fn save_memory_con_topic_reemplaza_e_informa_a_cual() {
 }
 
 #[test]
-fn save_memory_sin_topic_o_con_topic_vacio_no_reemplaza_nada() {
+fn save_memory_without_a_topic_or_with_an_empty_one_supersedes_nothing() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    llamar(&conn, "save_memory", serde_json::json!({"text": PAGOS_VIEJO, "project": "p"}));
-    llamar(&conn, "save_memory", serde_json::json!({"text": PAGOS_NUEVO, "project": "p"}));
-    llamar(&conn, "save_memory", serde_json::json!({
+    call(&conn, "save_memory", serde_json::json!({"text": PAGOS_VIEJO, "project": "p"}));
+    call(&conn, "save_memory", serde_json::json!({"text": PAGOS_NUEVO, "project": "p"}));
+    call(&conn, "save_memory", serde_json::json!({
         "text": "Otro dato sobre pagos", "project": "p", "topic": ""}));
 
     let activas: i64 = conn
@@ -368,7 +368,7 @@ fn save_memory_sin_topic_o_con_topic_vacio_no_reemplaza_nada() {
 }
 
 #[test]
-fn la_descripcion_de_save_memory_explica_cuando_usar_topic() {
+fn the_save_memory_description_explains_when_to_use_topic() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
     let req = serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"});
@@ -386,15 +386,15 @@ fn la_descripcion_de_save_memory_explica_cuando_usar_topic() {
 }
 
 #[test]
-fn search_y_get_memory_muestran_la_clave_para_poder_reutilizarla() {
+fn search_and_get_memory_show_the_key_so_it_can_be_reused() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    llamar(&conn, "save_memory", serde_json::json!({
+    call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_VIEJO, "project": "p", "topic": "pagos"}));
 
-    let busqueda = llamar(&conn, "search_memory", serde_json::json!({"query": "proveedor pagos"}));
+    let busqueda = call(&conn, "search_memory", serde_json::json!({"query": "proveedor pagos"}));
     assert!(busqueda.contains("[tema: pagos]"), "{busqueda}");
-    let body = llamar(&conn, "get_memory", serde_json::json!({"id": 1}));
+    let body = call(&conn, "get_memory", serde_json::json!({"id": 1}));
     assert!(body.contains("[tema: pagos]"), "{body}");
 }
 
@@ -409,11 +409,11 @@ fn status(conn: &rusqlite::Connection, id: i64) -> String {
 }
 
 #[test]
-fn supersedes_corrige_una_memoria_guardada_sin_clave() {
+fn supersedes_corrects_a_memory_saved_without_a_key() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    llamar(&conn, "save_memory", serde_json::json!({"text": PAGOS_VIEJO, "project": "p"}));
-    let out = llamar(&conn, "save_memory", serde_json::json!({
+    call(&conn, "save_memory", serde_json::json!({"text": PAGOS_VIEJO, "project": "p"}));
+    let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "supersedes": 1}));
 
     assert!(out.contains("Reemplaza a la memoria 1"), "{out}");
@@ -421,47 +421,47 @@ fn supersedes_corrige_una_memoria_guardada_sin_clave() {
     assert_eq!(status(&conn, 2), "active");
     let sup: i64 = conn.query_row("select supersedes_id from memories where id = 2", [], |r| r.get(0)).unwrap();
     assert_eq!(sup, 1);
-    let hits = llamar(&conn, "search_memory", serde_json::json!({"query": "proveedor pagos"}));
+    let hits = call(&conn, "search_memory", serde_json::json!({"query": "proveedor pagos"}));
     assert!(hits.contains("Adyen") && !hits.contains("Stripe"), "{hits}");
 }
 
 #[test]
-fn supersedes_acepta_el_id_como_texto() {
+fn supersedes_accepts_the_id_as_text() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    llamar(&conn, "save_memory", serde_json::json!({"text": PAGOS_VIEJO, "project": "p"}));
-    llamar(&conn, "save_memory", serde_json::json!({
+    call(&conn, "save_memory", serde_json::json!({"text": PAGOS_VIEJO, "project": "p"}));
+    call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "supersedes": " 1 "}));
     assert_eq!(status(&conn, 1), "superseded");
 }
 
 #[test]
-fn supersedes_que_no_es_un_id_no_guarda_nada() {
+fn a_supersedes_that_is_not_an_id_saves_nothing() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    let out = llamar(&conn, "save_memory", serde_json::json!({
+    let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "supersedes": "la anterior"}));
     assert!(out.starts_with("No se guardó"), "{out}");
     assert_eq!(total(&conn), 0);
 }
 
 #[test]
-fn supersedes_de_una_memoria_inexistente_se_rechaza_con_texto_y_no_guarda_nada() {
+fn supersedes_of_a_missing_memory_is_rejected_in_words_and_saves_nothing() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    let out = llamar(&conn, "save_memory", serde_json::json!({
+    let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "supersedes": 999999}));
     assert!(out.starts_with("No se guardó") && out.contains("999999"), "{out}");
     assert_eq!(total(&conn), 0, "el rechazo no puede dejar la memoria nueva guardada");
 }
 
 #[test]
-fn supersedes_de_una_memoria_que_no_esta_activa_se_rechaza() {
+fn supersedes_of_a_memory_that_is_not_active_is_rejected() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    llamar(&conn, "save_memory", serde_json::json!({"text": PAGOS_VIEJO, "project": "p"}));
+    call(&conn, "save_memory", serde_json::json!({"text": PAGOS_VIEJO, "project": "p"}));
     anathem::maint::forget(&conn, 1).unwrap();
-    let out = llamar(&conn, "save_memory", serde_json::json!({
+    let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "supersedes": 1}));
 
     assert!(out.starts_with("No se guardó") && out.contains("forgotten"), "{out}");
@@ -470,12 +470,12 @@ fn supersedes_de_una_memoria_que_no_esta_activa_se_rechaza() {
 }
 
 #[test]
-fn supersedes_y_topic_apuntando_a_la_misma_memoria_reemplazan_una_sola_vez() {
+fn supersedes_and_topic_pointing_at_one_memory_supersede_it_once() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    llamar(&conn, "save_memory", serde_json::json!({
+    call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_VIEJO, "project": "p", "topic": "pagos"}));
-    let out = llamar(&conn, "save_memory", serde_json::json!({
+    let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "topic": "pagos", "supersedes": 1}));
 
     assert!(out.contains("Tema «pagos»: reemplaza a la memoria 1"), "{out}");
@@ -484,13 +484,13 @@ fn supersedes_y_topic_apuntando_a_la_misma_memoria_reemplazan_una_sola_vez() {
 }
 
 #[test]
-fn supersedes_y_topic_que_apuntan_a_memorias_distintas_se_rechazan() {
+fn supersedes_and_topic_pointing_at_different_memories_are_rejected() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    llamar(&conn, "save_memory", serde_json::json!({
+    call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_VIEJO, "project": "p", "topic": "pagos"}));
-    llamar(&conn, "save_memory", serde_json::json!({"text": "Otra cosa", "project": "p"}));
-    let out = llamar(&conn, "save_memory", serde_json::json!({
+    call(&conn, "save_memory", serde_json::json!({"text": "Otra cosa", "project": "p"}));
+    let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "topic": "pagos", "supersedes": 2}));
 
     assert!(out.starts_with("No se guardó"), "{out}");
@@ -501,23 +501,23 @@ fn supersedes_y_topic_que_apuntan_a_memorias_distintas_se_rechazan() {
 }
 
 #[test]
-fn supersedes_con_una_clave_nueva_deja_la_clave_lista_para_la_proxima() {
+fn supersedes_with_a_new_key_leaves_the_key_ready_for_next_time() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    llamar(&conn, "save_memory", serde_json::json!({"text": PAGOS_VIEJO, "project": "p"}));
-    let out = llamar(&conn, "save_memory", serde_json::json!({
+    call(&conn, "save_memory", serde_json::json!({"text": PAGOS_VIEJO, "project": "p"}));
+    let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "topic": "pagos", "supersedes": 1}));
     assert!(out.contains("Reemplaza a la memoria 1") && out.contains("clave nueva"), "{out}");
 
     // La siguiente con la clave ya reemplaza a la que corrigió la anterior.
-    llamar(&conn, "save_memory", serde_json::json!({
+    call(&conn, "save_memory", serde_json::json!({
         "text": "El proveedor de pagos es Mercado Pago", "project": "p", "topic": "pagos"}));
     assert_eq!(status(&conn, 2), "superseded");
     assert_eq!(status(&conn, 3), "active");
 }
 
 #[test]
-fn la_descripcion_distingue_cuando_usar_supersedes_y_cuando_topic() {
+fn the_description_tells_when_to_use_supersedes_and_when_topic() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
     let req = serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"});
@@ -537,7 +537,7 @@ fn la_descripcion_distingue_cuando_usar_supersedes_y_cuando_topic() {
 // -- export ------------------------------------------------------------------
 
 #[test]
-fn el_export_conserva_la_clave_de_tema() {
+fn export_keeps_the_topic_key() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
     mem_ok(d.path(), &["save", "Sin clave", "--project", "p"]);
@@ -664,7 +664,7 @@ fn base_anterior(dir: &Path) {
 }
 
 #[test]
-fn una_base_anterior_sigue_abriendose_y_conserva_sus_memorias() {
+fn an_older_database_still_opens_and_keeps_its_memories() {
     let d = tempfile::tempdir().unwrap();
     base_anterior(d.path());
 
@@ -678,7 +678,7 @@ fn una_base_anterior_sigue_abriendose_y_conserva_sus_memorias() {
 }
 
 #[test]
-fn una_base_anterior_acepta_guardar_con_clave_y_listar_temas() {
+fn an_older_database_accepts_saving_with_a_key_and_listing_topics() {
     let d = tempfile::tempdir().unwrap();
     base_anterior(d.path());
 
@@ -691,7 +691,7 @@ fn una_base_anterior_acepta_guardar_con_clave_y_listar_temas() {
 }
 
 #[test]
-fn un_indice_sobre_proyecto_y_clave_existe() {
+fn an_index_over_project_and_key_exists() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
     let cols: Vec<String> = conn
@@ -706,7 +706,7 @@ fn un_indice_sobre_proyecto_y_clave_existe() {
 
 // -- invariante estructural: una activa por (proyecto, clave) ---------------------
 
-fn fila_con_clave(conn: &rusqlite::Connection, project: &str, topic: Option<&str>, status: &str) -> rusqlite::Result<usize> {
+fn row_with_key(conn: &rusqlite::Connection, project: &str, topic: Option<&str>, status: &str) -> rusqlite::Result<usize> {
     conn.execute(
         "insert into memories (project, title, body, created, updated, source, status, topic)
          values (?1, 't', 'b', '2026-01-01', '2026-01-01', 'explicit', ?3, ?2)",
@@ -715,34 +715,34 @@ fn fila_con_clave(conn: &rusqlite::Connection, project: &str, topic: Option<&str
 }
 
 #[test]
-fn la_base_impide_dos_activas_con_la_misma_clave_en_el_mismo_proyecto() {
+fn the_database_forbids_two_active_memories_under_one_key_in_a_project() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    fila_con_clave(&conn, "p", Some("pagos"), "active").unwrap();
-    let err = fila_con_clave(&conn, "p", Some("pagos"), "active")
+    row_with_key(&conn, "p", Some("pagos"), "active").unwrap();
+    let err = row_with_key(&conn, "p", Some("pagos"), "active")
         .expect_err("una segunda activa con la misma clave tiene que rechazarse");
     assert!(err.to_string().contains("UNIQUE"), "{err}");
 }
 
 #[test]
-fn el_indice_unico_no_molesta_a_lo_que_no_es_la_vigente() {
+fn the_unique_index_does_not_bother_anything_but_the_current_one() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    fila_con_clave(&conn, "p", Some("pagos"), "active").unwrap();
+    row_with_key(&conn, "p", Some("pagos"), "active").unwrap();
     // otro proyecto, misma clave
-    fila_con_clave(&conn, "q", Some("pagos"), "active").unwrap();
+    row_with_key(&conn, "q", Some("pagos"), "active").unwrap();
     // la historia de la clave: superseded y forgotten pueden ser varias
     for st in ["superseded", "superseded", "forgotten"] {
-        fila_con_clave(&conn, "p", Some("pagos"), st).unwrap();
+        row_with_key(&conn, "p", Some("pagos"), st).unwrap();
     }
     // sin clave no hay tope
     for _ in 0..3 {
-        fila_con_clave(&conn, "p", None, "active").unwrap();
+        row_with_key(&conn, "p", None, "active").unwrap();
     }
 }
 
 #[test]
-fn revivir_una_olvidada_cuando_ya_hay_vigente_falla_en_vez_de_dejar_dos_activas() {
+fn reviving_a_forgotten_one_when_a_current_exists_fails_instead_of_leaving_two_active() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
     let older = ingest::save_with_topic(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
@@ -754,10 +754,10 @@ fn revivir_una_olvidada_cuando_ya_hay_vigente_falla_en_vez_de_dejar_dos_activas(
 }
 
 #[test]
-fn una_base_anterior_tambien_recibe_el_indice_unico() {
+fn an_older_database_gets_the_unique_index_too() {
     let d = tempfile::tempdir().unwrap();
     base_anterior(d.path());
     let conn = db::open(&d.path().join("mem.db")).unwrap();
-    fila_con_clave(&conn, "p", Some("k"), "active").unwrap();
-    assert!(fila_con_clave(&conn, "p", Some("k"), "active").is_err());
+    row_with_key(&conn, "p", Some("k"), "active").unwrap();
+    assert!(row_with_key(&conn, "p", Some("k"), "active").is_err());
 }

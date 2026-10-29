@@ -199,7 +199,7 @@ pub(crate) fn filters_for(q: &Query, params: &mut Vec<Value>) -> String {
 /// Builds a `SearchHit` around one specific chunk. The merge uses it for
 /// memories the vector side found and bm25 did not: for those we have no row
 /// from the lexical pool, but we do know which chunk won.
-fn hit_de_chunk(conn: &Connection, chunk_id: i64) -> Result<Option<(SearchHit, i64)>> {
+fn hit_from_chunk(conn: &Connection, chunk_id: i64) -> Result<Option<(SearchHit, i64)>> {
     let r = conn.query_row(
         "select m.id, m.ext_id, m.project, m.title, c.body, m.pinned
            from chunks c join memories m on m.id = c.memory_id
@@ -295,7 +295,7 @@ pub fn run_explained(
                 cosines.insert(a.memory_id, a.cosine);
                 orden_vec.push(a.memory_id);
                 if !best.contains_key(&a.memory_id) {
-                    if let Some(par) = hit_de_chunk(conn, a.chunk_id)? {
+                    if let Some(par) = hit_from_chunk(conn, a.chunk_id)? {
                         best.insert(a.memory_id, par);
                     }
                 }

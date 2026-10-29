@@ -2,7 +2,7 @@ use anathem::{db, evalrun, ingest, model::NewMemory, search};
 use std::io::Write;
 
 #[test]
-fn calcula_metricas_sobre_fixture_conocido() {
+fn it_computes_metrics_over_a_known_fixture() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     for (ext, body) in [
@@ -39,7 +39,7 @@ fn calcula_metricas_sobre_fixture_conocido() {
 }
 
 #[test]
-fn hit_sin_ext_id_no_se_descarta_del_conteo_de_rango() {
+fn a_hit_without_an_ext_id_is_not_dropped_from_the_rank_count() {
     // Regresión I1: un memory sin ext_id (p.ej. creado por save_memory del MCP,
     // no por `migrate`) que rankea mejor que el match esperado no debe correr el
     // rango reportado hacia arriba. `first_rank` debe reflejar la posición real
@@ -85,7 +85,7 @@ fn hit_sin_ext_id_no_se_descarta_del_conteo_de_rango() {
 }
 
 #[test]
-fn serializa_al_formato_compartido() {
+fn it_serializes_to_the_shared_format() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let es = dir.path().join("evalset.json");

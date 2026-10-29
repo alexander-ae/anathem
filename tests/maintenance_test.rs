@@ -11,7 +11,7 @@ fn seed(conn: &rusqlite::Connection, ext: &str) -> i64 {
 }
 
 #[test]
-fn forget_saca_de_la_busqueda_sin_borrar() {
+fn forget_removes_from_search_without_deleting() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let id = seed(&conn, "a");
@@ -25,7 +25,7 @@ fn forget_saca_de_la_busqueda_sin_borrar() {
 }
 
 #[test]
-fn pin_marca_la_memoria() {
+fn pin_marks_the_memory() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let id = seed(&conn, "a");
@@ -35,7 +35,7 @@ fn pin_marca_la_memoria() {
 }
 
 #[test]
-fn forget_en_id_inexistente_falla() {
+fn forget_on_a_missing_id_fails() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let err = maint::forget(&conn, 999_999).expect_err("forget sobre un id inexistente debe fallar");
@@ -43,7 +43,7 @@ fn forget_en_id_inexistente_falla() {
 }
 
 #[test]
-fn pin_en_id_inexistente_falla() {
+fn pin_on_a_missing_id_fails() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let err = maint::pin(&conn, 999_999, true).expect_err("pin sobre un id inexistente debe fallar");
@@ -51,7 +51,7 @@ fn pin_en_id_inexistente_falla() {
 }
 
 #[test]
-fn history_devuelve_la_cadena_de_supersession() {
+fn history_returns_the_supersession_chain() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let older = seed(&conn, "vieja");
@@ -88,7 +88,7 @@ fn guardar_explicito_clasifica_y_extrae_refs() {
 
 /// Si se pasan tags explícitos, se respetan y NO se clasifica encima.
 #[test]
-fn guardar_explicito_respeta_los_tags_dados() {
+fn save_explicit_respects_the_given_tags() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let (id, used) = anathem::ingest::save_explicit(
@@ -105,7 +105,7 @@ fn guardar_explicito_respeta_los_tags_dados() {
 /// terminal y las guardadas por el agente caían en proyectos distintos y no
 /// se veían entre sí: ni para supersession ni para búsquedas filtradas.
 #[test]
-fn el_proyecto_por_defecto_es_el_mismo_en_cli_y_mcp() {
+fn the_default_project_is_the_same_in_cli_and_mcp() {
     // Los dos caminos tienen que derivar el mismo proyecto parados en el
     // mismo lugar. Antes esto se comprobaba mirando si la ayuda mencionaba
     // la constante; ahora que el valor se deriva, se comprueba ejecutando

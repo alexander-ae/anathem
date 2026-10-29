@@ -12,7 +12,7 @@ fn mem(dir: &std::path::Path, args: &[&str]) -> std::process::Output {
 }
 
 #[test]
-fn instalar_registra_el_paquete_y_lo_reporta() {
+fn install_registers_the_pack_and_reports_it() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
@@ -28,7 +28,7 @@ fn instalar_registra_el_paquete_y_lo_reporta() {
 }
 
 #[test]
-fn instalar_rechaza_un_sha256_que_no_coincide() {
+fn install_rejects_a_sha256_that_does_not_match() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
@@ -43,7 +43,7 @@ fn instalar_rechaza_un_sha256_que_no_coincide() {
 }
 
 #[test]
-fn instalar_rechaza_un_archivo_que_no_es_paquete() {
+fn install_rejects_a_file_that_is_not_a_pack() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("cualquiera.anathem-pack");
     std::fs::write(&r, b"no soy un paquete").unwrap();
@@ -52,7 +52,7 @@ fn instalar_rechaza_un_archivo_que_no_es_paquete() {
 }
 
 #[test]
-fn status_sin_paquete_lo_dice_y_no_falla() {
+fn status_with_no_pack_says_so_and_does_not_fail() {
     let d = tempfile::tempdir().unwrap();
     let o = mem(d.path(), &["model", "status"]);
     assert!(o.status.success());
@@ -61,7 +61,7 @@ fn status_sin_paquete_lo_dice_y_no_falla() {
 }
 
 #[test]
-fn quitar_el_paquete_vuelve_a_bm25_sin_romper_la_busqueda() {
+fn removing_the_pack_falls_back_to_bm25_without_breaking_search() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
@@ -80,7 +80,7 @@ fn quitar_el_paquete_vuelve_a_bm25_sin_romper_la_busqueda() {
 }
 
 #[test]
-fn si_falta_el_archivo_del_paquete_la_busqueda_degrada_a_bm25() {
+fn a_missing_pack_file_degrades_search_to_bm25() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
@@ -121,7 +121,7 @@ fn escribir_pack_ancho(pack_path: &std::path::Path, name: &str) {
 }
 
 #[test]
-fn cambiar_de_paquete_rehace_el_indice_en_vez_de_mezclar() {
+fn switching_packs_rebuilds_the_index_instead_of_mixing() {
     let d = tempfile::tempdir().unwrap();
     let a = d.path().join("a.anathem-pack");
     let b = d.path().join("b.anathem-pack");
@@ -146,7 +146,7 @@ fn cambiar_de_paquete_rehace_el_indice_en_vez_de_mezclar() {
 }
 
 #[test]
-fn un_paquete_sustituido_a_mano_dispara_el_reindexado() {
+fn a_pack_swapped_by_hand_triggers_the_reindex() {
     // El registro dice "mini-es" pero el archivo con ese nombre es en realidad
     // otro paquete. Buscar no puede usar los vectores viejos.
     let d = tempfile::tempdir().unwrap();
@@ -168,7 +168,7 @@ fn un_paquete_sustituido_a_mano_dispara_el_reindexado() {
 }
 
 #[test]
-fn incompatibilidad_por_nombre_deja_el_registro_consistente_con_el_disco() {
+fn a_name_mismatch_leaves_the_registry_consistent_with_disk() {
     // El registro dice "mini-es", y el archivo en paquetes/mini-es.anathem-pack
     // tiene las MISMAS dimensiones (4) pero es en realidad "otro-es": mismo
     // largo de vector, vocabulario distinto. Mezclar sería numéricamente
@@ -192,11 +192,11 @@ fn incompatibilidad_por_nombre_deja_el_registro_consistente_con_el_disco() {
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let (name, _sha, _dims) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
     assert_eq!(name, "otro-es", "el registro debe reflejar el nombre real del paquete");
-    let ruta_registrada = d.path().join("paquetes").join(format!("{name}.anathem-pack"));
+    let registered_path = d.path().join("paquetes").join(format!("{name}.anathem-pack"));
     assert!(
-        ruta_registrada.exists(),
+        registered_path.exists(),
         "el archivo tiene que vivir donde dice el registro: {}",
-        ruta_registrada.display()
+        registered_path.display()
     );
 
     // Una segunda búsqueda tiene que encontrar el paquete sin volver a avisar
@@ -211,7 +211,7 @@ fn incompatibilidad_por_nombre_deja_el_registro_consistente_con_el_disco() {
 }
 
 #[test]
-fn reinstalar_desde_la_ruta_instalada_no_destruye_el_paquete() {
+fn reinstalling_from_the_installed_path_does_not_destroy_the_pack() {
     // `mem model install paquetes/mini-es.anathem-pack` —reinstalar "para
     // forzar el reindexado", o un script que instala siempre desde la ruta
     // canónica— copiaba el archivo sobre sí mismo y lo truncaba a cero
@@ -261,7 +261,7 @@ fn reinstalar_desde_la_ruta_instalada_no_destruye_el_paquete() {
 }
 
 #[test]
-fn un_paquete_que_no_reconoce_nada_se_rechaza_sin_tocar_al_que_estaba() {
+fn a_pack_that_recognizes_nothing_is_rejected_without_touching_the_current_one() {
     // Un paquete cuya tabla no cubre el vocabulario que usa esta memoria
     // instala limpio, reporta cobertura completa y produce solo vectores
     // nulos: la búsqueda vectorial deja de aportar nada y nada lo dice.
@@ -293,7 +293,7 @@ fn un_paquete_que_no_reconoce_nada_se_rechaza_sin_tocar_al_que_estaba() {
 }
 
 #[test]
-fn status_no_cuenta_como_cubiertos_los_vectores_que_la_busqueda_descarta() {
+fn status_does_not_count_vectors_search_discards_as_covered() {
     // `cobertura` hacía `count(*)`, así que reportaba 1/1 mientras `buscar`
     // descartaba esa misma fila por dimensión incompatible. El único
     // diagnóstico que la especificación designa para hacer visible el hueco
@@ -321,14 +321,14 @@ fn status_no_cuenta_como_cubiertos_los_vectores_que_la_busqueda_descarta() {
 /// Cuántas filas `pack_instalando` hay en `meta`. Se consulta con SQL crudo
 /// a propósito: así este test no depende de que la API para leer la marca
 /// exista, y falla por lo que afirma y no por no compilar.
-fn marcas_de_instalacion(db: &std::path::Path) -> i64 {
+fn install_marks(db: &std::path::Path) -> i64 {
     let conn = rusqlite::Connection::open(db).unwrap();
     conn.query_row("select count(*) from meta where key = 'pack_instalando'", [], |r| r.get(0))
         .unwrap()
 }
 
 #[test]
-fn una_instalacion_cortada_despues_del_rename_no_deja_consultando_el_build_viejo() {
+fn an_install_cut_short_after_the_rename_does_not_keep_querying_the_old_build() {
     // Entre el `rename` —que ya reemplazó el archivo en `paquetes/`— y el
     // `adoptar_pack` que iba a describirlo hay una ventana. Un SIGKILL ahí
     // deja el build NUEVO en disco con `meta` describiendo al VIEJO.
@@ -394,14 +394,14 @@ fn una_instalacion_cortada_despues_del_rename_no_deja_consultando_el_build_viejo
     );
     drop(conn);
     assert_eq!(
-        marcas_de_instalacion(&db),
+        install_marks(&db),
         0,
         "resuelta la incoherencia, la marca no puede quedar reindexando para siempre"
     );
 }
 
 #[test]
-fn una_instalacion_completa_no_deja_la_marca_puesta() {
+fn a_complete_install_leaves_no_mark_behind() {
     // La otra mitad: si la marca sobreviviera a una instalación exitosa,
     // cada búsqueda posterior reindexaría el corpus entero para siempre.
     let d = tempfile::tempdir().unwrap();
@@ -411,14 +411,14 @@ fn una_instalacion_completa_no_deja_la_marca_puesta() {
     mem(d.path(), &["save", "hola mundo"]);
     assert!(mem(d.path(), &["model", "install", r.to_str().unwrap()]).status.success());
 
-    assert_eq!(marcas_de_instalacion(&db), 0, "la instalación terminó: la marca sobra");
+    assert_eq!(install_marks(&db), 0, "la instalación terminó: la marca sobra");
     let o = mem(d.path(), &["search", "hola"]);
     let err = String::from_utf8_lossy(&o.stderr).to_string();
     assert!(err.is_empty(), "una instalación sana no puede dejar avisando a cada búsqueda: {err}");
 }
 
 #[test]
-fn una_instalacion_que_falla_antes_de_tocar_el_archivo_no_deja_la_marca() {
+fn an_install_failing_before_touching_the_file_leaves_no_mark() {
     // Si el rename ni siquiera llegó a pasar, el archivo del paquete
     // registrado está intacto y la marca no describe ningún riesgo: dejarla
     // puesta costaría un reindexado del corpus entero al pedo.
@@ -439,7 +439,7 @@ fn una_instalacion_que_falla_antes_de_tocar_el_archivo_no_deja_la_marca() {
 
     let o = mem(d.path(), &["model", "install", r.to_str().unwrap()]);
     assert!(!o.status.success(), "el rename imposible tiene que hacer fallar la instalación");
-    assert_eq!(marcas_de_instalacion(&db), 0, "el archivo no se tocó: la marca no corresponde");
+    assert_eq!(install_marks(&db), 0, "el archivo no se tocó: la marca no corresponde");
 
     // Y tampoco quedan temporales tirados.
     let extras: Vec<String> = std::fs::read_dir(&packs)

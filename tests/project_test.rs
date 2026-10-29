@@ -13,7 +13,7 @@ fn repo(raiz: &Path, url_remoto: Option<&str>) {
 }
 
 #[test]
-fn usa_el_nombre_del_remoto_y_no_el_de_la_carpeta() {
+fn it_uses_the_remote_name_and_not_the_folder_name() {
     // El caso que motivó todo: el repo `api-monolito` vive en `API/Web`.
     let d = tempfile::tempdir().unwrap();
     let w = d.path().join("API").join("Web");
@@ -23,21 +23,21 @@ fn usa_el_nombre_del_remoto_y_no_el_de_la_carpeta() {
 }
 
 #[test]
-fn entiende_una_url_https() {
+fn it_understands_an_https_url() {
     let d = tempfile::tempdir().unwrap();
     repo(d.path(), Some("https://gitlab.com/__alexander__/anathem.git"));
     assert_eq!(detect(d.path()).as_deref(), Some("anathem"));
 }
 
 #[test]
-fn una_url_sin_sufijo_git_tambien_sirve() {
+fn a_url_without_the_git_suffix_works_too() {
     let d = tempfile::tempdir().unwrap();
     repo(d.path(), Some("https://gitlab.com/grupo/proyecto"));
     assert_eq!(detect(d.path()).as_deref(), Some("proyecto"));
 }
 
 #[test]
-fn desde_un_subdirectorio_encuentra_la_raiz() {
+fn from_a_subdirectory_it_finds_the_root() {
     let d = tempfile::tempdir().unwrap();
     repo(d.path(), Some("git@host:g/repo.git"));
     let hondo = d.path().join("src").join("modulo").join("interno");
@@ -46,7 +46,7 @@ fn desde_un_subdirectorio_encuentra_la_raiz() {
 }
 
 #[test]
-fn en_un_worktree_da_el_proyecto_y_no_el_nombre_de_la_rama() {
+fn in_a_worktree_it_gives_the_project_and_not_the_branch_name() {
     // Este es el caso que la derivación ingenua rompe: dentro de
     // `.claude/worktrees/op200-implementation`, el basename es el de la rama.
     let d = tempfile::tempdir().unwrap();
@@ -66,7 +66,7 @@ fn en_un_worktree_da_el_proyecto_y_no_el_nombre_de_la_rama() {
 }
 
 #[test]
-fn sin_remoto_cae_al_nombre_de_la_carpeta_del_repo() {
+fn with_no_remote_it_falls_back_to_the_repo_folder_name() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mi-proyecto-local");
     fs::create_dir_all(&r).unwrap();
@@ -75,13 +75,13 @@ fn sin_remoto_cae_al_nombre_de_la_carpeta_del_repo() {
 }
 
 #[test]
-fn fuera_de_un_repo_no_detecta_nada() {
+fn outside_a_repo_it_detects_nothing() {
     let d = tempfile::tempdir().unwrap();
     assert_eq!(detect(d.path()), None);
 }
 
 #[test]
-fn un_project_explicito_le_gana_a_la_deteccion() {
+fn an_explicit_project_beats_detection() {
     let d = tempfile::tempdir().unwrap();
     repo(d.path(), Some("git@host:g/detectado.git"));
     assert_eq!(resolve(Some("elegido".into()), d.path()), "elegido");
@@ -89,7 +89,7 @@ fn un_project_explicito_le_gana_a_la_deteccion() {
 }
 
 #[test]
-fn sin_repo_y_sin_pedido_queda_el_generico() {
+fn with_no_repo_and_nothing_asked_the_generic_one_stands() {
     let d = tempfile::tempdir().unwrap();
     assert_eq!(resolve(None, d.path()), NO_PROJECT);
 }

@@ -90,10 +90,10 @@ pub fn link(conn: &Connection, newer: i64, older: i64) -> Result<()> {
     if newer == older {
         anyhow::bail!("una memoria no puede reemplazarse a sí misma");
     }
-    let estado_nueva: Option<String> = conn
+    let status_of_newer: Option<String> = conn
         .query_row("select status from memories where id = ?1", [newer], |r| r.get(0))
         .optional()?;
-    match estado_nueva.as_deref() {
+    match status_of_newer.as_deref() {
         None => anyhow::bail!("no existe la memoria nueva id:{newer}"),
         Some("active") => {}
         Some(otro) => anyhow::bail!(

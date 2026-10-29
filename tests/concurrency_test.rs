@@ -28,7 +28,7 @@ fn lanzar(db: &Path, args: &[&str]) -> std::process::Child {
 /// Siembra fragmentos sin vector directamente en la base, para que ningún
 /// `mem` los haya sincronizado antes de tiempo. Son los "pendientes" que
 /// después se van a pelear varios procesos a la vez.
-fn sembrar_fragmentos_sin_vector(db: &Path, cuantos: usize) {
+fn seed_chunks_without_vectors(db: &Path, cuantos: usize) {
     let conn = anathem::db::open(db).unwrap();
     conn.execute(
         "insert into memories (project, title, body, created, updated, source)
@@ -51,7 +51,7 @@ fn sembrar_fragmentos_sin_vector(db: &Path, cuantos: usize) {
 }
 
 #[test]
-fn varios_save_simultaneos_no_fallan_ni_pierden_vectores() {
+fn concurrent_saves_neither_fail_nor_lose_vectors() {
     // `sincronizar` calculaba los pendientes fuera de la transacción y los
     // insertaba con un `insert` pelado sobre una clave primaria: con varios
     // procesos a la vez, los que perdían la carrera salían con código 1 y
@@ -72,7 +72,7 @@ fn varios_save_simultaneos_no_fallan_ni_pierden_vectores() {
 
     // Suficientes fragmentos como para que la ventana entre "ver qué falta"
     // y "escribirlo" no sea instantánea.
-    sembrar_fragmentos_sin_vector(&db, 600);
+    seed_chunks_without_vectors(&db, 600);
 
     let hijos: Vec<_> = (0..6)
         .map(|i| lanzar(&db, &["save", &format!("hola mundo guardado numero {i}")]))
@@ -104,7 +104,7 @@ fn varios_save_simultaneos_no_fallan_ni_pierden_vectores() {
 }
 
 #[test]
-fn buscar_no_falla_aunque_no_pueda_reindexar() {
+fn search_does_not_fail_even_when_it_cannot_reindex() {
     // La guarda de identidad convertía a `mem search` en un escritor que
     // renombraba el archivo y reindexaba el corpus entero, y propagaba con
     // `?` todos los errores de ese camino. Con `paquetes/` de solo lectura,
@@ -166,7 +166,7 @@ fn buscar_no_falla_aunque_no_pueda_reindexar() {
 }
 
 #[test]
-fn dos_busquedas_en_paralelo_con_la_guarda_disparada_sobreviven_las_dos() {
+fn two_parallel_searches_both_survive_with_the_guard_tripped() {
     // Las dos ven la incompatibilidad y las dos quieren renombrar y
     // reindexar. La que pierde la carrera se moría en el `rename`. Ahora
     // degrada a bm25, que es un resultado peor pero honesto, y sale con 0.
@@ -205,7 +205,7 @@ fn dos_busquedas_en_paralelo_con_la_guarda_disparada_sobreviven_las_dos() {
 const BACKLOG: usize = 20_000;
 
 #[test]
-fn un_install_concurrente_no_deja_vectores_de_dos_paquetes() {
+fn a_concurrent_install_leaves_no_vectors_from_two_packs() {
     // El agujero: `sincronizar` recibía un `&Pack` y no volvía a mirar el
     // registro nunca. Un proceso que resolvía el paquete A y después embebía
     // un backlog grande seguía escribiendo vectores de A minutos más tarde,
@@ -230,7 +230,7 @@ fn un_install_concurrente_no_deja_vectores_de_dos_paquetes() {
     // backlog se siembra después, que es la situación de siempre (memorias
     // guardadas sin paquete, o un `install` cortado con Ctrl-C).
     assert!(mem(&db, &["model", "install", a.to_str().unwrap()]).status.success());
-    sembrar_fragmentos_sin_vector(&db, BACKLOG);
+    seed_chunks_without_vectors(&db, BACKLOG);
 
     // Terminal 1: guarda una memoria, y al terminar arrastra el backlog
     // entero con el paquete A.

@@ -5,7 +5,7 @@ use anathem::tags;
 /// interfieren entre sí ni con el resto de la suite.
 
 #[test]
-fn sin_archivo_junto_a_la_db_usa_las_reglas_por_defecto() {
+fn with_no_file_next_to_the_db_it_uses_the_default_rules() {
     let dir = tempfile::tempdir().unwrap();
     let rules = tags::load_rules(Some(dir.path())).unwrap();
     let tags: Vec<&str> = rules.iter().map(|(t, _)| t.as_str()).collect();
@@ -14,7 +14,7 @@ fn sin_archivo_junto_a_la_db_usa_las_reglas_por_defecto() {
 }
 
 #[test]
-fn un_tags_json_junto_a_la_db_reemplaza_por_completo_las_reglas_por_defecto() {
+fn a_tags_json_next_to_the_db_replaces_the_default_rules_outright() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(
         dir.path().join("tags.json"),
@@ -42,7 +42,7 @@ fn un_tags_json_junto_a_la_db_reemplaza_por_completo_las_reglas_por_defecto() {
 }
 
 #[test]
-fn tags_json_con_regex_invalido_falla_nombrando_archivo_y_regla() {
+fn a_tags_json_with_an_invalid_regex_fails_naming_file_and_rule() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("tags.json");
     std::fs::write(&path, r#"[{"tag": "roto", "pattern": "(no cierra"}]"#).unwrap();
@@ -53,7 +53,7 @@ fn tags_json_con_regex_invalido_falla_nombrando_archivo_y_regla() {
 }
 
 #[test]
-fn tags_json_con_json_malformado_falla_nombrando_el_archivo() {
+fn a_malformed_tags_json_fails_naming_the_file() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("tags.json");
     std::fs::write(&path, "esto no es json").unwrap();
@@ -63,7 +63,7 @@ fn tags_json_con_json_malformado_falla_nombrando_el_archivo() {
 }
 
 #[test]
-fn tags_json_vacio_falla_en_vez_de_dejar_sin_reglas() {
+fn an_empty_tags_json_fails_instead_of_leaving_no_rules() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("tags.json");
     std::fs::write(&path, "[]").unwrap();

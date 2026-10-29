@@ -1,7 +1,7 @@
 use anathem::{db, migrate};
 use std::path::Path;
 
-fn migrada(conn: &rusqlite::Connection, ext: &str) -> Option<(String, String, String)> {
+fn migrated_one(conn: &rusqlite::Connection, ext: &str) -> Option<(String, String, String)> {
     conn.query_row(
         "select project, title, created from memories where ext_id = ?1",
         [ext],
@@ -11,7 +11,7 @@ fn migrada(conn: &rusqlite::Connection, ext: &str) -> Option<(String, String, St
 }
 
 #[test]
-fn migra_solo_curadas_y_reporta() {
+fn it_migrates_only_curated_ones_and_reports() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let rep = migrate::run(&conn, Path::new("tests/fixtures/export-sample.jsonl")).unwrap();
@@ -20,18 +20,18 @@ fn migra_solo_curadas_y_reporta() {
     assert_eq!(rep.archived, 2, "ccc, ddd");
     assert_eq!(rep.failed, 2, "fff, ggg");
 
-    assert!(migrada(&conn, "aaa").is_some());
-    assert!(migrada(&conn, "ccc").is_none(), "no debe migrar session_turn");
-    assert!(migrada(&conn, "fff").is_none(), "no debe migrar status failed");
+    assert!(migrated_one(&conn, "aaa").is_some());
+    assert!(migrated_one(&conn, "ccc").is_none(), "no debe migrar session_turn");
+    assert!(migrated_one(&conn, "fff").is_none(), "no debe migrar status failed");
 }
 
 #[test]
-fn usa_la_fecha_del_prefijo_save() {
+fn it_uses_the_date_from_the_save_prefix() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     migrate::run(&conn, Path::new("tests/fixtures/export-sample.jsonl")).unwrap();
 
-    let (_, title, created) = migrada(&conn, "aaa").unwrap();
+    let (_, title, created) = migrated_one(&conn, "aaa").unwrap();
     assert_eq!(created, "2026-09-21");
     assert!(!title.contains("[SAVE:"), "el prefijo quedó en el título: {title}");
     assert!(title.starts_with("El cache de PROJ-482"), "título: {title}");
@@ -56,7 +56,7 @@ fn asigna_tags_y_refs_al_migrar() {
 }
 
 #[test]
-fn reporta_curadas_en_failed_para_reimportar_a_mano() {
+fn it_reports_curated_failures_for_manual_reimport() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let rep = migrate::run(&conn, Path::new("tests/fixtures/export-sample.jsonl")).unwrap();

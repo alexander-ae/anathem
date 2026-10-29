@@ -401,12 +401,12 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
                 continue;
             }
         };
-        let necesita_paquete = req["method"] == "tools/call"
+        let needs_pack = req["method"] == "tools/call"
             && matches!(
                 req["params"]["name"].as_str(),
                 Some("search_memory") | Some("save_memory")
             );
-        let ctx = if necesita_paquete {
+        let ctx = if needs_pack {
             search::SearchContext::for_server(live_pack.current(conn), cfg.bm25_weight)
         } else {
             search::SearchContext::for_server(None, cfg.bm25_weight)

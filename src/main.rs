@@ -616,27 +616,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn resolve_sin_home_no_panica_devuelve_err() {
+    fn resolve_without_home_returns_err_instead_of_panicking() {
         let err = resolve("~/.anathem/mem.db", None)
             .expect_err("sin HOME, resolve debe fallar en vez de panicar");
         assert!(err.to_string().contains("HOME"), "mensaje inesperado: {err}");
     }
 
     #[test]
-    fn resolve_con_home_expande_el_prefijo() {
+    fn resolve_with_home_expands_the_prefix() {
         let home = Path::new("/home/alguien");
         let resuelto = resolve("~/.anathem/mem.db", Some(home)).unwrap();
         assert_eq!(resuelto, home.join(".anathem/mem.db"));
     }
 
     #[test]
-    fn resolve_sin_prefijo_deja_la_ruta_intacta() {
+    fn resolve_without_prefix_leaves_the_path_alone() {
         let resuelto = resolve("/tmp/x.db", None).unwrap();
         assert_eq!(resuelto, PathBuf::from("/tmp/x.db"));
     }
 
     #[test]
-    fn elegir_home_fuera_de_windows_prefiere_home_sobre_userprofile() {
+    fn choose_home_outside_windows_prefers_home_over_userprofile() {
         let h = choose_home(
             Some(PathBuf::from("/home/alguien")),
             Some(PathBuf::from(r"C:\Users\alguien")),
@@ -646,7 +646,7 @@ mod tests {
     }
 
     #[test]
-    fn elegir_home_en_windows_prefiere_userprofile_sobre_home() {
+    fn choose_home_on_windows_prefers_userprofile_over_home() {
         // Git Bash and MSYS define HOME on Windows too, but in posix form
         // (`/c/Users/...`), which a native binary does not read as a user
         // path. USERPROFILE is always the native one: it has to win, even
@@ -660,7 +660,7 @@ mod tests {
     }
 
     #[test]
-    fn elegir_home_usa_userprofile_si_no_hay_home() {
+    fn choose_home_uses_userprofile_when_there_is_no_home() {
         // The Windows-without-Git-Bash case: HOME is not defined and we
         // have to fall back to USERPROFILE instead of failing.
         let h = choose_home(None, Some(PathBuf::from(r"C:\Users\alguien")), false);
@@ -668,7 +668,7 @@ mod tests {
     }
 
     #[test]
-    fn elegir_home_en_windows_cae_a_home_si_no_hay_userprofile() {
+    fn choose_home_on_windows_falls_back_to_home_without_userprofile() {
         // USERPROFILE wins when both are there, but if it alone is missing
         // there is still a usable home in HOME.
         let h = choose_home(Some(PathBuf::from(r"C:\Users\alguien")), None, true);
@@ -676,7 +676,7 @@ mod tests {
     }
 
     #[test]
-    fn elegir_home_home_vacia_no_cuenta_como_definida() {
+    fn choose_home_an_empty_home_does_not_count_as_defined() {
         // HOME can exist as a variable and be empty (export HOME=).
         // Without this check, `resolve` would join the rest of the path
         // against "" and the result would be relative to the current
@@ -686,29 +686,29 @@ mod tests {
     }
 
     #[test]
-    fn elegir_home_userprofile_vacia_no_cuenta_como_definida() {
+    fn choose_home_an_empty_userprofile_does_not_count_as_defined() {
         let h = choose_home(Some(PathBuf::from("/home/alguien")), Some(PathBuf::new()), true);
         assert_eq!(h, Some(PathBuf::from("/home/alguien")));
     }
 
     #[test]
-    fn elegir_home_sin_ninguna_de_las_dos_devuelve_none() {
+    fn choose_home_with_neither_of_the_two_returns_none() {
         assert_eq!(choose_home(None, None, false), None);
         assert_eq!(choose_home(None, None, true), None);
     }
 
     #[test]
-    fn editor_por_defecto_en_windows_es_notepad() {
+    fn default_editor_on_windows_is_notepad() {
         assert_eq!(default_editor(true), "notepad");
     }
 
     #[test]
-    fn editor_por_defecto_fuera_de_windows_es_vi() {
+    fn default_editor_outside_windows_is_vi() {
         assert_eq!(default_editor(false), "vi");
     }
 
     #[test]
-    fn resolve_sin_home_nombra_las_dos_variables() {
+    fn resolve_without_home_names_both_variables() {
         // Stronger than the original assertion: it is not enough for the
         // message to mention HOME, it has to mention the Windows
         // alternative too, because the fallback now exists and whoever

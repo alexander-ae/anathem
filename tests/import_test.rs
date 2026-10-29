@@ -23,7 +23,7 @@ fn counts(p: &Path) -> (i64, i64, i64, i64, i64) {
 }
 
 #[test]
-fn una_base_entera_sobrevive_la_vuelta_completa() {
+fn a_whole_database_survives_the_round_trip() {
     let d = tempfile::tempdir().unwrap();
     let source = d.path().join("origen.db");
     {
@@ -55,7 +55,7 @@ fn una_base_entera_sobrevive_la_vuelta_completa() {
 }
 
 #[test]
-fn importar_sobre_una_base_con_contenido_se_rechaza_sin_fusionar() {
+fn importing_onto_a_nonempty_database_is_rejected_without_merge() {
     let d = tempfile::tempdir().unwrap();
     let source = d.path().join("o.db");
     {
@@ -78,7 +78,7 @@ fn importar_sobre_una_base_con_contenido_se_rechaza_sin_fusionar() {
 }
 
 #[test]
-fn un_archivo_sin_frontmatter_no_rompe_la_importacion() {
+fn a_file_without_frontmatter_does_not_break_the_import() {
     let d = tempfile::tempdir().unwrap();
     let exp = d.path().join("exp");
     std::fs::create_dir_all(exp.join("p")).unwrap();
@@ -95,7 +95,7 @@ fn un_archivo_sin_frontmatter_no_rompe_la_importacion() {
 }
 
 #[test]
-fn se_leen_los_campos_que_el_export_escribe() {
+fn the_fields_export_writes_are_read_back() {
     let txt = "---\nid: 7\nproject: \"api\"\ndescription: \"el titulo\"\ntags: [\"uno\", \"dos\"]\ncreated: \"2026-01-02\"\nupdated: \"2026-01-03\"\nstatus: \"superseded\"\nsource: \"migrated\"\npinned: true\ntopic: \"la-clave\"\next_id: \"ext-9\"\nsupersedes: 3\nevent_start: \"2026-01-01\"\nrefs:\n  - kind: \"ticket\"\n    value: \"ABC-1\"\n---\n\nel cuerpo de la memoria\n";
     let m = import::parse(txt).expect("tenía que leerse");
     assert_eq!(m.old_id, Some(7));

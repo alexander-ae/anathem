@@ -21,7 +21,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 }
 
 /// Compila y corre el paquete mínimo; devuelve el commit que cree tener.
-fn commit_del_binario(dir: &Path, target: &Path) -> String {
+fn binary_commit(dir: &Path, target: &Path) -> String {
     let o = Command::new(env!("CARGO"))
         .args(["run", "-q", "--offline"])
         .current_dir(dir)
@@ -32,13 +32,13 @@ fn commit_del_binario(dir: &Path, target: &Path) -> String {
     String::from_utf8_lossy(&o.stdout).trim().to_string()
 }
 
-fn hay_git() -> bool {
+fn has_git() -> bool {
     Command::new("git").arg("--version").output().map(|o| o.status.success()).unwrap_or(false)
 }
 
 #[test]
-fn el_commit_del_binario_sigue_a_head_tras_pack_refs_y_en_el_primer_commit() {
-    if !hay_git() {
+fn the_binary_commit_tracks_head_after_pack_refs_and_on_the_first_commit() {
+    if !has_git() {
         return;
     }
     let d = tempfile::tempdir().unwrap();
@@ -60,22 +60,22 @@ fn el_commit_del_binario_sigue_a_head_tras_pack_refs_y_en_el_primer_commit() {
     git(&pack_, &["init", "-q"]);
 
     // Sin ningún commit no hay nada que decir, y no puede fallar.
-    assert_eq!(commit_del_binario(&pack_, &target), "desconocido");
+    assert_eq!(binary_commit(&pack_, &target), "desconocido");
 
     // El primer commit: ninguno de los archivos que existían cambió.
     git(&pack_, &["add", "-A"]);
     git(&pack_, &["commit", "-qm", "uno"]);
-    assert_eq!(commit_del_binario(&pack_, &target), git(&pack_, &["rev-parse", "--short", "HEAD"]));
+    assert_eq!(binary_commit(&pack_, &target), git(&pack_, &["rev-parse", "--short", "HEAD"]));
 
     // Tras `pack-refs` la rama vive solo en `packed-refs`; el commit siguiente
     // crea el archivo suelto y ni `HEAD` ni `packed-refs` cambian.
     git(&pack_, &["pack-refs", "--all"]);
-    assert_eq!(commit_del_binario(&pack_, &target), git(&pack_, &["rev-parse", "--short", "HEAD"]));
+    assert_eq!(binary_commit(&pack_, &target), git(&pack_, &["rev-parse", "--short", "HEAD"]));
     for n in 0..2 {
         std::fs::write(pack_.join("cambio.txt"), format!("{n}")).unwrap();
         git(&pack_, &["add", "-A"]);
         git(&pack_, &["commit", "-qm", "otro"]);
         let expected = git(&pack_, &["rev-parse", "--short", "HEAD"]);
-        assert_eq!(commit_del_binario(&pack_, &target), expected, "commit {n} tras pack-refs");
+        assert_eq!(binary_commit(&pack_, &target), expected, "commit {n} tras pack-refs");
     }
 }

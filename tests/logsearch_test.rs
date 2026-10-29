@@ -1,15 +1,15 @@
 use anathem::{db, logsearch};
 use rusqlite::params;
 
-fn conn_vacia() -> (tempfile::TempDir, rusqlite::Connection) {
+fn empty_conn() -> (tempfile::TempDir, rusqlite::Connection) {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     (dir, conn)
 }
 
 #[test]
-fn mark_follow_up_no_matchea_por_substring() {
-    let (_d, conn) = conn_vacia();
+fn mark_follow_up_does_not_match_by_substring() {
+    let (_d, conn) = empty_conn();
     // returned_ids contiene "131" y "132" pero nunca el id "1" como entrada propia.
     conn.execute(
         "insert into search_log (ts, query, project, returned_ids, budget_used)
@@ -26,8 +26,8 @@ fn mark_follow_up_no_matchea_por_substring() {
 }
 
 #[test]
-fn mark_follow_up_matchea_id_genuino_en_la_lista() {
-    let (_d, conn) = conn_vacia();
+fn mark_follow_up_matches_a_genuine_id_in_the_list() {
+    let (_d, conn) = empty_conn();
     conn.execute(
         "insert into search_log (ts, query, project, returned_ids, budget_used)
          values ('2026-09-22T00:00:00', 'q', null, ?1, 0)",

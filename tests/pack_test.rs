@@ -7,7 +7,7 @@ fn cos(a: &[f32], b: &[f32]) -> f32 {
 }
 
 #[test]
-fn abre_y_reporta_sus_metadatos() {
+fn it_opens_and_reports_its_metadata() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
@@ -17,7 +17,7 @@ fn abre_y_reporta_sus_metadatos() {
 }
 
 #[test]
-fn un_solo_token_da_su_eje() {
+fn a_single_token_yields_its_axis() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
@@ -40,7 +40,7 @@ fn dos_tokens_promedian_sus_filas() {
 }
 
 #[test]
-fn el_sufijo_se_resegmenta_en_vez_de_caer_en_desconocido() {
+fn the_suffix_is_re_segmented_instead_of_falling_back_to_unknown() {
     // "mundos" no es una pieza, pero "▁mundo" y "s" sí. Esta es la propiedad
     // que hace que recortar el vocabulario no pierda calidad.
     let d = tempfile::tempdir().unwrap();
@@ -52,7 +52,7 @@ fn el_sufijo_se_resegmenta_en_vez_de_caer_en_desconocido() {
 }
 
 #[test]
-fn texto_vacio_da_un_vector_nulo_sin_fallar() {
+fn empty_text_yields_a_null_vector_without_failing() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
@@ -63,7 +63,7 @@ fn texto_vacio_da_un_vector_nulo_sin_fallar() {
 }
 
 #[test]
-fn rechaza_un_archivo_sin_la_marca() {
+fn it_rejects_a_file_without_the_magic() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("basura.anathem-pack");
     std::fs::write(&r, b"esto no es un paquete en absoluto").unwrap();
@@ -72,7 +72,7 @@ fn rechaza_un_archivo_sin_la_marca() {
 }
 
 #[test]
-fn rechaza_una_version_que_no_entiende() {
+fn it_rejects_a_version_it_does_not_understand() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
@@ -82,7 +82,7 @@ fn rechaza_una_version_que_no_entiende() {
 }
 
 #[test]
-fn rechaza_un_archivo_truncado() {
+fn it_rejects_a_truncated_file() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
@@ -94,7 +94,7 @@ fn rechaza_un_archivo_truncado() {
 }
 
 #[test]
-fn rechaza_un_largo_de_tokenizador_corrupto_sin_paniquear() {
+fn it_rejects_a_corrupt_tokenizer_length_without_panicking() {
     // "largo del tokenizador" es un u64 leído crudo del archivo. Si un
     // paquete corrupto lo declara cerca de u64::MAX, sumarlo al
     // desplazamiento actual no debe desbordar la aritmética de punteros:
@@ -114,7 +114,7 @@ fn rechaza_un_largo_de_tokenizador_corrupto_sin_paniquear() {
 }
 
 #[test]
-fn el_sha256_es_estable_y_cambia_con_el_contenido() {
+fn the_sha256_is_stable_and_changes_with_the_content() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
@@ -126,7 +126,7 @@ fn el_sha256_es_estable_y_cambia_con_el_contenido() {
 }
 
 #[test]
-fn rechaza_una_tabla_mas_chica_que_el_vocabulario() {
+fn it_rejects_a_table_smaller_than_the_vocabulary() {
     // Un paquete con menos filas que piezas tiene su tokenizador abre
     // limpio, instala, reporta cobertura completa y produce SOLO vectores
     // nulos: `embeber` saltea las filas que no existen, y si faltan todas
@@ -142,7 +142,7 @@ fn rechaza_una_tabla_mas_chica_que_el_vocabulario() {
 }
 
 #[test]
-fn acepta_un_added_token_con_id_fuera_de_la_tabla() {
+fn it_accepts_an_added_token_whose_id_is_outside_the_table() {
     // La tabla cubre exactamente las cuatro piezas del modelo, que es lo que
     // el generador escribe. El tokenizador trae además un `added_token` con
     // id 7, fuera de ese rango — la forma de cualquier sentencepiece podado.

@@ -18,7 +18,7 @@ fn mem(db: &std::path::Path, args: &[&str]) -> (String, String, bool) {
 /// contenerlo es basura. Buscar no puede fallar por eso: tiene que avisar
 /// por stderr y seguir devolviendo resultados de bm25.
 #[test]
-fn paquete_corrupto_degrada_a_bm25_sin_tumbar_la_busqueda() {
+fn a_corrupt_pack_degrades_to_bm25_without_breaking_search() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("m.db");
     mem(&db, &["init"]);

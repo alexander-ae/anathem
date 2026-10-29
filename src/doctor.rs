@@ -206,7 +206,7 @@ fn entero(conn: &Connection, sql: &str) -> rusqlite::Result<i64> {
     conn.query_row(sql, [], |r| r.get(0))
 }
 
-fn tiene_tabla(conn: &Connection, name: &str) -> rusqlite::Result<bool> {
+fn has_table(conn: &Connection, name: &str) -> rusqlite::Result<bool> {
     Ok(conn.query_row(
         "select count(*) from sqlite_master where type in ('table', 'view') and name = ?1",
         [name],
@@ -220,10 +220,10 @@ fn tiene_tabla(conn: &Connection, name: &str) -> rusqlite::Result<bool> {
 /// time a command opens the database for writing.
 const TABLAS_VECTORIALES: [&str; 2] = ["chunk_vectors", "meta"];
 
-fn tablas_vectoriales_ausentes(conn: &Connection) -> rusqlite::Result<Vec<&'static str>> {
+fn missing_vector_tables(conn: &Connection) -> rusqlite::Result<Vec<&'static str>> {
     let mut v = Vec::new();
     for t in TABLAS_VECTORIALES {
-        if !tiene_tabla(conn, t)? {
+        if !has_table(conn, t)? {
             v.push(t);
         }
     }
@@ -345,7 +345,7 @@ fn database_section(db: &Path) -> (Section, Option<Connection>) {
 }
 
 fn check_database(conn: &Connection, s: &mut Section) {
-    match tablas_vectoriales_ausentes(conn) {
+    match missing_vector_tables(conn) {
         Ok(v) if !v.is_empty() => s.info(format!(
             "la base es anterior a la capa vectorial (faltan las tablas {}); se actualiza \
              sola la próxima vez que un comando la abra para escribir",
@@ -432,7 +432,7 @@ fn orphans(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
     )?;
     // Without the table (a database predating the vector layer) there are
     // no vectors that could be orphaned.
-    let sin_fragmento = if tiene_tabla(conn, "chunk_vectors")? {
+    let sin_fragmento = if has_table(conn, "chunk_vectors")? {
         entero(
             conn,
             "select count(*) from chunk_vectors v
@@ -518,7 +518,7 @@ fn vector_section(conn: &Connection, dir: &Path) -> Section {
     let mut s = Section::new("Capa vectorial");
     // The tables' absence was already reported in the database section;
     // here it is only a matter of not tripping over it.
-    if tablas_vectoriales_ausentes(conn).map_or(false, |v| !v.is_empty()) {
+    if missing_vector_tables(conn).map_or(false, |v| !v.is_empty()) {
         s.info("sin paquete de vocabulario: la base todavía no tiene capa vectorial");
         stray_files(&mut s, dir);
         return s;

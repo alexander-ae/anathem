@@ -10,7 +10,7 @@ fn seed(conn: &rusqlite::Connection, ext: &str, body: &str) -> i64 {
 }
 
 #[test]
-fn propone_candidatos_parecidos() {
+fn it_proposes_similar_candidates() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     seed(&conn, "vieja", "El cache del breakdown se justifica por rendimiento");
@@ -22,7 +22,7 @@ fn propone_candidatos_parecidos() {
 }
 
 #[test]
-fn link_marca_la_vieja_y_la_saca_de_la_busqueda() {
+fn link_marks_the_older_one_and_removes_it_from_search() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let older = seed(&conn, "vieja", "El cache del breakdown se justifica");
@@ -40,7 +40,7 @@ fn link_marca_la_vieja_y_la_saca_de_la_busqueda() {
 }
 
 #[test]
-fn no_se_propone_a_si_misma() {
+fn it_does_not_propose_itself() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let id = seed(&conn, "unica", "El cache del breakdown no se justifica");
@@ -52,7 +52,7 @@ fn no_se_propone_a_si_misma() {
 // -- I1: `link` con `nueva` inexistente ------------------------------------
 
 #[test]
-fn link_con_nueva_inexistente_falla_y_no_toca_vieja() {
+fn link_with_a_missing_newer_one_fails_and_leaves_the_older_alone() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let older = seed(&conn, "vieja", "El cache del breakdown se justifica");
@@ -76,7 +76,7 @@ fn link_con_nueva_inexistente_falla_y_no_toca_vieja() {
 // -- I2: `link` no debe permitir armar un ciclo -----------------------------
 
 #[test]
-fn link_rechaza_cerrar_un_ciclo_de_dos() {
+fn link_refuses_to_close_a_two_step_cycle() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let siete = seed(&conn, "siete", "El endpoint de comites ignora el filtro de estado");
@@ -104,7 +104,7 @@ fn link_rechaza_cerrar_un_ciclo_de_dos() {
 // -- I3: candidates() por id, no por contenido, con un caso que distingue --
 
 #[test]
-fn candidates_no_descarta_duplicados_preexistentes_del_mismo_proyecto() {
+fn candidates_does_not_discard_preexisting_duplicates_from_the_same_project() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let text = "El endpoint de boletas duplica el cobro de cuota mensual";

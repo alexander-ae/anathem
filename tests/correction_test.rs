@@ -39,7 +39,7 @@ fn reindex_reconstruye_desde_cero() {
 }
 
 #[test]
-fn export_escribe_markdown_con_frontmatter() {
+fn export_writes_markdown_with_frontmatter() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     seed(&conn, "el cache del breakdown no se justifica");
@@ -71,7 +71,7 @@ fn frontmatter_yaml(txt: &str) -> &str {
 }
 
 #[test]
-fn export_frontmatter_es_yaml_valido_con_dos_puntos_en_el_titulo() {
+fn export_frontmatter_is_valid_yaml_with_a_colon_in_the_title() {
     // Regresión del hallazgo A: un título con "PROJ-136 2026-08-11: ..." hacía
     // que YAML interpretara el ": " como una nueva clave anidada, rompiendo
     // el parseo. Esta es la forma real en que aparecen los títulos migrados
@@ -185,7 +185,7 @@ fn walkdir(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
 }
 
 #[test]
-fn export_desambigua_titulos_que_colisionan_en_las_primeras_ocho_palabras() {
+fn export_disambiguates_titles_colliding_on_the_first_eight_words() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let base = "PROJ-482 / PR #4821 — ronda de hallazgos del bot";
@@ -225,7 +225,7 @@ fn export_desambigua_titulos_que_colisionan_en_las_primeras_ocho_palabras() {
 }
 
 #[test]
-fn run_explained_expone_el_score() {
+fn run_explained_exposes_the_score() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     seed(&conn, "el cache del breakdown no se justifica");
@@ -236,7 +236,7 @@ fn run_explained_expone_el_score() {
 }
 
 #[test]
-fn editar_el_cuerpo_recalcula_el_titulo() {
+fn editing_the_body_recomputes_the_title() {
     // El título se deriva del cuerpo. Si al editar no se recalcula, la memoria
     // queda anunciándose con un texto que ya no contiene — que es exactamente
     // lo que pasó al reimportar una memoria cuyo encabezado se quitó después.
@@ -257,7 +257,7 @@ fn editar_el_cuerpo_recalcula_el_titulo() {
 }
 
 #[test]
-fn el_export_preserva_todo_lo_necesario_para_migrar() {
+fn export_preserves_everything_needed_to_migrate() {
     // El export es la salida de emergencia del proyecto: si no alcanza para
     // reconstruir la base en otra herramienta, encierra al usuario. Antes
     // perdía refs, pinned, la cadena de supersession y el id externo.
@@ -305,7 +305,7 @@ fn el_export_preserva_todo_lo_necesario_para_migrar() {
 }
 
 #[test]
-fn el_export_incluye_las_memorias_olvidadas() {
+fn export_includes_forgotten_memories() {
     // `forget` oculta, no borra. Dejarlas afuera del export convertía cada
     // migración en una pérdida de datos silenciosa.
     let dir = tempfile::tempdir().unwrap();
