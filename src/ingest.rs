@@ -5,7 +5,7 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBe
 pub const CHUNK_SIZE: usize = 500;
 pub const CHUNK_STEP: usize = 400;
 
-/// Debe coincidir con el check constraint de `memory_refs.kind` en db::SCHEMA.
+/// Must match the check constraint on `memory_refs.kind` in db::SCHEMA.
 const VALID_REF_KINDS: [&str; 3] = ["ticket", "pr", "sha"];
 
 pub fn insert(conn: &Connection, m: &NewMemory) -> Result<i64> {
@@ -15,20 +15,20 @@ pub fn insert(conn: &Connection, m: &NewMemory) -> Result<i64> {
     Ok(id)
 }
 
-/// Marca de tiempo con hora para `memories.creado_ts`.
+/// A timestamp with the time of day for `memories.created_ts`.
 ///
-/// `created` guarda solo la fecha y así se queda: lo usa el export, el nombre
-/// de archivo de cada memoria y la migración desde otros sistemas. Esta es una
-/// columna aparte, para poder contestar "qué pasó hace un rato" sin tocar nada
-/// de lo anterior.
+/// `created` stores only the date and stays that way: the export, each
+/// memory's filename and the migration from other systems all use it. This
+/// is a separate column, so "what happened a short while ago" can be
+/// answered without touching any of that.
 fn now_with_time() -> String {
     chrono::Local::now().to_rfc3339()
 }
 
-/// El insert en sí, sin abrir ni cerrar transacción: quien llama pone el
-/// límite. `insert` lo envuelve en la suya; el guardado con clave de tema lo
-/// corre dentro de la que también cubre el supersede, para que ambas cosas
-/// ocurran juntas o ninguna.
+/// The insert itself, opening and closing no transaction: the caller sets
+/// the boundary. `insert` wraps it in its own; saving with a topic key runs
+/// it inside the one that also covers the supersede, so both happen together
+/// or neither does.
 fn insert_row(tx: &Connection, m: &NewMemory, agent: Option<&str>) -> Result<i64> {
     tx.execute(
         "insert into memories
@@ -67,19 +67,20 @@ fn insert_row(tx: &Connection, m: &NewMemory, agent: Option<&str>) -> Result<i64
     Ok(id)
 }
 
-/// Guardado explícito de una memoria nueva, compartido por la CLI (`mem save`)
-/// y por la tool `save_memory` de MCP. Existe para que los dos caminos no
-/// puedan divergir: antes estaba duplicado y la rama de la CLI no clasificaba
-/// ni extraía referencias, así que una memoria guardada desde la terminal
-/// nacía sin tags ni tickets.
+/// Explicit save of a new memory, shared by the CLI (`mem save`) and by
+/// MCP's `save_memory` tool. It exists so the two paths cannot drift apart:
+/// this used to be duplicated and the CLI branch neither classified nor
+/// extracted references, so a memory saved from the terminal was born
+/// without tags or tickets.
 ///
-/// Si `tags_dados` viene vacío se clasifica el texto; si trae algo, se respeta
-/// tal cual y no se clasifica encima. Devuelve el id y los tags aplicados.
-/// El título de una memoria es su primera línea no vacía, recortada a 120
-/// caracteres. Vive acá, y no duplicado en cada camino, porque el título se
-/// deriva del cuerpo: si un camino lo calcula distinto —o no lo recalcula al
-/// cambiar el cuerpo— la memoria queda mostrando un título que ya no
-/// describe lo que contiene.
+/// When `given_tags` arrives empty the text is classified; when it carries
+/// something, that is respected as is and nothing is classified on top.
+/// Returns the id and the tags applied.
+/// A memory's title is its first non-empty line, trimmed to 120 characters.
+/// It lives here, and not duplicated in each path, because the title derives
+/// from the body: if one path computed it differently — or did not recompute
+/// it when the body changed — the memory would end up showing a title that
+/// no longer describes what it holds.
 pub fn title_from(texto: &str) -> String {
     texto
         .lines()
@@ -101,41 +102,40 @@ pub fn save_explicit(
     Ok((g.id, g.tags))
 }
 
-/// La memoria que un guardado con clave de tema dejó `superseded`.
+/// The memory that a save with a topic key left `superseded`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Replaced {
     pub id: i64,
     pub title: String,
 }
 
-/// Resultado de `guardar_con_tema`.
+/// The result of `save_with_topic`.
 #[derive(Debug, Clone)]
 pub struct Saved {
     pub id: i64,
     pub project: String,
     pub tags: Vec<String>,
-    /// La clave tal como quedó guardada, ya normalizada.
+    /// The key exactly as it was stored, already normalized.
     pub topic: Option<String>,
-    /// La memoria que quedó superseded, sea por la clave de tema o por un
-    /// `supersedes` explícito.
+    /// The memory left superseded, whether by the topic key or by an
+    /// explicit `supersedes`.
     pub reemplazada: Option<Replaced>,
-    /// La clave no tenía ninguna memoria activa antes de este guardado.
+    /// The key had no active memory before this save.
     pub clave_nueva: bool,
-    /// Solo cuando la clave resultó nueva: las demás claves que tienen una
-    /// memoria activa en el proyecto, para que un error de tipeo se note.
+    /// Only when the key turned out to be new: the other keys that do have
+    /// an active memory in the project, so a typo shows.
     pub otras_claves: Vec<String>,
 }
 
-/// Valida y normaliza una clave de tema: minúsculas, recortada en los bordes
-/// y con los espacios internos colapsados a uno (un salto de línea cuenta
-/// como espacio). Una clave vacía se rechaza.
+/// Validates and normalizes a topic key: lowercase, trimmed at the edges
+/// and with inner whitespace collapsed to one space (a newline counts as a
+/// space). An empty key is rejected.
 ///
-/// Se normaliza porque la clave la escribe un modelo, y `Pagos`, `pagos` y
-/// `pagos ` tienen que ser el mismo tema: si no, una variación de tipeo
-/// guarda como tema nuevo y no reemplaza nada, con un mensaje idéntico al de
-/// una clave legítimamente nueva. Lo que la normalización no arregla
-/// (`stack-frontend` contra `stack-del-frontend`) lo hace visible
-/// `Guardado::otras_claves`.
+/// It is normalized because a model writes the key, and `Pagos`, `pagos` and
+/// `pagos ` have to be the same topic: otherwise a typing variation saves as
+/// a new topic and replaces nothing, with a message identical to that of a
+/// legitimately new key. What normalizing does not fix (`stack-frontend`
+/// against `stack-del-frontend`) is made visible by `Saved::other_keys`.
 pub fn normalize_topic(clave: &str) -> Result<String> {
     let t = clave.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
     if t.is_empty() {
@@ -144,13 +144,13 @@ pub fn normalize_topic(clave: &str) -> Result<String> {
     Ok(t)
 }
 
-/// Tope de claves que se listan al avisar que una clave es nueva.
+/// Cap on how many keys are listed when reporting that a key is new.
 const MAX_CLAVES_LISTADAS: usize = 30;
 
-/// Error por un pedido que no se puede cumplir (un `supersedes` que no existe,
-/// que no está activo, o que choca con la clave). A diferencia de un fallo de
-/// la base, es culpa de la entrada y se puede contar tal cual a quien llamó:
-/// MCP lo devuelve como texto de la tool y no como "error interno".
+/// An error for a request that cannot be fulfilled (a `supersedes` that does
+/// not exist, is not active, or clashes with the key). Unlike a database
+/// failure, it is the input's fault and can be told to the caller as is: MCP
+/// returns it as the tool's text and not as an "internal error".
 #[derive(Debug)]
 pub struct BadRequest(pub String);
 
@@ -200,13 +200,13 @@ pub fn save_with_topic(
     save_with_topic_by(conn, texto, project, tags_dados, topic, supersedes, None)
 }
 
-/// Igual que `guardar_con_tema`, anotando qué agente lo guardó.
+/// Same as `save_with_topic`, recording which agent saved it.
 ///
-/// Existe como función aparte y no como un parámetro más de la otra para no
-/// tocar sus veinte y pico de sitios de llamada, casi todos tests: el agente
-/// solo lo conoce el servidor MCP, que es el único que lee el `clientInfo`
-/// del `initialize`. Lo guardado desde la CLI no tiene agente, y está bien
-/// que así sea.
+/// It exists as a separate function and not as one more parameter on the
+/// other so its twenty-odd call sites, almost all tests, are left untouched:
+/// only the MCP server knows the agent, since it is the only one reading
+/// `clientInfo` from `initialize`. Anything saved from the CLI has no agent,
+/// and that is as it should be.
 #[allow(clippy::too_many_arguments)]
 pub fn save_with_topic_by(
     conn: &Connection,
@@ -316,8 +316,8 @@ pub fn save_with_topic_by(
     })
 }
 
-/// Las claves de tema con una memoria activa en `project`, menos `excepto`,
-/// ordenadas. Se recorta a `MAX_CLAVES_LISTADAS`.
+/// The topic keys with an active memory in `project`, minus `except`,
+/// sorted. Trimmed to `MAX_CLAVES_LISTADAS`.
 fn active_topic_keys(conn: &Connection, project: &str, excepto: &str) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
         "select distinct topic from memories
@@ -331,16 +331,16 @@ fn active_topic_keys(conn: &Connection, project: &str, excepto: &str) -> Result<
 }
 
 impl Saved {
-    /// Lo que pasó con el reemplazo y la clave de tema, en español, o `None`
-    /// si no hubo ni una cosa ni la otra. Lo usan la CLI y MCP para que digan
-    /// lo mismo.
+    /// What happened with the replacement and the topic key, in Spanish, or
+    /// `None` when neither occurred. The CLI and MCP both use it so they say
+    /// the same thing.
     ///
-    /// Si reemplazó, nombra la memoria con su id: un reemplazo silencioso es
-    /// el tipo de magia que después nadie entiende. Si la clave era nueva y no
-    /// reemplazó nada, lista las que ya existen en el proyecto: un error de
-    /// tipeo produce el mismo "no había nada" que una clave legítimamente
-    /// nueva, y sin la lista nadie puede distinguirlos. Cuesta texto solo en
-    /// ese caso.
+    /// When it replaced something, it names the memory by id: a silent
+    /// replacement is the kind of magic nobody can account for later. When
+    /// the key was new and nothing was replaced, it lists the keys already in
+    /// the project: a typo produces the same "there was nothing" as a
+    /// legitimately new key, and without the list nobody can tell them apart.
+    /// It costs text only in that case.
     pub fn describe(&self) -> Option<String> {
         let reemplazo = self.reemplazada.as_ref().map(|r| {
             format!(

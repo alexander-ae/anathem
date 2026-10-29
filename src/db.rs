@@ -95,17 +95,17 @@ pub fn open(path: &Path) -> Result<Connection> {
         std::fs::create_dir_all(parent)?;
     }
     let conn = Connection::open(path)?;
-    // Varios procesos comparten la base: dos `mem save` desde dos terminales,
-    // el servidor MCP y la CLI a la vez, un `mem model install` mientras algo
-    // busca. Sin esto, el segundo escritor recibe `database is locked` al
-    // instante en vez de esperar su turno.
+    // Several processes share the database: two `mem save` from two
+    // terminals, the MCP server and the CLI at once, a `mem model install`
+    // while something searches. Without this, the second writer gets
+    // `database is locked` instantly instead of waiting its turn.
     //
-    // Cinco segundos. Las transacciones de escritura son cortas a propósito
-    // —`vecstore::sincronizar` embebe afuera y escribe por lotes de 256— así
-    // que cinco segundos cubren decenas de lotes ajenos seguidos, que es
-    // mucho más de lo que dura cualquier contención real. Más alto haría que
-    // un lock genuinamente trabado pareciera un comando colgado; más bajo
-    // volvería a fallar por una carrera de milisegundos.
+    // Five seconds. Write transactions are short on purpose — `vecstore::sync`
+    // embeds outside and writes in batches of 256 — so five seconds cover
+    // dozens of other processes' batches back to back, far more than any
+    // real contention lasts. Higher would make a genuinely stuck lock look
+    // like a hung command; lower would go back to failing on a
+    // millisecond-long race.
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
     conn.execute_batch(SCHEMA)?;
     add_topic_column(&conn)?;
@@ -126,11 +126,12 @@ fn has_topic_column(conn: &Connection) -> Result<bool> {
     has_column(conn, "topic")
 }
 
-/// Agrega una columna que puede faltar en una base vieja, tolerando que otro
-/// proceso gane la carrera. Mismo razonamiento que `agregar_columna_topic`:
-/// la CLI y el servidor MCP pueden abrir la misma base a la vez, los dos ven
-/// la columna ausente, y el segundo `alter` falla con "duplicate column
-/// name". Si tras fallar la columna ya está, el resultado es el que se quería.
+/// Adds a column that may be missing from an older database, tolerating
+/// another process winning the race. Same reasoning as `add_topic_column`:
+/// the CLI and the MCP server can open the same database at once, both see
+/// the column missing, and the second `alter` fails with "duplicate column
+/// name". If the column is there after the failure, the result is the one
+/// we wanted.
 fn add_column(conn: &Connection, nombre: &str, tipo: &str) -> Result<()> {
     if has_column(conn, nombre)? {
         return Ok(());
@@ -144,14 +145,14 @@ fn add_column(conn: &Connection, nombre: &str, tipo: &str) -> Result<()> {
     Ok(())
 }
 
-/// Las columnas y tablas que nacieron con nombres en español, antes de que el
-/// proyecto unificara el código en inglés. Se renombran una sola vez; después
-/// esto no hace nada.
+/// The columns and tables born with Spanish names, before the project
+/// unified its code in English. They are renamed once; afterwards this does
+/// nothing.
 ///
-/// Se usa `alter table ... rename column`, que SQLite soporta desde la 3.25 y
-/// preserva los datos: no se copia nada ni se reconstruye la tabla, así que no
-/// hay ventana donde se puedan perder filas. Si la columna vieja ya no está
-/// —el caso de todas las bases nuevas— no se toca nada.
+/// It uses `alter table ... rename column`, which SQLite supports since 3.25
+/// and which preserves the data: nothing is copied and no table is rebuilt,
+/// so there is no window in which rows could be lost. If the old column is
+/// already gone — the case for every new database — nothing is touched.
 fn rename_columns_to_english(conn: &Connection) -> Result<()> {
     for (tabla, old, new_id) in [
         ("memories", "agente", "agent"),
@@ -167,13 +168,14 @@ fn rename_columns_to_english(conn: &Connection) -> Result<()> {
         if existe == 0 {
             continue;
         }
-        // El índice viejo referencia la columna por su nombre anterior; se
-        // saca antes de renombrar y se vuelve a crear más abajo con el nuevo.
+        // The old index references the column by its previous name; it is
+        // dropped before renaming and recreated below with the new one.
         conn.execute("drop index if exists idx_mem_project_creado", [])?;
         let sql = format!("alter table \"{tabla}\" rename column \"{old}\" to \"{new_id}\"");
         if let Err(e) = conn.execute(&sql, []) {
-            // Otro proceso pudo ganar la carrera, igual que con las columnas
-            // nuevas: si ya quedó renombrada, el resultado es el que se quería.
+            // Another process may have won the race, same as with the new
+            // columns: if it is already renamed, the result is the one we
+            // wanted.
             let ya: i64 = conn.query_row(
                 "select count(*) from pragma_table_info(?1) where name = ?2",
                 [tabla, new_id],
@@ -187,21 +189,23 @@ fn rename_columns_to_english(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Las dos columnas que hacen posible contar qué pasó últimamente y quién lo
-/// escribió. Son opcionales en el sentido fuerte: una base donde nadie las
-/// use se comporta igual que antes, y las memorias viejas las tienen nulas.
+/// The two columns that make it possible to tell what happened lately and
+/// who wrote it. They are optional in the strong sense: a database where
+/// nobody uses them behaves exactly as before, and older memories have them
+/// null.
 ///
-/// `creado_ts` existe porque `created` guarda solo la fecha. Para saber qué
-/// hizo el otro agente hace un rato, un día de resolución no alcanza.
+/// `created_ts` exists because `created` stores only the date. To know what
+/// the other agent did a short while ago, a day of resolution is not enough.
 ///
-/// `agente` lo llena el servidor MCP con el nombre que el cliente manda en el
-/// `initialize`; lo guardado desde la CLI queda sin agente, que es la verdad.
+/// `agent` is filled by the MCP server with the name the client sends in
+/// `initialize`; anything saved from the CLI is left without an agent, which
+/// is the truth.
 fn add_handoff_columns(conn: &Connection) -> Result<()> {
     rename_columns_to_english(conn)?;
     add_column(conn, "agent", "text")?;
     add_column(conn, "created_ts", "text")?;
-    // Sirve a la consulta de `mem recent`, que filtra por proyecto y ordena
-    // por fecha descendente.
+    // Serves `mem recent`'s query, which filters by project and orders by
+    // date descending.
     conn.execute(
         "create index if not exists idx_mem_project_created on memories(project, created_ts)",
         [],
@@ -209,16 +213,16 @@ fn add_handoff_columns(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Una base creada antes de las claves de tema no tiene `memories.topic`, y
-/// `create table if not exists` no la toca: hay que agregarla con `alter
-/// table`. SQLite no tiene `add column if not exists`, así que se pregunta
-/// primero. El índice se crea acá y no en `SCHEMA` porque en una base vieja
-/// la columna todavía no existe cuando corre ese lote.
+/// A database created before topic keys has no `memories.topic`, and
+/// `create table if not exists` does not touch it: it has to be added with
+/// `alter table`. SQLite has no `add column if not exists`, so it is asked
+/// first. The index is created here and not in `SCHEMA` because in an older
+/// database the column does not exist yet when that batch runs.
 ///
-/// Dos procesos pueden abrir la misma base vieja a la vez (la CLI y el
-/// servidor MCP): los dos ven la columna ausente y el segundo `alter` falla
-/// con "duplicate column name". Si tras fallar la columna ya está, el otro
-/// ganó la carrera y el resultado es el que se quería.
+/// Two processes can open the same older database at once (the CLI and the
+/// MCP server): both see the column missing and the second `alter` fails
+/// with "duplicate column name". If the column is there after the failure,
+/// the other won the race and the result is the one we wanted.
 fn add_topic_column(conn: &Connection) -> Result<()> {
     if !has_topic_column(conn)? {
         if let Err(e) = conn.execute("alter table memories add column topic text", []) {
@@ -231,18 +235,19 @@ fn add_topic_column(conn: &Connection) -> Result<()> {
         "create index if not exists idx_mem_project_topic on memories(project, topic)",
         [],
     )?;
-    // Una clave de tema tiene a lo sumo una memoria activa por proyecto: la
-    // vigente. El guardado con clave ya lo mantiene (busca la vigente, la
-    // supersede y recién después fija la clave en la nueva, ver
-    // `ingest::guardar_con_tema`), pero un invariante que depende de que cada
-    // camino se acuerde de cumplirlo es el que alguien rompe sin querer. Con
-    // el índice, un camino que dejara dos activas falla en la base en vez de
-    // dejar a `search` devolviendo las dos.
+    // A topic key has at most one active memory per project: the current
+    // one. Saving with a key already maintains that (it finds the current
+    // one, supersedes it and only then sets the key on the new one, see
+    // `ingest::save_with_topic`), but an invariant that depends on every
+    // path remembering to uphold it is the one somebody breaks by accident.
+    // With the index, a path that left two active fails in the database
+    // instead of leaving `search` returning both.
     //
-    // Los únicos caminos que tocan `status` son `forget` (pasa a `forgotten`)
-    // y `supersede::link` (a `superseded`); ninguno vuelve a `active`, así que
-    // no hay forma de revivir una memoria y chocar con la vigente. Las filas
-    // con `topic` nulo no cuentan: en un índice único los nulos son distintos.
+    // The only paths touching `status` are `forget` (to `forgotten`) and
+    // `supersede::link` (to `superseded`); neither returns to `active`, so
+    // there is no way to revive a memory and collide with the current one.
+    // Rows with a null `topic` do not count: in a unique index nulls are all
+    // distinct.
     conn.execute(
         "create unique index if not exists idx_mem_topic_activa
            on memories(project, topic)
