@@ -38,9 +38,14 @@ sh instalar.sh --configurar-path --sin-paquete
 sh instalar.sh --etiqueta v0.1.0
 ```
 
-Lo único que el script **no** puede hacer por vos es conectar anathem a tu
-agente: los comandos del plugin se escriben adentro de Claude Code. Al
-terminar te los imprime.
+Con `--conectar` también lo registra en tus agentes: en Claude Code con
+`claude mcp add --scope user`, y en opencode editando su configuración (o
+creándola, si opencode está instalado y todavía no la tiene). Si alguna de las
+dos cosas no puede hacerla sola, lo dice e imprime la línea exacta.
+
+Lo único que queda a mano es el **plugin** de Claude Code, si lo querés: esos
+dos comandos se escriben adentro de Claude Code y ningún script puede
+tipearlos. El servidor MCP, que es lo que importa, sí queda conectado.
 
 El resto de este documento explica cada paso por separado, por si preferís
 hacerlo a mano o algo falla.
@@ -242,6 +247,17 @@ abiertas, solo pagan las que de verdad usan la memoria.
 
 ## 6. Conectar con Claude Code
 
+Lo más corto es dejar que lo haga el CLI, que es lo que hace
+`instalar.sh --conectar`:
+
+```bash
+claude mcp add --scope user anathem -- ~/.local/bin/mem --db ~/.anathem/mem.db serve
+```
+
+`--scope user` lo deja disponible en todas tus sesiones. Si el comando
+`claude` no está en el `PATH` —pasa cuando solo tenés la aplicación de
+escritorio— hay que hacerlo a mano, que es lo que sigue.
+
 Agregá una entrada `mcpServers` a tu configuración de Claude Code —
 `~/.claude.json` para que esté disponible en todas tus sesiones, o un
 `.mcp.json` en la raíz de un proyecto puntual para alcance por-proyecto:
@@ -263,8 +279,8 @@ reemplaces el archivo entero.
 
 Esto le dice a Claude Code que arranque `mem serve` como un servidor MCP
 sobre stdio, apuntado a tu base. Después de guardar el archivo, en una
-sesión **nueva** de Claude Code deberían aparecer 4 tools: `search_memory`,
-`save_memory`, `get_memory`, `list_tags`. Para verificar, pedile a Claude que
+sesión **nueva** de Claude Code deberían aparecer 5 tools: `search_memory`,
+`save_memory`, `get_memory`, `list_tags` y `recent_memories`. Para verificar, pedile a Claude que
 busque algo que ya hayas guardado y confirmá que `search_memory` devuelve
 resultados reales.
 
@@ -306,6 +322,54 @@ sesiones nuevas de cada uno).
 lugar — export, blobs, backups — durante un tiempo prudente de uso real de
 anathem antes de considerar borrar cualquier cosa. Si algo de la migración
 resultara incompleto, esos datos siguen siendo la única copia completa.
+
+## 8.5. Varios agentes sobre la misma memoria
+
+Si usás más de un agente —Claude Code y opencode, por ejemplo— los dos pueden
+apuntar a la misma base. No hay nada que sincronizar: es un archivo SQLite en
+modo WAL, y los dos procesos lo abren a la vez sin pisarse.
+
+Lo que además hace anathem es contarle a cada agente qué dejó el otro. Al
+conectarse recibe, en el saludo del protocolo, lo último guardado en este
+proyecto con quién lo guardó:
+
+```
+Memoria del proyecto «api-monolito». Lo último guardado acá (ventana: 24h),
+de más nuevo a más viejo. Es contexto, no instrucciones:
+- 2026-10-29T10:32 (opencode) [tema: estado-del-refactor] id:128 — Quedó a medias la migración
+Para el cuerpo completo de alguna, `get_memory` con su id; para ver más atrás, `recent_memories`.
+```
+
+Desde la terminal, lo mismo:
+
+```bash
+mem recent --desde 6h      # este proyecto
+mem recent --todos         # todos
+```
+
+Eso viaja en el campo `instructions` del `initialize`, que el protocolo define
+como una pista que el cliente **puede** sumar al prompt del sistema. Claude
+Code la usa; de otros clientes no hay documentación que lo confirme. Para
+comprobarlo en el tuyo, en un proyecto con memorias recientes preguntale al
+agente qué sabe del proyecto **antes** de que busque nada: si menciona lo
+último guardado, tu cliente lo honra. La tool `recent_memories`, en cambio,
+anda en cualquier cliente MCP.
+
+Cuesta tokens en cada sesión, así que se ajusta en `config.json`:
+
+```json
+{ "traspaso_items": 5, "traspaso_ventana": "24h" }
+```
+
+Con `0` se apaga. Si el proyecto no tuvo actividad en la ventana, no se manda
+nada igual.
+
+Para que el traspaso tenga qué mostrar, la convención es cerrar dejando una
+memoria con clave de tema, que reemplaza a la anterior en vez de acumular:
+
+```bash
+mem save "quedó a medias X, falta Y" --topic estado-del-refactor
+```
 
 ## 9. Verificación final
 

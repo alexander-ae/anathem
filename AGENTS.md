@@ -60,9 +60,9 @@ mem doctor
 Tiene que terminar en `Todo en orden.` y salir con 0. Los códigos de salida
 son 0 sin problemas, 1 con problemas, 2 si el diagnóstico no pudo correr.
 
-Después, en una sesión nueva del agente, tienen que aparecer cuatro tools:
-`search_memory`, `save_memory`, `get_memory` y `list_tags`. Para confirmarlo
-de verdad, guardá algo y buscalo:
+Después, en una sesión nueva del agente, tienen que aparecer cinco tools:
+`search_memory`, `save_memory`, `get_memory`, `list_tags` y `recent_memories`.
+Para confirmarlo de verdad, guardá algo y buscalo:
 
 ```bash
 mem save "una nota de prueba"
@@ -79,6 +79,34 @@ mem search "prueba"
 - **El diagnóstico se queja de la capa vectorial**: la herramienta funciona
   igual, solo con búsqueda léxica. El paquete se instala después con
   `mem model install <archivo.anathem-pack>`.
+
+## Cómo se usa, una vez instalado
+
+Las tools traen su propia explicación, así que no hace falta aprenderse nada
+de memoria. Lo que conviene saber:
+
+- **Guardar** con `save_memory` cuando el usuario pide recordar algo, o al
+  cerrar una tarea con un hallazgo que valga conservar. Si lo que guardás
+  corrige algo ya guardado, decilo con `supersedes` (el id de la vieja) o con
+  `topic` (una clave que la próxima versión vuelve a usar); si no, la memoria
+  vieja sigue compitiendo en las búsquedas con la nueva.
+- **Buscar** con `search_memory` usando los sustantivos que probablemente
+  estén escritos en la memoria, no la pregunta tal como se diría en voz alta:
+  la base es léxica. Devuelve candidatos con extracto corto; para el cuerpo
+  entero de uno, `get_memory` con su id.
+- **Retomar** con `recent_memories`, que lista lo último del proyecto por
+  fecha y dice qué agente lo guardó. Además, al conectarse, anathem manda ese
+  resumen en el saludo del protocolo, así que si el cliente lo honra ya lo
+  tenés en contexto sin pedirlo.
+
+Si trabajás junto a otro agente sobre el mismo proyecto, la convención que
+hace que el traspaso funcione es cerrar dejando una memoria con clave de tema:
+
+```bash
+mem save "quedó a medias X, falta Y" --topic estado-del-refactor
+```
+
+Cada versión reemplaza a la anterior en vez de acumular.
 
 Para todo lo demás, incluida la instalación paso a paso y cómo migrar un
 corpus existente, ver [`docs/instalacion.md`](docs/instalacion.md).
