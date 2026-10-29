@@ -1,20 +1,20 @@
-//! Leer de vuelta lo que escribió `mem export`.
+//! Reading back what `mem export` wrote.
 //!
-//! Hasta ahora el export era de ida nomás: servía para irse de anathem, pero
-//! no para volver. Eso dejaba sin respuesta tres cosas de todos los días —
-//! restaurar un respaldo, mover la memoria a otra máquina, y sincronizar dos
-//! computadoras a mano con git— que no necesitan servidor ni cuenta, solo
-//! poder leer lo que uno mismo escribió.
+//! Until now the export was one-way: it served to leave anathem, but not to
+//! come back. That left three everyday things unanswered — restoring a
+//! backup, moving the memory to another machine, and syncing two computers
+//! by hand with git — none of which need a server or an account, only being
+//! able to read what you wrote yourself.
 //!
-//! No corre nada mientras no se lo invoque, así que no cuesta memoria ni
-//! tiempo al resto.
+//! Nothing runs unless it is invoked, so it costs the rest neither memory
+//! nor time.
 
 use anyhow::{bail, Context, Result};
 use rusqlite::{params, Connection, TransactionBehavior};
 use std::collections::HashMap;
 use std::path::Path;
 
-/// Una memoria tal como viene del archivo, todavía sin tocar la base.
+/// A memory as it comes from the file, before touching the database.
 #[derive(Debug, Default, Clone)]
 pub struct ParsedMemory {
     pub old_id: Option<i64>,
@@ -42,7 +42,7 @@ pub struct Summary {
     pub chains: usize,
 }
 
-/// Saca las comillas de un valor YAML escrito por `export::yaml_dq`.
+/// Strips the quotes from a YAML value written by `export::yaml_dq`.
 fn unquote(v: &str) -> String {
     let v = v.trim();
     if v.len() >= 2 && v.starts_with('"') && v.ends_with('"') {
@@ -52,15 +52,15 @@ fn unquote(v: &str) -> String {
     }
 }
 
-/// Lista YAML en una línea: `["a", "b"]`.
+/// A single-line YAML list: `["a", "b"]`.
 fn inline_list(v: &str) -> Vec<String> {
     let v = v.trim().trim_start_matches('[').trim_end_matches(']');
     v.split(',').map(unquote).filter(|s| !s.is_empty()).collect()
 }
 
-/// Lee un archivo del export. Devuelve `None` si no tiene frontmatter, para
-/// poder apuntar `--desde` a una carpeta con otras cosas adentro sin que
-/// explote.
+/// Parses one file from the export. Returns `None` when it has no
+/// frontmatter, so `--desde` can be pointed at a folder with other things
+/// inside without blowing up.
 pub fn parse(texto: &str) -> Option<ParsedMemory> {
     let resto = texto.strip_prefix("---\n")?;
     let fin = resto.find("\n---\n")?;
@@ -75,7 +75,7 @@ pub fn parse(texto: &str) -> Option<ParsedMemory> {
     while i < lineas.len() {
         let l = lineas[i];
         i += 1;
-        // Las refs son una lista de pares en líneas siguientes, con sangría.
+        // Refs are a list of pairs on following lines, indented.
         if l.trim_start().starts_with("- kind:") {
             let kind = unquote(l.split_once("kind:").map(|x| x.1).unwrap_or(""));
             let value = lineas
@@ -125,15 +125,15 @@ pub fn parse(texto: &str) -> Option<ParsedMemory> {
     Some(m)
 }
 
-/// Importa todo lo que haya bajo `dir`.
+/// Imports everything under `dir`.
 ///
-/// `fusionar` permite importar sobre una base que ya tiene memorias; sin eso
-/// se exige que esté vacía. La diferencia no es de comodidad: importar sobre
-/// una base con contenido duplica todo lo que ya estaba, y descubrirlo
-/// después cuesta más que escribir una bandera.
+/// `merge` allows importing into a database that already holds memories;
+/// without it, the database must be empty. The difference is not
+/// convenience: importing on top of existing content duplicates everything
+/// already there, and finding that out later costs more than typing a flag.
 ///
-/// Se omite lo que ya está, comparando proyecto y cuerpo: es la identidad que
-/// sobrevive a un export y vuelta, porque los ids se reasignan.
+/// What is already present is skipped, comparing project and body: that is
+/// the identity surviving an export round trip, because ids get reassigned.
 pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary> {
     if !dir.is_dir() {
         bail!("{} no es una carpeta", dir.display());
@@ -160,7 +160,7 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
     }
 
     let tx = Transaction_inmediata(conn)?;
-    // Lo que ya está, para no duplicarlo.
+    // What is already there, so it is not duplicated.
     let mut existing: std::collections::HashSet<(String, String)> =
         std::collections::HashSet::new();
     {
@@ -171,9 +171,9 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
         }
     }
 
-    // Primero todas las filas, sin `supersedes_id`: el id al que apunta puede
-    // ser el de una memoria que todavía no se insertó, y resolverlo sobre la
-    // marcha dejaría cadenas rotas según el orden de los archivos.
+    // All the rows first, without `supersedes_id`: the id it points at may
+    // belong to a memory not inserted yet, and resolving it on the fly would
+    // leave chains broken depending on the order of the files.
     let mut map_: HashMap<i64, i64> = HashMap::new();
     let mut resumen = Summary::default();
     for m in &parsed {
@@ -221,7 +221,7 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
         resumen.inserted += 1;
     }
 
-    // Recién ahora las cadenas, con todos los ids nuevos ya conocidos.
+    // Only now the chains, with every new id already known.
     for m in &parsed {
         let (Some(old), Some(apunta)) = (m.old_id, m.supersedes) else { continue };
         let (Some(&new_id), Some(&target)) = (map_.get(&old), map_.get(&apunta)) else {
@@ -234,8 +234,8 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
     Ok(resumen)
 }
 
-/// `Transaction::new_unchecked` con `Immediate`, igual que el guardado: si dos
-/// procesos importan a la vez, el segundo espera en vez de fallar a mitad.
+/// `Transaction::new_unchecked` with `Immediate`, same as saving: if two
+/// processes import at once, the second waits instead of failing halfway.
 #[allow(non_snake_case)]
 fn Transaction_inmediata(conn: &Connection) -> Result<rusqlite::Transaction<'_>> {
     Ok(rusqlite::Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?)
