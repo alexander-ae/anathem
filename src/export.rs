@@ -14,13 +14,12 @@ pub fn slug(s: &str) -> String {
         .join("-")
 }
 
-/// Codifica `s` como un escalar YAML entre comillas dobles, válido en
-/// cualquier contexto (bloque o flujo). El estilo "double-quoted" de YAML
-/// soporta cualquier carácter con un juego de escapes acotado, así que no
-/// hace falta decidir caso por caso si el valor "necesita" comillas — a
-/// diferencia de la interpolación cruda de antes, que rompía apenas el texto
-/// libre (típicamente `description`, el título de la memoria) contenía ": "
-/// y YAML lo leía como una clave anidada.
+/// Encodes `s` as a double-quoted YAML scalar, valid in any context (block
+/// or flow). YAML's "double-quoted" style supports any character with a
+/// bounded set of escapes, so there is no need to decide case by case
+/// whether a value "needs" quoting — unlike the raw interpolation it
+/// replaces, which broke as soon as the free text (typically `description`,
+/// the memory's title) contained ": " and YAML read it as a nested key.
 fn yaml_dq(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
@@ -39,12 +38,12 @@ fn yaml_dq(s: &str) -> String {
     out
 }
 
-/// Sanitiza un componente de ruta de un solo nivel (pensado para `project`,
-/// que en producción llega sin validar desde argumentos MCP que un agente
-/// completa a partir de la conversación — ver `save_memory` en `src/mcp.rs`).
-/// Reemplaza separadores de ruta y recorta puntos líderes para que el
-/// resultado no pueda ser `..`, `.`, ni contener `/` o `\`, y por lo tanto no
-/// pueda salirse del directorio de exportación al usarse con `Path::join`.
+/// Sanitizes a single-level path component (meant for `project`, which in
+/// production arrives unvalidated from MCP arguments an agent fills in from
+/// the conversation — see `save_memory` in `src/mcp.rs`). It replaces path
+/// separators and trims leading dots so the result cannot be `..`, `.`, nor
+/// contain `/` or `\`, and therefore cannot escape the export directory
+/// when used with `Path::join`.
 fn safe_component(s: &str) -> String {
     let cleaned: String = s
         .chars()
@@ -55,7 +54,7 @@ fn safe_component(s: &str) -> String {
     out.to_string()
 }
 
-/// Una fila de `memories` con todo lo que el export necesita preservar.
+/// One row of `memories` with everything the export has to preserve.
 struct Fila {
     id: i64,
     project: String,
@@ -73,15 +72,15 @@ struct Fila {
     topic: Option<String>,
 }
 
-/// Exporta cada memoria a un markdown con frontmatter. El formato está
-/// documentado en `docs/formato-de-export.md` y es **completo**: lo que sale
-/// alcanza para reconstruir la base en otra herramienta sin perder nada
-/// salvo los vectores, que se recalculan.
+/// Exports each memory to a markdown file with frontmatter. The format is
+/// documented in `docs/formato-de-export.md` and is **complete**: what comes
+/// out is enough to rebuild the database in another tool without losing
+/// anything except the vectors, which are recomputed.
 ///
-/// Incluye las memorias `forgotten`. `forget` oculta, no borra, así que
-/// dejarlas afuera —como hacía antes— convertía cada migración en una
-/// pérdida de datos silenciosa. El campo `status` viaja en el frontmatter,
-/// de modo que quien lea el export puede filtrarlas si quiere.
+/// It includes `forgotten` memories. `forget` hides, it does not delete, so
+/// leaving them out — as it used to — turned every migration into silent
+/// data loss. The `status` field travels in the frontmatter, so whoever
+/// reads the export can filter them if they want.
 pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
     let rows: Vec<Fila> = conn
         .prepare(
@@ -109,13 +108,13 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
         })?
         .collect::<rusqlite::Result<_>>()?;
 
-    // slug() trunca a las primeras 8 palabras, así que dos memorias con el mismo
-    // proyecto, fecha de creación y título hasta la palabra 8 producirían el
-    // mismo nombre de archivo (visto en un corpus real: dos memorias con el
-    // mismo proyecto, misma fecha, y un título largo idéntico hasta la
-    // palabra 8 con dos continuaciones distintas). El id es clave primaria y
-    // por lo tanto único, así que sufijarlo garantiza un nombre de archivo
-    // distinto por memoria sin sacrificar legibilidad.
+    // slug() truncates to the first 8 words, so two memories with the same
+    // project, creation date and title up to word 8 would produce the same
+    // filename (seen in a real corpus: two memories with the same project,
+    // the same date, and a long title identical up to word 8 with two
+    // different continuations). The id is the primary key and therefore
+    // unique, so suffixing it guarantees a distinct filename per memory
+    // without sacrificing readability.
     let mut written: HashSet<PathBuf> = HashSet::new();
     let mut n = 0;
     for f in rows {
@@ -134,13 +133,13 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
 
         let project_dir = safe_component(&f.project);
         let d = dir.join(&project_dir);
-        // `safe_component` ya garantiza que `project_dir` no puede contener
-        // separadores de ruta ni ser `..`/`.`, así que `d` no puede salirse de
-        // `dir` — pero lo verificamos explícitamente en vez de confiar en la
-        // invariante de una función vecina: si algo la cambia mañana y se
-        // rompe, preferimos un error acá y no un archivo escrito fuera de
-        // `dir` (hallazgo B: `--project "../../ESCAPADO"` escribía dos
-        // niveles por encima del directorio de salida).
+        // `safe_component` already guarantees `project_dir` cannot contain
+        // path separators nor be `..`/`.`, so `d` cannot escape `dir` — but
+        // we check it explicitly instead of relying on a neighbouring
+        // function's invariant: if something changes it tomorrow and it
+        // breaks, we would rather have an error here than a file written
+        // outside `dir` (finding B: `--project "../../ESCAPADO"` wrote two
+        // levels above the output directory).
         if d.parent() != Some(dir) {
             anyhow::bail!(
                 "mem export: el proyecto de la memoria {id} produjo una ruta fuera del directorio de salida: {}",
@@ -150,10 +149,10 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
         std::fs::create_dir_all(&d)?;
         let name = format!("{}-{}-{id}.md", f.created, slug(&f.title));
         let path = d.join(&name);
-        // El sufijo de id vuelve la colisión estructuralmente imposible (id es
-        // primary key), pero si de todos modos ocurriera preferimos avisar y
-        // no pisar un archivo ya escrito en esta misma corrida, en vez de
-        // repetir en silencio el bug que esto reemplaza.
+        // The id suffix makes a collision structurally impossible (id is
+        // the primary key), but should one happen anyway we would rather
+        // warn and not overwrite a file already written in this same run,
+        // instead of silently repeating the bug this replaces.
         if written.contains(&path) {
             eprintln!(
                 "mem export: colisión de nombre de archivo pese al sufijo de id, se omite memoria {id}: {}",
@@ -162,10 +161,10 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
             continue;
         }
         let tags_yaml = tags.iter().map(|t| yaml_dq(t)).collect::<Vec<_>>().join(", ");
-        // Los campos opcionales se omiten cuando no hay valor, en vez de
-        // emitirse como `null`: un frontmatter sin la clave se lee igual en
-        // cualquier parser y no invita a confundir "no tiene" con "tiene
-        // nulo".
+        // Optional fields are omitted when there is no value, rather than
+        // emitted as `null`: frontmatter without the key reads the same in
+        // any parser and does not invite confusing "has none" with "has
+        // null".
         let mut opcionales = String::new();
         if let Some(e) = &f.ext_id {
             opcionales.push_str(&format!("ext_id: {}\n", yaml_dq(e)));
