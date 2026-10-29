@@ -17,11 +17,11 @@ pub struct Query {
     pub tags: Vec<String>,
     pub limit: usize,
     pub budget_tokens: usize,
-    /// Si es `Some(n)`, el fragmento de cada resultado se recorta a `n`
-    /// caracteres **antes** de contar su costo contra `budget_tokens`. Así
-    /// entran más candidatos breves en el mismo presupuesto en vez de pocos
-    /// fragmentos completos. `None` conserva el comportamiento de siempre:
-    /// el fragmento entero cuenta contra el presupuesto.
+    /// When `Some(n)`, each result's snippet is trimmed to `n` characters
+    /// **before** its cost counts against `budget_tokens`. That way more
+    /// short candidates fit in the same budget instead of a few full
+    /// snippets. `None` keeps the long-standing behaviour: the whole snippet
+    /// counts against the budget.
     pub excerpt: Option<usize>,
 }
 
@@ -43,9 +43,8 @@ fn word_re() -> &'static Regex {
     R.get_or_init(|| Regex::new(r"\w+").unwrap())
 }
 
-/// Convierte texto libre en una expresión MATCH de FTS5 segura.
-/// Cada término va entre comillas para que caracteres como `+` de "N+1"
-/// no se interpreten como sintaxis de consulta.
+/// Turns free text into a safe FTS5 MATCH expression. Each term is quoted
+/// so characters like the `+` in "N+1" are not read as query syntax.
 pub fn to_match(text: &str) -> String {
     let terms: Vec<String> = word_re()
         .find_iter(text)
@@ -60,9 +59,9 @@ fn est_tokens(s: &str) -> usize {
 
 type Row = (i64, Option<String>, String, String, String, f64, i64);
 
-/// Arma y ejecuta la consulta de candidatos contra `chunks_fts`, con los
-/// filtros comunes (match, status activo, proyecto, tags) más una cláusula
-/// extra y un límite opcionales.
+/// Builds and runs the candidate query against `chunks_fts`, with the
+/// common filters (match, active status, project, tags) plus an optional
+/// extra clause and limit.
 fn candidate_rows(
     conn: &Connection,
     match_expr: &str,
@@ -107,9 +106,9 @@ fn candidate_rows(
     Ok(out)
 }
 
-/// Resultado con las señales crudas expuestas, para `--explain` y para quien
-/// necesite el número y no solo el orden. Un resultado que entró solo por
-/// bm25 no tiene coseno, y uno que entró solo por vector no tiene bm25.
+/// A result with its raw signals exposed, for `--explain` and for anyone
+/// who needs the number and not just the order. A result that got in by bm25
+/// alone has no cosine, and one that got in by vector alone has no bm25.
 #[derive(Debug, Clone)]
 pub struct Explained {
     pub hit: SearchHit,
@@ -117,15 +116,15 @@ pub struct Explained {
     pub cosine: Option<f32>,
 }
 
-/// Qué recuperadores están disponibles para esta operación.
+/// Which retrievers are available for this operation.
 ///
-/// Los campos son privados y hay un constructor por caso de uso porque el
-/// paquete y la identidad con la que la base lo tenía registrado no pueden
-/// venir de dos lecturas distintas: emparejar el paquete de antes con el
-/// registro de después es justamente la forma de terminar escribiendo
-/// vectores de un paquete caducado. Quien solo busca usa `de_lectura` y no
-/// tiene con qué escribir; quien además guarda usa `de_servidor`, que
-/// recibe el par entero tal como lo entrega `packstore::PaqueteVivo::actual`.
+/// The fields are private and there is one constructor per use case because
+/// the pack and the identity the database had it registered under cannot
+/// come from two separate reads: pairing the pack from before with the
+/// registry from after is precisely how one ends up writing a stale pack's
+/// vectors. Whoever only searches uses `de_lectura` and has nothing to write
+/// with; whoever also saves uses `de_servidor`, which receives the whole
+/// pair exactly as `packstore::LivePack::current` hands it over.
 pub struct Contexto<'a> {
     pack: Option<&'a Pack>,
     identidad: Option<&'a crate::vecstore::PackIdentity>,
@@ -133,20 +132,20 @@ pub struct Contexto<'a> {
 }
 
 impl Contexto<'static> {
-    /// Búsqueda sin capa vectorial: el comportamiento histórico.
+    /// Search with no vector layer: the long-standing behaviour.
     pub fn solo_bm25() -> Contexto<'static> {
         Contexto { pack: None, identidad: None, bm25_weight: 1.0 }
     }
 }
 
 impl<'a> Contexto<'a> {
-    /// Para buscar. Leer con el paquete equivocado da un resultado peor, no
-    /// un índice mezclado, así que la lectura no necesita la identidad.
+    /// For searching. Reading with the wrong pack gives a worse result, not
+    /// a mixed index, so reads do not need the identity.
     pub fn de_lectura(pack: Option<&'a Pack>, bm25_weight: f64) -> Contexto<'a> {
         Contexto { pack, identidad: None, bm25_weight }
     }
 
-    /// Para el servidor MCP, que busca y también guarda.
+    /// For the MCP server, which searches and also saves.
     pub fn de_servidor(
         activo: Option<(&'a Pack, &'a crate::vecstore::PackIdentity)>,
         bm25_weight: f64,
@@ -154,13 +153,13 @@ impl<'a> Contexto<'a> {
         Contexto { pack: activo.map(|(p, _)| p), identidad: activo.map(|(_, i)| i), bm25_weight }
     }
 
-    /// El paquete con el que embeber la consulta, si hay.
+    /// The pack to embed the query with, if there is one.
     pub fn pack(&self) -> Option<&Pack> {
         self.pack
     }
 
-    /// El par que exige `vecstore::sincronizar`. `None` en un contexto de
-    /// lectura aunque tenga paquete: ahí no hay nada que escribir.
+    /// The pair `vecstore::sync` demands. `None` in a read context even
+    /// when a pack is present: there is nothing to write there.
     pub fn para_escribir(&self) -> Option<(&Pack, &crate::vecstore::PackIdentity)> {
         match (self.pack, self.identidad) {
             (Some(p), Some(i)) => Some((p, i)),
@@ -169,18 +168,18 @@ impl<'a> Contexto<'a> {
     }
 }
 
-/// El `WHERE` de proyecto y tags, compartido por la búsqueda léxica y la
-/// vectorial. Asume que la consulta tiene `memories` con alias `m`.
+/// The project and tags `WHERE`, shared by the lexical and the vector
+/// search. It assumes the query has `memories` aliased as `m`.
 ///
-/// Agrega sus parámetros a `params` y devuelve el fragmento de SQL con la
-/// numeración `?N` ya resuelta, para que quien llama pueda traer parámetros
-/// de antes (la búsqueda léxica llega con el `match` en `?1`).
+/// It appends its parameters to `params` and returns the SQL fragment with
+/// the `?N` numbering already resolved, so the caller can bring parameters
+/// from before (the lexical search arrives with the `match` in `?1`).
 ///
-/// Existe porque esto estaba escrito dos veces, en `search` y en `vecstore`,
-/// cada una con su numeración hecha a mano. Mientras coincidieran no se
-/// notaba. El día que alguien agregara un filtro a `Query` y actualizara uno
-/// solo, el lado vectorial habría devuelto memorias que el léxico filtra, y
-/// ningún test lo habría visto.
+/// It exists because this used to be written twice, in `search` and in
+/// `vecstore`, each with its numbering done by hand. As long as they agreed
+/// nothing showed. The day someone added a filter to `Query` and updated
+/// only one, the vector side would have returned memories the lexical side
+/// filters out, and no test would have seen it.
 pub(crate) fn filters_for(q: &Query, params: &mut Vec<Value>) -> String {
     let mut sql = String::new();
     if let Some(p) = &q.project {
@@ -197,9 +196,9 @@ pub(crate) fn filters_for(q: &Query, params: &mut Vec<Value>) -> String {
     sql
 }
 
-/// Trae un `SearchHit` armado alrededor de un fragmento concreto. Lo usa la
-/// fusión para las memorias que encontró el vector y bm25 no: de esas no
-/// tenemos fila del pool léxico, pero sí sabemos qué fragmento ganó.
+/// Builds a `SearchHit` around one specific chunk. The merge uses it for
+/// memories the vector side found and bm25 did not: for those we have no row
+/// from the lexical pool, but we do know which chunk won.
 fn hit_de_chunk(conn: &Connection, chunk_id: i64) -> Result<Option<(SearchHit, i64)>> {
     let r = conn.query_row(
         "select m.id, m.ext_id, m.project, m.title, c.body, m.pinned
@@ -238,19 +237,21 @@ pub fn run_explained(
     let mut best: HashMap<i64, (SearchHit, i64)> = HashMap::new();
     let mut orden_bm25: Vec<i64> = Vec::new();
     if !m.is_empty() {
-        // Pool principal: los CANDIDATES mejores chunks por bm25, sin importar pinned.
+        // Main pool: the CANDIDATES best chunks by bm25, pinned or not.
         let mut rows = candidate_rows(conn, &m, q, "", Some(CANDIDATES))?;
-        // Garantía aparte, sin límite: toda memoria pinned que matchee el query es
-        // candidata siempre, aunque su mejor chunk caiga fuera del top-CANDIDATES
-        // por bm25 puro. Sin esto, `order by score limit N` puede dejar afuera a
-        // una pinned relevante pero verbosa cuando el pool de candidatos supera N
-        // (en el corpus real, un conector común como "que" ya matchea >700 chunks).
+        // A separate, unlimited guarantee: every pinned memory matching the
+        // query is always a candidate, even when its best chunk falls
+        // outside the top CANDIDATES by pure bm25. Without this, `order by
+        // score limit N` can leave out a relevant but verbose pinned memory
+        // once the candidate pool exceeds N (in the real corpus, a common
+        // connective like "que" already matches >700 chunks).
         rows.extend(candidate_rows(conn, &m, q, " and m.pinned = 1", None)?);
 
-        // bm25() de SQLite devuelve valores negativos, más negativo es mejor.
-        // Deduplicamos quedándonos con el mejor (más negativo) chunk por memoria.
-        // Las dos consultas de arriba vienen concatenadas, así que no alcanza con
-        // quedarse con la primera aparición: hay que comparar explícitamente.
+        // SQLite's bm25() returns negative values; more negative is better.
+        // We deduplicate by keeping the best (most negative) chunk per
+        // memory. The two queries above come concatenated, so keeping the
+        // first appearance is not enough: they have to be compared
+        // explicitly.
         for (id, ext_id, project, title, body, score, pinned) in rows {
             match best.entry(id) {
                 Entry::Occupied(mut e) => {
@@ -269,25 +270,25 @@ pub fn run_explained(
         }
         let mut por_score: Vec<(i64, f64)> =
             best.iter().map(|(id, (h, _))| (*id, h.score)).collect();
-        // bm25() devuelve negativos: más negativo es mejor.
+        // bm25() returns negatives: more negative is better.
         por_score.sort_by(|a, b| {
             a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).then(a.0.cmp(&b.0))
         });
         orden_bm25 = por_score.into_iter().map(|(id, _)| id).collect();
     }
 
-    // --- recuperación vectorial, si hay paquete ---
+    // --- vector retrieval, when there is a pack ---
     let mut cosenos: HashMap<i64, f32> = HashMap::new();
     let mut orden_vec: Vec<i64> = Vec::new();
     if let Some(p) = ctx.pack() {
         if !q.text.trim().is_empty() {
             let cv = p.embeber(&q.text)?;
-            // Un vector nulo (consulta sin tokens conocidos por el paquete:
-            // solo puntuación, un emoji, una escritura que no cubre) tiene
-            // coseno 0 contra todo, así que `vecstore::buscar` devolvería
-            // hasta CANDIDATES memorias arbitrarias empatadas en 0 -- basura
-            // con apariencia de resultado. Sin señal real, no hay nada que
-            // recuperar por vector.
+            // A null vector (a query with no tokens the pack knows: only
+            // punctuation, an emoji, a script it does not cover) has cosine
+            // 0 against everything, so `vecstore::search_vectors` would
+            // return up to CANDIDATES arbitrary memories all tied at 0 —
+            // garbage shaped like a result. With no real signal, there is
+            // nothing to retrieve by vector.
             let nulo = cv.iter().all(|&x| x == 0.0);
             let vec_hits = if nulo { Vec::new() } else { crate::vecstore::search_vectors(conn, &cv, q, CANDIDATES)? };
             for a in vec_hits {
@@ -313,8 +314,8 @@ pub fn run_explained(
         crate::fusion::rrf(&orden_bm25, &orden_vec, ctx.bm25_weight)
     };
 
-    // Las fijadas siguen primero, como siempre: la fusión ordena dentro de
-    // cada grupo, no lo atraviesa.
+    // Pinned ones still come first, as always: the merge orders within each
+    // group, it does not cut across them.
     let mut fijadas: Vec<i64> = Vec::new();
     let mut resto: Vec<i64> = Vec::new();
     for id in fusionado {
@@ -336,12 +337,12 @@ pub fn run_explained(
             Some(v) => v,
             None => continue,
         };
-        // El recorte va antes de calcular `cost`: si se hiciera después de
-        // este bucle, el presupuesto ya habría cortado la lista al tamaño
-        // que daban los fragmentos completos, y devolver más candidatos
-        // breves no cambiaría nada. Recortar por caracteres, no bytes: el
-        // corpus es en español con acentos y un corte a mitad de un UTF-8
-        // rompería el fragmento (ver `chunk::split`).
+        // The trim goes before computing `cost`: done after this loop, the
+        // budget would already have cut the list down to the size full
+        // snippets gave, and returning more short candidates would change
+        // nothing. Trim by characters, not bytes: the corpus is in Spanish,
+        // with accents, and cutting mid UTF-8 would break the snippet (see
+        // `chunk::split`).
         if let Some(n) = q.excerpt {
             hit.snippet = hit.snippet.chars().take(n).collect();
         }
