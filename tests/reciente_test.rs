@@ -325,3 +325,115 @@ fn el_comando_recent_imprime_lo_ultimo() {
     assert!(!ok, "una ventana ilegible no puede pasar por buena");
     assert!(err.contains("ayer"), "stderr: {err}");
 }
+
+// --------------------------------------------- traspaso en el `initialize`
+
+/// El proyecto que el servidor va a derivar del directorio donde corre, que
+/// es el mismo que usa el `initialize`. Guardar con otro nombre haría que el
+/// traspaso no encontrara nada, que es justamente lo que tiene que pasar.
+fn proyecto_del_cwd() -> String {
+    let cwd = std::env::current_dir().unwrap();
+    anathem::proyecto::resolver(None, &cwd)
+}
+
+/// Pide el `initialize` y devuelve el `instructions`, si vino.
+fn instrucciones_de(conn: &Connection, cfg: &Config, quien: &str) -> Option<String> {
+    let req = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {"clientInfo": {"name": quien}}
+    });
+    let res = mcp::handle(conn, &search::Contexto::solo_bm25(), cfg, &req).unwrap().unwrap();
+    res["result"]["instructions"].as_str().map(str::to_string)
+}
+
+#[test]
+fn un_proyecto_quieto_no_gasta_tokens_en_decir_que_no_paso_nada() {
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&d.path().join("mem.db")).unwrap();
+    assert_eq!(
+        instrucciones_de(&conn, &Config::default(), "claude-code"),
+        None,
+        "sin memorias recientes no se manda nada"
+    );
+
+    // Y con memorias viejas tampoco: quedan fuera de la ventana.
+    let id = ingest::guardar_explicito(&conn, "algo de la semana pasada", &proyecto_del_cwd(), vec![]).unwrap().0;
+    fechar(&conn, id, &hace(700_000));
+    assert_eq!(instrucciones_de(&conn, &Config::default(), "claude-code"), None);
+}
+
+#[test]
+fn se_puede_apagar_del_todo() {
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&d.path().join("mem.db")).unwrap();
+    ingest::guardar_explicito(&conn, "algo recién guardado", &proyecto_del_cwd(), vec![]).unwrap();
+
+    let apagado = Config { traspaso_items: 0, ..Config::default() };
+    assert_eq!(
+        instrucciones_de(&conn, &apagado, "claude-code"),
+        None,
+        "con traspaso_items en 0 no se manda nada"
+    );
+    // Con el valor por defecto sí llega: el test anterior solo vale si este pasa.
+    assert!(instrucciones_de(&conn, &Config::default(), "claude-code").is_some());
+}
+
+#[test]
+fn el_traspaso_dice_quien_guardo_cada_cosa() {
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&d.path().join("mem.db")).unwrap();
+    let ctx = search::Contexto::solo_bm25();
+    let cfg = Config::default();
+
+    // opencode guarda algo.
+    let mut agente = None;
+    let init = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {"clientInfo": {"name": "opencode"}}});
+    mcp::handle_con_agente(&conn, &ctx, &cfg, &init, &mut agente).unwrap();
+    let save = serde_json::json!({
+        "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+        "params": {"name": "save_memory",
+                   "arguments": {"text": "quedo a medias el refactor",
+                                 "project": proyecto_del_cwd()}}});
+    mcp::handle_con_agente(&conn, &ctx, &cfg, &save, &mut agente).unwrap();
+
+    // Otro agente conecta y lo ve.
+    let visto = instrucciones_de(&conn, &cfg, "claude-code").expect("tenía que haber traspaso");
+    assert!(visto.contains("opencode"), "no dice quién fue: {visto}");
+    assert!(visto.contains("quedo a medias el refactor"), "no trae el título: {visto}");
+
+    // El mismo agente lo ve marcado como propio, no como ajeno.
+    let propio = instrucciones_de(&conn, &cfg, "opencode").unwrap();
+    assert!(propio.contains("esta herramienta"), "debería marcar lo propio: {propio}");
+}
+
+#[test]
+fn el_traspaso_se_limita_a_lo_pedido() {
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&d.path().join("mem.db")).unwrap();
+    for i in 0..8 {
+        ingest::guardar_explicito(&conn, &format!("memoria numero {i}"), &proyecto_del_cwd(), vec![]).unwrap();
+    }
+    let cfg = Config { traspaso_items: 3, ..Config::default() };
+    let txt = instrucciones_de(&conn, &cfg, "claude-code").unwrap();
+    let lineas = txt.lines().filter(|l| l.starts_with("- ")).count();
+    assert_eq!(lineas, 3, "tenía que listar 3 y listó {lineas}:\n{txt}");
+}
+
+#[test]
+fn una_ventana_de_traspaso_ilegible_no_rompe_el_handshake() {
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&d.path().join("mem.db")).unwrap();
+    ingest::guardar_explicito(&conn, "algo", &proyecto_del_cwd(), vec![]).unwrap();
+    let roto = Config { traspaso_ventana: "ayer".into(), ..Config::default() };
+    // El initialize es el handshake: romperlo dejaría al agente sin memoria
+    // entera por un ajuste mal escrito. Mejor sin traspaso que sin servidor.
+    let req = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {"clientInfo": {"name": "x"}}});
+    let res = mcp::handle(&conn, &search::Contexto::solo_bm25(), &roto, &req).unwrap().unwrap();
+    assert!(res["error"].is_null(), "el handshake tiene que sobrevivir: {res}");
+    assert_eq!(res["result"]["protocolVersion"].as_str().unwrap(), "2024-11-05");
+    assert!(res["result"]["instructions"].is_null(), "sin traspaso, pero vivo");
+}

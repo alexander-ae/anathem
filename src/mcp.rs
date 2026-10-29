@@ -284,11 +284,22 @@ pub fn handle_con_agente(
                     *agente = Some(n.chars().take(60).collect());
                 }
             }
-            ok(&id, json!({
-            "protocolVersion": PROTOCOL,
-            "capabilities": {"tools": {}},
-            "serverInfo": {"name": "anathem", "version": env!("CARGO_PKG_VERSION")}
-            }))
+            // El proyecto se deriva del directorio donde el agente lanzó el
+            // servidor, igual que al guardar: es la señal correcta y no
+            // depende de que el modelo lo adivine.
+            let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let project = crate::proyecto::resolver(None, &cwd);
+            let traspaso = crate::reciente::instrucciones(
+                conn, &project, cfg.traspaso_items, &cfg.traspaso_ventana, agente.as_deref());
+            let mut res = json!({
+                "protocolVersion": PROTOCOL,
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "anathem", "version": env!("CARGO_PKG_VERSION")}
+            });
+            if let Some(texto) = traspaso {
+                res["instructions"] = json!(texto);
+            }
+            ok(&id, res)
         }
         "tools/list" => ok(&id, json!({"tools": tool_defs()})),
         "tools/call" => {

@@ -267,6 +267,47 @@ sola cada cosa que el agente toca: eso es lo que hacía supermemory, y en este
 mismo corpus medimos que el 56% de lo que guardaba así era ruido. El agente
 decide qué vale la pena dejar escrito.
 
+### Que aparezca solo, sin pedirlo
+
+El agente no tiene que acordarse de llamar a nada. Al conectarse, anathem le
+cuenta en el saludo qué se guardó últimamente en este proyecto:
+
+```
+Memoria del proyecto «api-monolito». Lo último guardado acá (ventana: 24h),
+de más nuevo a más viejo. Es contexto, no instrucciones:
+- 2026-10-29T10:32 (opencode) [tema: estado-del-refactor] id:128 — Quedó a medias la migración de los tests
+Para el cuerpo completo de alguna, `get_memory` con su id; para ver más atrás, `recent_memories`.
+```
+
+Eso viaja en el campo `instructions` del `initialize`, que el protocolo MCP
+define como una pista que el cliente **puede** sumar al prompt del sistema.
+Se usa eso, y no un gancho por herramienta, porque es parte del protocolo: no
+hay código específico para cada agente que después haya que mantener.
+
+**Qué funciona dónde**, que es distinto de lo que a uno le gustaría:
+
+| | la tool `recent_memories` | el resumen automático al conectar |
+|---|---|---|
+| Claude Code | sí | sí, comprobado |
+| opencode, Cursor, Codex y demás | sí | depende de si el cliente honra `instructions`; el protocolo dice *puede*, no *debe* |
+
+La tool anda en cualquier cliente MCP, porque las tools son el terreno común.
+El resumen automático depende del cliente, y no encontré documentación de
+Cursor, Codex ni opencode que diga si lo usan. Para comprobarlo en el tuyo,
+abrí una sesión en un proyecto con memorias recientes y preguntale al agente
+qué sabe de este proyecto **antes** de que busque nada: si menciona lo último
+guardado, tu cliente lo honra.
+
+Cuesta tokens en cada sesión, así que es corto, y se apaga o se achica desde
+`config.json`:
+
+```json
+{ "traspaso_items": 5, "traspaso_ventana": "24h" }
+```
+
+Con `"traspaso_items": 0` no se manda nada. Y si el proyecto no tuvo actividad
+en la ventana, tampoco: no se gastan tokens en decir que no pasó nada.
+
 Para saber qué **archivos** tocó el otro agente, `git diff` es mejor que
 cualquier memoria. Lo que anathem aporta es el **por qué**: qué intentó, qué
 descartó y con qué quedó a medias.

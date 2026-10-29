@@ -40,6 +40,23 @@ pub struct Config {
     /// porqué del recorte.
     #[serde(default = "extracto_por_defecto")]
     pub extracto: usize,
+
+    /// Cuántas memorias recientes contarle al agente al conectarse, para que
+    /// sepa qué dejó el anterior sin tener que preguntar.
+    ///
+    /// Viaja en el campo `instructions` del `initialize`, que el protocolo
+    /// define como una pista que el cliente **puede** sumar al prompt del
+    /// sistema. Se usa eso y no un gancho por agente porque es parte de MCP:
+    /// funciona en cualquier cliente que lo honre, sin código por herramienta.
+    ///
+    /// Cuesta tokens en cada sesión, así que es corto y se puede apagar con 0.
+    /// Si el proyecto no tuvo actividad en la ventana, no se manda nada.
+    #[serde(default = "traspaso_por_defecto")]
+    pub traspaso_items: usize,
+
+    /// Qué tan atrás mirar para ese resumen: `6h`, `2d`. Por defecto 24h.
+    #[serde(default = "traspaso_ventana_por_defecto")]
+    pub traspaso_ventana: String,
 }
 
 fn peso_por_defecto() -> f64 {
@@ -54,12 +71,22 @@ fn extracto_por_defecto() -> usize {
     120
 }
 
+fn traspaso_por_defecto() -> usize {
+    5
+}
+
+fn traspaso_ventana_por_defecto() -> String {
+    "24h".to_string()
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             peso_bm25: peso_por_defecto(),
             candidatos: candidatos_por_defecto(),
             extracto: extracto_por_defecto(),
+            traspaso_items: traspaso_por_defecto(),
+            traspaso_ventana: traspaso_ventana_por_defecto(),
         }
     }
 }
