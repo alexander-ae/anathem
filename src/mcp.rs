@@ -71,7 +71,7 @@ fn call_tool(
     cfg: &Config,
     name: &str,
     args: &Value,
-    agente: Option<&str>,
+    agent: Option<&str>,
 ) -> Result<Value> {
     match name {
         "search_memory" => {
@@ -88,12 +88,12 @@ fn call_tool(
                 tags: tags_arg,
                 // `limit` sigue pudiendo pisar por llamada el default de
                 // `cfg.candidatos` (20), igual que antes pisaba al 10 fijo.
-                limit: args["limit"].as_u64().map(|l| l as usize).unwrap_or(cfg.candidatos),
+                limit: args["limit"].as_u64().map(|l| l as usize).unwrap_or(cfg.candidates),
                 budget_tokens: budget,
                 // El recorte a `cfg.extracto` caracteres es lo que hace que
                 // entren muchos candidatos breves en el mismo presupuesto de
                 // tokens en vez de pocos fragmentos completos.
-                extracto: Some(cfg.extracto),
+                excerpt: Some(cfg.excerpt),
             };
             let hits = search::run(conn, &q, ctx)?;
             let ids: Vec<String> = hits.iter().map(|h| h.memory_id.to_string()).collect();
@@ -124,7 +124,7 @@ fn call_tool(
             // pedirle al modelo que lo invente, que es como el sistema
             // anterior terminó con todo en un único contenedor de relleno.
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            let project = crate::proyecto::resolver(
+            let project = crate::project::resolve(
                 args["project"].as_str().map(str::to_string), &cwd);
             let tags_dados: Vec<String> = args["tags"].as_array().map(|a| {
                 a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()
@@ -149,26 +149,26 @@ fn call_tool(
                     }
                 },
             };
-            let g = match ingest::guardar_con_tema_de(
-                conn, text, &project, tags_dados, topic, supersedes, agente) {
+            let g = match ingest::save_with_topic_by(
+                conn, text, &project, tags_dados, topic, supersedes, agent) {
                 Ok(g) => g,
                 // Un pedido que no se puede cumplir no es un error interno:
                 // el modelo tiene que leer qué corregir, y no se guardó nada.
-                Err(e) => match e.downcast_ref::<ingest::PedidoInvalido>() {
+                Err(e) => match e.downcast_ref::<ingest::BadRequest>() {
                     Some(p) => return Ok(text_result(format!("No se guardó: {p}"))),
                     None => return Err(e),
                 },
             };
             let (id, tag_list) = (g.id, g.tags.clone());
-            let title = ingest::titulo_de(text);
-            let aviso_tema = g.describir().map(|m| format!("\n{m}")).unwrap_or_default();
+            let title = ingest::title_from(text);
+            let aviso_tema = g.describe().map(|m| format!("\n{m}")).unwrap_or_default();
 
             // `PaqueteVivo` revalidó el paquete al empezar el mensaje, pero
             // embeber un backlog grande puede llevar minutos y en ese rato
             // otra terminal instala lo que quiera: por eso `sincronizar`
             // recibe la identidad y la vuelve a comprobar en cada lote.
             if let Some((p, identidad)) = ctx.para_escribir() {
-                if crate::vecstore::sincronizar(conn, p, identidad)?.abandonada() {
+                if crate::vecstore::sync(conn, p, identidad)?.abandonada() {
                     // El guardado salió bien y eso es lo que el agente tiene
                     // que oír; el hueco de vectores lo cierra la próxima
                     // escritura o un `mem reindex`. Devolver un error acá
@@ -189,7 +189,7 @@ fn call_tool(
                     .map(|c| format!("  id:{} {}", c.memory_id, c.title))
                     .collect::<Vec<_>>().join("\n");
                 format!(
-                    "\n\nMemorias parecidas que esta podría reemplazar:\n{lista}\n\
+                    "\n\nMemorias parecidas que esta podría replace_file:\n{lista}\n\
                      Si alguna quedó obsoleta, decilo y la marco con `mem supersede {id} <id_vieja>`."
                 )
             };
@@ -199,18 +199,18 @@ fn call_tool(
         }
         "recent_memories" => {
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            let project = crate::proyecto::resolver(
+            let project = crate::project::resolve(
                 args["project"].as_str().map(str::to_string), &cwd);
-            let ventana = match args["since"].as_str() {
-                Some(s) => match crate::reciente::duracion_en_segundos(s) {
+            let window = match args["since"].as_str() {
+                Some(s) => match crate::recent::duration_in_seconds(s) {
                     Ok(v) => Some(v),
                     Err(e) => return Ok(text_result(format!("No se pudo listar: {e}"))),
                 },
                 None => Some(24 * 3600),
             };
-            let limite = args["limit"].as_u64().map(|l| l as usize).unwrap_or(15);
-            let items = crate::reciente::listar(conn, Some(&project), ventana, limite, cfg.extracto)?;
-            Ok(text_result(crate::reciente::formatear(&items, false)))
+            let limit_ = args["limit"].as_u64().map(|l| l as usize).unwrap_or(15);
+            let items = crate::recent::list_recent(conn, Some(&project), window, limit_, cfg.excerpt)?;
+            Ok(text_result(crate::recent::format_items(&items, false)))
         }
         "get_memory" => {
             let id = args["id"].as_i64().unwrap_or(-1);
@@ -266,7 +266,7 @@ pub fn handle_con_agente(
     ctx: &search::Contexto,
     cfg: &Config,
     req: &Value,
-    agente: &mut Option<String>,
+    agent: &mut Option<String>,
 ) -> Result<Option<Value>> {
     let method = req["method"].as_str().unwrap_or_default();
     let id = req.get("id").cloned();
@@ -281,16 +281,16 @@ pub fn handle_con_agente(
             if let Some(n) = req["params"]["clientInfo"]["name"].as_str() {
                 let n = n.trim();
                 if !n.is_empty() {
-                    *agente = Some(n.chars().take(60).collect());
+                    *agent = Some(n.chars().take(60).collect());
                 }
             }
             // El proyecto se deriva del directorio donde el agente lanzó el
             // servidor, igual que al guardar: es la señal correcta y no
             // depende de que el modelo lo adivine.
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            let project = crate::proyecto::resolver(None, &cwd);
-            let traspaso = crate::reciente::instrucciones(
-                conn, &project, cfg.traspaso_items, &cfg.traspaso_ventana, agente.as_deref());
+            let project = crate::project::resolve(None, &cwd);
+            let traspaso = crate::recent::handoff_instructions(
+                conn, &project, cfg.traspaso_items, &cfg.traspaso_ventana, agent.as_deref());
             let mut res = json!({
                 "protocolVersion": PROTOCOL,
                 "capabilities": {"tools": {}},
@@ -306,7 +306,7 @@ pub fn handle_con_agente(
             let name = req["params"]["name"].as_str().unwrap_or_default();
             let empty = json!({});
             let args = req["params"].get("arguments").unwrap_or(&empty);
-            match call_tool(conn, ctx, cfg, name, args, agente.as_deref()) {
+            match call_tool(conn, ctx, cfg, name, args, agent.as_deref()) {
                 Ok(v) => ok(&id, v),
                 Err(e) => err(&id, -32603, &format!("error interno: {e}")),
             }
@@ -334,15 +334,15 @@ pub fn handle_con_agente(
 /// se le pide el paquete a `vivo` solo cuando el mensaje es una llamada a una
 /// de esas dos. Una sesión que nunca busca ni guarda nunca paga ese heap.
 pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
-    let mut vivo = crate::paquete::PaqueteVivo::nuevo(dir);
+    let mut vivo = crate::packstore::LivePack::new_id(dir);
     // Quién está del otro lado, según el `initialize`. Se recuerda entre
     // mensajes porque ese handshake llega una vez y los guardados vienen
     // después.
-    let mut agente: Option<String> = None;
+    let mut agent: Option<String> = None;
     // El paquete se abre recién cuando alguien busca o guarda, así que una
     // sesión que nunca lo use no vería que desapareció. Este chequeo cuesta
     // un `stat` y cubre ese caso al arrancar.
-    crate::paquete::avisar_si_falta_el_archivo(conn, dir);
+    crate::packstore::warn_if_file_missing(conn, dir);
     let mut stdout = std::io::stdout();
 
     // Leer en otro hilo y esperar con plazo. Un `for line in stdin` se queda
@@ -354,18 +354,18 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
         let entrada = std::io::stdin();
         for linea in entrada.lock().lines() {
             if tx.send(linea).is_err() {
-                break; // el otro lado cerró: nadie va a leer más
+                break; // el otro lado cerró: nadie va a parse más
             }
         }
     });
 
-    let limite = std::time::Duration::from_secs(cfg.soltar_paquete_tras);
+    let limit_ = std::time::Duration::from_secs(cfg.soltar_paquete_tras);
     // Mirar más seguido que el plazo para no estirarlo al doble, pero no
     // tanto como para despertar por gusto en una sesión que no hace nada.
-    let intervalo = if limite.is_zero() {
+    let intervalo = if limit_.is_zero() {
         std::time::Duration::from_secs(60)
     } else {
-        (limite / 4).max(std::time::Duration::from_secs(5))
+        (limit_ / 4).max(std::time::Duration::from_secs(5))
     };
 
     loop {
@@ -376,7 +376,7 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
                 break;
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                if vivo.soltar_si_inactivo(limite) {
+                if vivo.release_if_idle(limit_) {
                     eprintln!(
                         "anathem: paquete soltado tras {}s sin buscar; se reabre en la próxima búsqueda",
                         cfg.soltar_paquete_tras
@@ -404,11 +404,11 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
                 Some("search_memory") | Some("save_memory")
             );
         let ctx = if necesita_paquete {
-            search::Contexto::de_servidor(vivo.actual(conn), cfg.peso_bm25)
+            search::Contexto::de_servidor(vivo.actual(conn), cfg.bm25_weight)
         } else {
-            search::Contexto::de_servidor(None, cfg.peso_bm25)
+            search::Contexto::de_servidor(None, cfg.bm25_weight)
         };
-        if let Some(res) = handle_con_agente(conn, &ctx, cfg, &req, &mut agente)? {
+        if let Some(res) = handle_con_agente(conn, &ctx, cfg, &req, &mut agent)? {
             writeln!(stdout, "{}", serde_json::to_string(&res)?)?;
             stdout.flush()?;
         }

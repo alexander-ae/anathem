@@ -95,7 +95,7 @@ fn si_falta_el_archivo_del_paquete_la_busqueda_degrada_a_bm25() {
 
 /// Variante del fixture con otro nombre y otras dimensiones, para forzar la
 /// incompatibilidad.
-fn escribir_pack_ancho(ruta: &std::path::Path, nombre: &str) {
+fn escribir_pack_ancho(pack_path: &std::path::Path, nombre: &str) {
     // Mismo tokenizador, pero 8 dimensiones en vez de 4.
     let tok = apoyo::TOKENIZER_MINI.as_bytes();
     let dims = 8usize;
@@ -117,7 +117,7 @@ fn escribir_pack_ancho(ruta: &std::path::Path, nombre: &str) {
     for _ in 0..dims { b.extend_from_slice(&1.0f32.to_le_bytes()); }
     for _ in 0..dims { b.extend_from_slice(&0.0f32.to_le_bytes()); }
     for f in filas { b.extend_from_slice(&f); }
-    std::fs::write(ruta, b).unwrap();
+    std::fs::write(pack_path, b).unwrap();
 }
 
 #[test]
@@ -190,7 +190,7 @@ fn incompatibilidad_por_nombre_deja_el_registro_consistente_con_el_disco() {
     // verdad: el nombre registrado y el nombre del archivo en disco tienen
     // que coincidir.
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
-    let (nombre, _sha, _dims) = anathem::vecstore::pack_registrado(&conn).unwrap().unwrap();
+    let (nombre, _sha, _dims) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
     assert_eq!(nombre, "otro-es", "el registro debe reflejar el nombre real del paquete");
     let ruta_registrada = d.path().join("paquetes").join(format!("{nombre}.anathem-pack"));
     assert!(
@@ -342,13 +342,13 @@ fn una_instalacion_cortada_despues_del_rename_no_deja_consultando_el_build_viejo
     // completa.
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("mem.db");
-    let viejo = d.path().join("viejo.anathem-pack");
-    let nuevo = d.path().join("nuevo.anathem-pack");
-    apoyo::escribir_pack_mini(&viejo, "mini-es"); // ▁hola -> eje 0
-    apoyo::escribir_pack_permutado(&nuevo, "mini-es"); // mismo nombre y dims, ▁hola -> eje 3
+    let old = d.path().join("viejo.anathem-pack");
+    let new_id = d.path().join("nuevo.anathem-pack");
+    apoyo::escribir_pack_mini(&old, "mini-es"); // ▁hola -> eje 0
+    apoyo::escribir_pack_permutado(&new_id, "mini-es"); // mismo nombre y dims, ▁hola -> eje 3
 
     mem(d.path(), &["save", "hola mundo"]);
-    assert!(mem(d.path(), &["model", "install", viejo.to_str().unwrap()]).status.success());
+    assert!(mem(d.path(), &["model", "install", old.to_str().unwrap()]).status.success());
     {
         let conn = rusqlite::Connection::open(&db).unwrap();
         let v = apoyo::leer_vector(&conn, "select vec from chunk_vectors");
@@ -364,12 +364,12 @@ fn una_instalacion_cortada_despues_del_rename_no_deja_consultando_el_build_viejo
         .unwrap();
     }
 
-    let o = mem(d.path(), &["model", "install", nuevo.to_str().unwrap()]);
+    let o = mem(d.path(), &["model", "install", new_id.to_str().unwrap()]);
     assert!(!o.status.success(), "esta instalación tenía que quedar cortada");
     let instalado = d.path().join("paquetes").join("mini-es.anathem-pack");
     assert_eq!(
         std::fs::read(&instalado).unwrap(),
-        std::fs::read(&nuevo).unwrap(),
+        std::fs::read(&new_id).unwrap(),
         "precondición: el rename ya pasó y en disco está el build nuevo"
     );
 
@@ -433,9 +433,9 @@ fn una_instalacion_que_falla_antes_de_tocar_el_archivo_no_deja_la_marca() {
 
     let paquetes = d.path().join("paquetes");
     std::fs::create_dir_all(&paquetes).unwrap();
-    let destino = paquetes.join("mini-es.anathem-pack");
-    std::fs::create_dir(&destino).unwrap();
-    std::fs::write(destino.join("ocupado"), b"x").unwrap();
+    let target = paquetes.join("mini-es.anathem-pack");
+    std::fs::create_dir(&target).unwrap();
+    std::fs::write(target.join("ocupado"), b"x").unwrap();
 
     let o = mem(d.path(), &["model", "install", r.to_str().unwrap()]);
     assert!(!o.status.success(), "el rename imposible tiene que hacer fallar la instalación");

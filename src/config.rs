@@ -17,7 +17,7 @@ pub struct Config {
     /// la búsqueda monolingüe empata con bm25 puro y la cruzada gana 24
     /// puntos. Ver `docs/superpowers/medicion-corpus-real.md`.
     #[serde(default = "peso_por_defecto")]
-    pub peso_bm25: f64,
+    pub bm25_weight: f64,
 
     /// Cuántos candidatos como máximo devuelve `search_memory` por defecto.
     ///
@@ -32,14 +32,14 @@ pub struct Config {
     /// las mostradas mucho más seguido (82 % contra 72 %; en consultas
     /// parafrásticas, 50 % contra 25 %).
     #[serde(default = "candidatos_por_defecto")]
-    pub candidatos: usize,
+    pub candidates: usize,
 
     /// A cuántos caracteres se recorta el fragmento de cada candidato en
     /// `search_memory`, antes de contar su costo contra el presupuesto de
     /// tokens (`search::run_explained`). Ver `candidatos` arriba para el
     /// porqué del recorte.
     #[serde(default = "extracto_por_defecto")]
-    pub extracto: usize,
+    pub excerpt: usize,
 
     /// Cuántas memorias recientes contarle al agente al conectarse, para que
     /// sepa qué dejó el anterior sin tener que preguntar.
@@ -67,7 +67,7 @@ pub struct Config {
     /// devuelve a unos 7 MB; lo único que cuesta es reabrirlo —del orden de
     /// 90 ms— en la próxima búsqueda, que por definición viene después de un
     /// hueco.
-    #[serde(default = "soltar_tras_por_defecto")]
+    #[serde(default = "release_after_default")]
     pub soltar_paquete_tras: u64,
 }
 
@@ -91,19 +91,19 @@ fn traspaso_ventana_por_defecto() -> String {
     "24h".to_string()
 }
 
-fn soltar_tras_por_defecto() -> u64 {
+fn release_after_default() -> u64 {
     300
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            peso_bm25: peso_por_defecto(),
-            candidatos: candidatos_por_defecto(),
-            extracto: extracto_por_defecto(),
+            bm25_weight: peso_por_defecto(),
+            candidates: candidatos_por_defecto(),
+            excerpt: extracto_por_defecto(),
             traspaso_items: traspaso_por_defecto(),
             traspaso_ventana: traspaso_ventana_por_defecto(),
-            soltar_paquete_tras: soltar_tras_por_defecto(),
+            soltar_paquete_tras: release_after_default(),
         }
     }
 }
@@ -113,26 +113,26 @@ impl Default for Config {
 /// rota que se degradara en silencio le haría creer al usuario que su ajuste
 /// está aplicado cuando no lo está.
 pub fn cargar(dir: &Path) -> Result<Config> {
-    let ruta = dir.join("config.json");
-    if !ruta.exists() {
+    let pack_path = dir.join("config.json");
+    if !pack_path.exists() {
         return Ok(Config::default());
     }
-    let crudo = std::fs::read_to_string(&ruta)
-        .with_context(|| format!("no se pudo leer {}", ruta.display()))?;
+    let crudo = std::fs::read_to_string(&pack_path)
+        .with_context(|| format!("no se pudo leer {}", pack_path.display()))?;
     let c: Config = serde_json::from_str(&crudo)
-        .with_context(|| format!("{} no es un config.json válido", ruta.display()))?;
-    if !(c.peso_bm25.is_finite() && c.peso_bm25 >= 0.0) {
+        .with_context(|| format!("{} no es un config.json válido", pack_path.display()))?;
+    if !(c.bm25_weight.is_finite() && c.bm25_weight >= 0.0) {
         bail!(
             "{}: peso_bm25 debe ser un número mayor o igual a cero, no {}",
-            ruta.display(),
-            c.peso_bm25
+            pack_path.display(),
+            c.bm25_weight
         );
     }
-    if c.candidatos == 0 {
-        bail!("{}: candidatos debe ser mayor que cero, no {}", ruta.display(), c.candidatos);
+    if c.candidates == 0 {
+        bail!("{}: candidatos debe ser mayor que cero, no {}", pack_path.display(), c.candidates);
     }
-    if c.extracto == 0 {
-        bail!("{}: extracto debe ser mayor que cero, no {}", ruta.display(), c.extracto);
+    if c.excerpt == 0 {
+        bail!("{}: extracto debe ser mayor que cero, no {}", pack_path.display(), c.excerpt);
     }
     Ok(c)
 }

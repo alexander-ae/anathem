@@ -14,7 +14,7 @@ use std::process::Command;
 
 /// Dónde preguntar. Se puede apuntar a otro lado con `ANATHEM_REPO`, igual
 /// que en el instalador, para quien tenga su propia copia del proyecto.
-fn api_de_la_ultima() -> String {
+fn latest_release_api() -> String {
     let repo =
         std::env::var("ANATHEM_REPO").unwrap_or_else(|_| "__alexander__/anathem".to_string());
     let codificado = repo.replace('/', "%2F");
@@ -27,7 +27,7 @@ fn api_de_la_ultima() -> String {
 /// esto se invoca a mano y muy de vez en cuando: meter una pila de TLS en el
 /// binario para eso lo engordaría y sumaría dependencias que después hay que
 /// seguir en cada aviso de seguridad.
-fn bajar(url: &str) -> Result<String> {
+fn fetch(url: &str) -> Result<String> {
     let intento = |programa: &str, args: &[&str]| -> Option<std::process::Output> {
         Command::new(programa).args(args).output().ok().filter(|o| o.status.success())
     };
@@ -44,7 +44,7 @@ fn bajar(url: &str) -> Result<String> {
 }
 
 /// La etiqueta de la última release, sin la `v`.
-fn ultima_publicada(json: &str) -> Result<String> {
+fn latest_published(json: &str) -> Result<String> {
     // Se busca el campo a mano para no sumar un parser de JSON a un camino
     // que corre una vez cada tanto; la respuesta es de GitLab y el campo es
     // estable.
@@ -60,7 +60,7 @@ fn ultima_publicada(json: &str) -> Result<String> {
 /// Compara número a número y no como texto, porque `0.10.0` es mayor que
 /// `0.9.0` pero menor alfabéticamente, y ese error aparece recién cuando el
 /// proyecto llega a la décima versión.
-pub fn es_mas_nueva(publicada: &str, actual: &str) -> bool {
+pub fn is_newer(publicada: &str, actual: &str) -> bool {
     let partes = |s: &str| -> Vec<u64> {
         s.split(['.', '-']).map(|x| x.parse().unwrap_or(0)).collect()
     };
@@ -75,11 +75,11 @@ pub fn es_mas_nueva(publicada: &str, actual: &str) -> bool {
 }
 
 /// Consulta y cuenta. Devuelve si hay una más nueva.
-pub fn comprobar() -> Result<bool> {
+pub fn check_for_update() -> Result<bool> {
     let actual = env!("CARGO_PKG_VERSION");
-    let json = bajar(&api_de_la_ultima())?;
-    let publicada = ultima_publicada(&json)?;
-    if es_mas_nueva(&publicada, actual) {
+    let json = fetch(&latest_release_api())?;
+    let publicada = latest_published(&json)?;
+    if is_newer(&publicada, actual) {
         println!("Hay una versión nueva: {publicada} (tenés la {actual}).");
         println!();
         println!("Para actualizar, el instalador hace lo mismo que la primera vez:");
@@ -109,31 +109,31 @@ mod tests {
     #[test]
     fn se_lee_la_etiqueta_de_la_respuesta() {
         let j = r#"{"name":"v0.3.0","tag_name":"v0.3.0","description":"algo"}"#;
-        assert_eq!(ultima_publicada(j).unwrap(), "0.3.0");
+        assert_eq!(latest_published(j).unwrap(), "0.3.0");
         // Sin la `v` también.
         let j = r#"{"tag_name":"1.2.3"}"#;
-        assert_eq!(ultima_publicada(j).unwrap(), "1.2.3");
+        assert_eq!(latest_published(j).unwrap(), "1.2.3");
     }
 
     #[test]
     fn una_respuesta_sin_etiqueta_falla_y_lo_dice() {
-        let e = ultima_publicada(r#"{"message":"404 Not Found"}"#).unwrap_err().to_string();
+        let e = latest_published(r#"{"message":"404 Not Found"}"#).unwrap_err().to_string();
         assert!(e.contains("tag_name"), "{e}");
     }
 
     #[test]
     fn las_versiones_se_comparan_por_numero_y_no_como_texto() {
-        assert!(es_mas_nueva("0.2.0", "0.1.0"));
-        assert!(es_mas_nueva("1.0.0", "0.9.9"));
+        assert!(is_newer("0.2.0", "0.1.0"));
+        assert!(is_newer("1.0.0", "0.9.9"));
         // El caso que rompe la comparación alfabética.
-        assert!(es_mas_nueva("0.10.0", "0.9.0"));
-        assert!(!es_mas_nueva("0.9.0", "0.10.0"));
+        assert!(is_newer("0.10.0", "0.9.0"));
+        assert!(!is_newer("0.9.0", "0.10.0"));
         // Iguales no es "más nueva".
-        assert!(!es_mas_nueva("0.2.0", "0.2.0"));
+        assert!(!is_newer("0.2.0", "0.2.0"));
         // Más vieja tampoco.
-        assert!(!es_mas_nueva("0.1.0", "0.2.0"));
+        assert!(!is_newer("0.1.0", "0.2.0"));
         // Distinta cantidad de partes.
-        assert!(es_mas_nueva("0.2.1", "0.2"));
-        assert!(!es_mas_nueva("0.2", "0.2.0"));
+        assert!(is_newer("0.2.1", "0.2"));
+        assert!(!is_newer("0.2", "0.2.0"));
     }
 }

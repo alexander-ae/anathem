@@ -16,8 +16,8 @@ use std::path::Path;
 
 /// Una memoria tal como viene del archivo, todavía sin tocar la base.
 #[derive(Debug, Default, Clone)]
-pub struct Leida {
-    pub id_viejo: Option<i64>,
+pub struct ParsedMemory {
+    pub old_id: Option<i64>,
     pub project: String,
     pub title: String,
     pub body: String,
@@ -36,14 +36,14 @@ pub struct Leida {
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
-pub struct Resumen {
-    pub insertadas: usize,
-    pub omitidas: usize,
-    pub cadenas: usize,
+pub struct Summary {
+    pub inserted: usize,
+    pub skipped: usize,
+    pub chains: usize,
 }
 
 /// Saca las comillas de un valor YAML escrito por `export::yaml_dq`.
-fn sin_comillas(v: &str) -> String {
+fn unquote(v: &str) -> String {
     let v = v.trim();
     if v.len() >= 2 && v.starts_with('"') && v.ends_with('"') {
         v[1..v.len() - 1].replace("\\\"", "\"").replace("\\\\", "\\")
@@ -53,20 +53,20 @@ fn sin_comillas(v: &str) -> String {
 }
 
 /// Lista YAML en una línea: `["a", "b"]`.
-fn lista_en_linea(v: &str) -> Vec<String> {
+fn inline_list(v: &str) -> Vec<String> {
     let v = v.trim().trim_start_matches('[').trim_end_matches(']');
-    v.split(',').map(sin_comillas).filter(|s| !s.is_empty()).collect()
+    v.split(',').map(unquote).filter(|s| !s.is_empty()).collect()
 }
 
 /// Lee un archivo del export. Devuelve `None` si no tiene frontmatter, para
 /// poder apuntar `--desde` a una carpeta con otras cosas adentro sin que
 /// explote.
-pub fn leer(texto: &str) -> Option<Leida> {
+pub fn parse(texto: &str) -> Option<ParsedMemory> {
     let resto = texto.strip_prefix("---\n")?;
     let fin = resto.find("\n---\n")?;
     let (cabecera, cuerpo) = (&resto[..fin], &resto[fin + 5..]);
 
-    let mut m = Leida { body: cuerpo.trim_start_matches('\n').trim_end().to_string(), ..Default::default() };
+    let mut m = ParsedMemory { body: cuerpo.trim_start_matches('\n').trim_end().to_string(), ..Default::default() };
     m.status = "active".into();
     m.source = "explicit".into();
 
@@ -77,11 +77,11 @@ pub fn leer(texto: &str) -> Option<Leida> {
         i += 1;
         // Las refs son una lista de pares en líneas siguientes, con sangría.
         if l.trim_start().starts_with("- kind:") {
-            let kind = sin_comillas(l.split_once("kind:").map(|x| x.1).unwrap_or(""));
+            let kind = unquote(l.split_once("kind:").map(|x| x.1).unwrap_or(""));
             let value = lineas
                 .get(i)
                 .and_then(|x| x.split_once("value:"))
-                .map(|x| sin_comillas(x.1))
+                .map(|x| unquote(x.1))
                 .unwrap_or_default();
             if !kind.is_empty() && !value.is_empty() {
                 m.refs.push((kind, value));
@@ -92,24 +92,24 @@ pub fn leer(texto: &str) -> Option<Leida> {
         let Some((k, v)) = l.split_once(':') else { continue };
         let (k, v) = (k.trim(), v.trim());
         match k {
-            "id" => m.id_viejo = v.parse().ok(),
-            "project" => m.project = sin_comillas(v),
+            "id" => m.old_id = v.parse().ok(),
+            "project" => m.project = unquote(v),
             "description" => {
                 if m.title.is_empty() {
-                    m.title = sin_comillas(v);
+                    m.title = unquote(v);
                 }
             }
-            "created" => m.created = sin_comillas(v),
-            "updated" => m.updated = sin_comillas(v),
-            "status" => m.status = sin_comillas(v),
-            "source" => m.source = sin_comillas(v),
+            "created" => m.created = unquote(v),
+            "updated" => m.updated = unquote(v),
+            "status" => m.status = unquote(v),
+            "source" => m.source = unquote(v),
             "pinned" => m.pinned = v == "true",
-            "topic" => m.topic = Some(sin_comillas(v)).filter(|s| !s.is_empty()),
-            "ext_id" => m.ext_id = Some(sin_comillas(v)).filter(|s| !s.is_empty()),
+            "topic" => m.topic = Some(unquote(v)).filter(|s| !s.is_empty()),
+            "ext_id" => m.ext_id = Some(unquote(v)).filter(|s| !s.is_empty()),
             "supersedes" => m.supersedes = v.parse().ok(),
-            "event_start" => m.event_start = Some(sin_comillas(v)).filter(|s| !s.is_empty()),
-            "event_end" => m.event_end = Some(sin_comillas(v)).filter(|s| !s.is_empty()),
-            "tags" => m.tags = lista_en_linea(v),
+            "event_start" => m.event_start = Some(unquote(v)).filter(|s| !s.is_empty()),
+            "event_end" => m.event_end = Some(unquote(v)).filter(|s| !s.is_empty()),
+            "tags" => m.tags = inline_list(v),
             _ => {}
         }
     }
@@ -117,7 +117,7 @@ pub fn leer(texto: &str) -> Option<Leida> {
         return None;
     }
     if m.title.is_empty() {
-        m.title = crate::ingest::titulo_de(&m.body);
+        m.title = crate::ingest::title_from(&m.body);
     }
     if m.updated.is_empty() {
         m.updated = m.created.clone();
@@ -134,51 +134,51 @@ pub fn leer(texto: &str) -> Option<Leida> {
 ///
 /// Se omite lo que ya está, comparando proyecto y cuerpo: es la identidad que
 /// sobrevive a un export y vuelta, porque los ids se reasignan.
-pub fn importar(conn: &Connection, dir: &Path, fusionar: bool) -> Result<Resumen> {
+pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary> {
     if !dir.is_dir() {
         bail!("{} no es una carpeta", dir.display());
     }
-    let habia: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0))?;
-    if habia > 0 && !fusionar {
+    let had: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0))?;
+    if had > 0 && !merge {
         bail!(
-            "la base ya tiene {habia} memorias. Importar encima duplicaría lo que ya está.\n   \
+            "la base ya tiene {had} memorias. Importar encima duplicaría lo que ya está.\n   \
              Usá --fusionar para agregar solo lo que falte, o apuntá --db a una base nueva."
         );
     }
 
-    let mut archivos: Vec<std::path::PathBuf> = Vec::new();
-    juntar(dir, &mut archivos)?;
-    archivos.sort();
+    let mut files: Vec<std::path::PathBuf> = Vec::new();
+    collect_files(dir, &mut files)?;
+    files.sort();
 
-    let mut leidas: Vec<Leida> = Vec::new();
-    for a in &archivos {
+    let mut parsed: Vec<ParsedMemory> = Vec::new();
+    for a in &files {
         let txt = std::fs::read_to_string(a)
             .with_context(|| format!("no se pudo leer {}", a.display()))?;
-        if let Some(m) = leer(&txt) {
-            leidas.push(m);
+        if let Some(m) = parse(&txt) {
+            parsed.push(m);
         }
     }
 
     let tx = Transaction_inmediata(conn)?;
     // Lo que ya está, para no duplicarlo.
-    let mut existentes: std::collections::HashSet<(String, String)> =
+    let mut existing: std::collections::HashSet<(String, String)> =
         std::collections::HashSet::new();
     {
         let mut st = tx.prepare("select project, body from memories")?;
         let filas = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
         for f in filas {
-            existentes.insert(f?);
+            existing.insert(f?);
         }
     }
 
     // Primero todas las filas, sin `supersedes_id`: el id al que apunta puede
     // ser el de una memoria que todavía no se insertó, y resolverlo sobre la
     // marcha dejaría cadenas rotas según el orden de los archivos.
-    let mut mapa: HashMap<i64, i64> = HashMap::new();
-    let mut resumen = Resumen::default();
-    for m in &leidas {
-        if existentes.contains(&(m.project.clone(), m.body.clone())) {
-            resumen.omitidas += 1;
+    let mut map_: HashMap<i64, i64> = HashMap::new();
+    let mut resumen = Summary::default();
+    for m in &parsed {
+        if existing.contains(&(m.project.clone(), m.body.clone())) {
+            resumen.skipped += 1;
             continue;
         }
         tx.execute(
@@ -191,11 +191,11 @@ pub fn importar(conn: &Connection, dir: &Path, fusionar: bool) -> Result<Resumen
                 m.event_end, m.source, m.status, m.pinned as i64, m.ext_id, m.topic
             ],
         )?;
-        let nuevo = tx.last_insert_rowid();
-        if let Some(viejo) = m.id_viejo {
-            mapa.insert(viejo, nuevo);
+        let new_id = tx.last_insert_rowid();
+        if let Some(old) = m.old_id {
+            map_.insert(old, new_id);
         }
-        existentes.insert((m.project.clone(), m.body.clone()));
+        existing.insert((m.project.clone(), m.body.clone()));
         for (ord, cuerpo) in
             crate::chunk::split(&m.body, crate::ingest::CHUNK_SIZE, crate::ingest::CHUNK_STEP)
                 .iter()
@@ -203,32 +203,32 @@ pub fn importar(conn: &Connection, dir: &Path, fusionar: bool) -> Result<Resumen
         {
             tx.execute(
                 "insert into chunks (memory_id, ord, body) values (?1, ?2, ?3)",
-                params![nuevo, ord as i64, cuerpo],
+                params![new_id, ord as i64, cuerpo],
             )?;
         }
         for t in &m.tags {
             tx.execute(
                 "insert or ignore into memory_tags (memory_id, tag) values (?1, ?2)",
-                params![nuevo, t],
+                params![new_id, t],
             )?;
         }
         for (kind, value) in &m.refs {
             tx.execute(
                 "insert or ignore into memory_refs (memory_id, kind, value) values (?1, ?2, ?3)",
-                params![nuevo, kind, value],
+                params![new_id, kind, value],
             )?;
         }
-        resumen.insertadas += 1;
+        resumen.inserted += 1;
     }
 
     // Recién ahora las cadenas, con todos los ids nuevos ya conocidos.
-    for m in &leidas {
-        let (Some(viejo), Some(apunta)) = (m.id_viejo, m.supersedes) else { continue };
-        let (Some(&nuevo), Some(&destino)) = (mapa.get(&viejo), mapa.get(&apunta)) else {
+    for m in &parsed {
+        let (Some(old), Some(apunta)) = (m.old_id, m.supersedes) else { continue };
+        let (Some(&new_id), Some(&target)) = (map_.get(&old), map_.get(&apunta)) else {
             continue;
         };
-        tx.execute("update memories set supersedes_id = ?2 where id = ?1", params![nuevo, destino])?;
-        resumen.cadenas += 1;
+        tx.execute("update memories set supersedes_id = ?2 where id = ?1", params![new_id, target])?;
+        resumen.chains += 1;
     }
     tx.commit()?;
     Ok(resumen)
@@ -241,11 +241,11 @@ fn Transaction_inmediata(conn: &Connection) -> Result<rusqlite::Transaction<'_>>
     Ok(rusqlite::Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?)
 }
 
-fn juntar(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<()> {
+fn collect_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<()> {
     for e in std::fs::read_dir(dir)? {
         let p = e?.path();
         if p.is_dir() {
-            juntar(&p, out)?;
+            collect_files(&p, out)?;
         } else if p.extension().is_some_and(|x| x == "md") {
             out.push(p);
         }

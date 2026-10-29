@@ -43,11 +43,11 @@ fn dir_git_comun(cwd: &Path) -> Option<PathBuf> {
         }
         if punto_git.is_file() {
             let contenido = std::fs::read_to_string(&punto_git).ok()?;
-            let ruta = contenido.strip_prefix("gitdir:")?.trim();
-            let gitdir = if Path::new(ruta).is_absolute() {
-                PathBuf::from(ruta)
+            let pack_path = contenido.strip_prefix("gitdir:")?.trim();
+            let gitdir = if Path::new(pack_path).is_absolute() {
+                PathBuf::from(pack_path)
             } else {
-                d.join(ruta)
+                d.join(pack_path)
             };
             let commondir = gitdir.join("commondir");
             if let Ok(rel) = std::fs::read_to_string(&commondir) {
@@ -111,6 +111,6 @@ fn nombre_del_remoto(config: &Path) -> Option<String> {
 
 /// El proyecto a usar: el que pidió quien llama, o el detectado, o el
 /// genérico. Un `--project` explícito siempre gana.
-pub fn resolver(pedido: Option<String>, cwd: &Path) -> String {
+pub fn resolve(pedido: Option<String>, cwd: &Path) -> String {
     pedido.unwrap_or_else(|| detectar(cwd).unwrap_or_else(|| SIN_PROYECTO.to_string()))
 }

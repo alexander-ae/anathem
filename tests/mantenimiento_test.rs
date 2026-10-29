@@ -75,7 +75,7 @@ fn guardar_explicito_clasifica_y_extrae_refs() {
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let texto = "Se decidió revertir: había un bug en los tests de ABC-42 (PR #7).";
 
-    let (id, usados) = anathem::ingest::guardar_explicito(&conn, texto, "p", Vec::new()).unwrap();
+    let (id, usados) = anathem::ingest::save_explicit(&conn, texto, "p", Vec::new()).unwrap();
     assert!(!usados.is_empty(), "no clasificó: {usados:?}");
 
     let n_tags: i64 = conn.query_row(
@@ -91,7 +91,7 @@ fn guardar_explicito_clasifica_y_extrae_refs() {
 fn guardar_explicito_respeta_los_tags_dados() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
-    let (id, usados) = anathem::ingest::guardar_explicito(
+    let (id, usados) = anathem::ingest::save_explicit(
         &conn, "un bug en los tests", "p", vec!["mio".to_string()]).unwrap();
     assert_eq!(usados, vec!["mio".to_string()]);
     let tags: Vec<String> = conn

@@ -26,7 +26,7 @@ fn paquete_corrupto_degrada_a_bm25_sin_tumbar_la_busqueda() {
 
     {
         let conn = anathem::db::open(&db).unwrap();
-        anathem::vecstore::registrar_pack(&conn, "mini-es", "deadbeef", 4).unwrap();
+        anathem::vecstore::register_pack(&conn, "mini-es", "deadbeef", 4).unwrap();
     }
     let paquetes = dir.path().join("paquetes");
     std::fs::create_dir_all(&paquetes).unwrap();

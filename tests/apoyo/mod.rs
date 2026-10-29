@@ -39,14 +39,14 @@ pub const TOKENIZER_CON_AGREGADO_FUERA_DE_RANGO: &str = r#"{
 /// descuantizado es el byte tal cual y los vectores esperados se calculan a
 /// mano. `n_tokens` sale del largo de `filas`, que es justo el campo que hay
 /// que poder descuadrar para probar la validación de `Pack::abrir`.
-pub fn escribir_pack_filas(ruta: &Path, nombre: &str, dims: usize, filas: &[Vec<u8>]) {
-    escribir_pack_con_tokenizador(ruta, nombre, dims, filas, TOKENIZER_MINI);
+pub fn escribir_pack_filas(pack_path: &Path, nombre: &str, dims: usize, filas: &[Vec<u8>]) {
+    escribir_pack_con_tokenizador(pack_path, nombre, dims, filas, TOKENIZER_MINI);
 }
 
 /// `escribir_pack_filas` eligiendo también el tokenizador embebido, para
 /// poder descuadrar la relación entre la tabla y el vocabulario.
 pub fn escribir_pack_con_tokenizador(
-    ruta: &Path,
+    pack_path: &Path,
     nombre: &str,
     dims: usize,
     filas: &[Vec<u8>],
@@ -72,16 +72,16 @@ pub fn escribir_pack_con_tokenizador(
         assert_eq!(f.len(), dims, "cada fila tiene que medir dims bytes");
         b.extend_from_slice(f);
     }
-    std::fs::write(ruta, b).unwrap();
+    std::fs::write(pack_path, b).unwrap();
 }
 
 /// Escribe un paquete de 4 tokens y 4 dimensiones en `ruta`.
 ///
 /// Filas: `<unk>`=[0,0,0,0], `▁hola`=[10,0,0,0], `▁mundo`=[0,10,0,0],
 /// `s`=[0,0,10,0].
-pub fn escribir_pack_mini(ruta: &Path, nombre: &str) {
+pub fn escribir_pack_mini(pack_path: &Path, nombre: &str) {
     escribir_pack_filas(
-        ruta,
+        pack_path,
         nombre,
         4,
         &[vec![0, 0, 0, 0], vec![10, 0, 0, 0], vec![0, 10, 0, 0], vec![0, 0, 10, 0]],
@@ -95,9 +95,9 @@ pub fn escribir_pack_mini(ruta: &Path, nombre: &str) {
 /// fija 256 dimensiones para todo paquete, los blobs de dos paquetes
 /// distintos miden exactamente lo mismo y nada los distingue salvo mirar
 /// hacia dónde apuntan.
-pub fn escribir_pack_permutado(ruta: &Path, nombre: &str) {
+pub fn escribir_pack_permutado(pack_path: &Path, nombre: &str) {
     escribir_pack_filas(
-        ruta,
+        pack_path,
         nombre,
         4,
         &[vec![0, 0, 0, 0], vec![0, 0, 0, 10], vec![0, 0, 10, 0], vec![0, 10, 0, 0]],
@@ -106,8 +106,8 @@ pub fn escribir_pack_permutado(ruta: &Path, nombre: &str) {
 
 /// Un paquete cuya tabla es todo ceros: abre, instala y produce solo
 /// vectores nulos.
-pub fn escribir_pack_nulo(ruta: &Path, nombre: &str) {
-    escribir_pack_filas(ruta, nombre, 4, &vec![vec![0u8; 4]; 4]);
+pub fn escribir_pack_nulo(pack_path: &Path, nombre: &str) {
+    escribir_pack_filas(pack_path, nombre, 4, &vec![vec![0u8; 4]; 4]);
 }
 
 /// Lee un vector de `chunk_vectors` como `Vec<f32>`.
@@ -117,10 +117,10 @@ pub fn leer_vector(conn: &rusqlite::Connection, sql: &str) -> Vec<f32> {
 }
 
 /// Reescribe un byte suelto del archivo, para construir paquetes corruptos.
-pub fn corromper(ruta: &Path, offset: usize, valor: u8) {
-    let mut b = std::fs::read(ruta).unwrap();
+pub fn corromper(pack_path: &Path, offset: usize, valor: u8) {
+    let mut b = std::fs::read(pack_path).unwrap();
     b[offset] = valor;
-    std::fs::write(ruta, b).unwrap();
+    std::fs::write(pack_path, b).unwrap();
 }
 
 /// Registra `p` como el paquete de la base y sincroniza con esa identidad.
@@ -133,8 +133,8 @@ pub fn corromper(ruta: &Path, offset: usize, valor: u8) {
 pub fn registrar_y_sincronizar(
     conn: &rusqlite::Connection,
     p: &anathem::pack::Pack,
-) -> anathem::vecstore::Sincronizacion {
+) -> anathem::vecstore::SyncOutcome {
     let id = (p.nombre().to_string(), "sha-de-prueba".to_string(), p.dims());
-    anathem::vecstore::registrar_pack(conn, &id.0, &id.1, id.2).unwrap();
-    anathem::vecstore::sincronizar(conn, p, &id).unwrap()
+    anathem::vecstore::register_pack(conn, &id.0, &id.1, id.2).unwrap();
+    anathem::vecstore::sync(conn, p, &id).unwrap()
 }

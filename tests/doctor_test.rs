@@ -157,7 +157,7 @@ fn config_roto_se_reporta_y_el_diagnostico_no_se_cae() {
 fn config_con_un_valor_invalido_dice_cual_es() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
-    std::fs::write(d.path().join("config.json"), r#"{"candidatos": 0}"#).unwrap();
+    std::fs::write(d.path().join("config.json"), r#"{"candidates": 0}"#).unwrap();
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
     assert!(o.stdout.contains("candidatos"), "{}", o.stdout);
@@ -167,7 +167,7 @@ fn config_con_un_valor_invalido_dice_cual_es() {
 fn config_valido_muestra_los_valores_efectivos() {
     let d = tempfile::tempdir().unwrap();
     let db = base_sana(d.path());
-    std::fs::write(d.path().join("config.json"), r#"{"candidatos": 7}"#).unwrap();
+    std::fs::write(d.path().join("config.json"), r#"{"candidates": 7}"#).unwrap();
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
     assert!(o.stdout.contains("candidatos=7"), "{}", o.stdout);

@@ -126,8 +126,8 @@ enum Cmd {
         #[arg(long, default_value = "24h")]
         desde: String,
         /// Cuántas memorias como máximo
-        #[arg(long, default_value_t = 15)]
-        limite: usize,
+        #[arg(long = "limite", default_value_t = 15)]
+        limit_: usize,
     },
     /// Muestra la cadena de supersession de una memoria, de la más nueva a la más vieja
     History {
@@ -141,8 +141,8 @@ enum Cmd {
         desde: PathBuf,
         /// Importar sobre una base que ya tiene memorias, agregando solo lo
         /// que falte
-        #[arg(long)]
-        fusionar: bool,
+        #[arg(long = "fusionar")]
+        merge: bool,
     },
     /// Comprueba si hay una versión más nueva publicada
     ///
@@ -250,29 +250,29 @@ fn editor_por_defecto(es_windows: bool) -> &'static str {
 /// Un problema de la capa vectorial se avisa, no tumba el comando: la
 /// memoria ya está guardada y perder el aviso sería peor que perder el
 /// vector.
-fn sincronizar_tras_escribir(conn: &rusqlite::Connection, dir: &Path) {
-    use anathem::vecstore::Sincronizacion;
-    let activo = anathem::paquete::resolver(conn, dir);
-    activo.avisar();
+fn sync_after_write(conn: &rusqlite::Connection, dir: &Path) {
+    use anathem::vecstore::SyncOutcome;
+    let activo = anathem::packstore::resolve(conn, dir);
+    activo.warn();
     let Some((p, identidad)) = activo.para_escribir() else {
         return;
     };
-    match anathem::vecstore::sincronizar(conn, p, identidad) {
-        Ok(Sincronizacion::Completa(0)) => {}
-        Ok(Sincronizacion::Completa(n)) => println!("vectores nuevos: {n}"),
+    match anathem::vecstore::sync(conn, p, identidad) {
+        Ok(SyncOutcome::Completa(0)) => {}
+        Ok(SyncOutcome::Completa(n)) => println!("vectores nuevos: {n}"),
         // Otro proceso instaló o quitó el paquete mientras este embebía. Lo
         // que se escribió antes del cambio ya lo borró su `adoptar_pack`, y
         // lo que faltaba no se escribió: quedan fragmentos sin vector, que
         // es la degradación aceptable. Mezclarlos no lo sería. El comando
         // sale con 0 igual: la memoria está guardada.
-        Ok(Sincronizacion::Abandonada(_)) => eprintln!(
+        Ok(SyncOutcome::Abandonada(_)) => eprintln!(
             "aviso: la memoria se guardó, pero otro proceso cambió el paquete de \
              vocabulario mientras se calculaban los vectores; se abandonó el lote para \
              no mezclar dos paquetes. Corré `mem reindex` cuando puedas."
         ),
         Err(e) => eprintln!(
             "aviso: la memoria se guardó pero no se pudieron actualizar los vectores ({e}); \
-             corré `mem reindex` cuando puedas."
+             corré `mem reindex` when puedas."
         ),
     }
 }
@@ -318,20 +318,20 @@ fn ejecutar(cli: Cli) -> Result<()> {
                     println!("  {ext_id}  {title}");
                 }
             }
-            sincronizar_tras_escribir(&conn, &dir);
+            sync_after_write(&conn, &dir);
         }
         Cmd::Search { query, project, tag, limit, explain, budget } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new("."));
             let cfg = anathem::config::cargar(dir)?;
-            let p = anathem::paquete::resolver_y_avisar(&conn, dir);
-            let ctx = anathem::search::Contexto::de_lectura(p.as_ref(), cfg.peso_bm25);
+            let p = anathem::packstore::resolve_and_warn(&conn, dir);
+            let ctx = anathem::search::Contexto::de_lectura(p.as_ref(), cfg.bm25_weight);
             let q = anathem::search::Query {
                 text: query, project, tags: tag, limit,
                 budget_tokens: budget.unwrap_or(anathem::search::DEFAULT_BUDGET_TOKENS),
                 // La CLI no recorta: `mem search` sigue mostrando el fragmento
                 // completo, como siempre.
-                extracto: None,
+                excerpt: None,
             };
             let hits = anathem::search::run_explained(&conn, &q, &ctx)?;
             if hits.is_empty() {
@@ -361,7 +361,7 @@ fn ejecutar(cli: Cli) -> Result<()> {
                     // Un resultado puede haber entrado por bm25, por el vector, o
                     // por los dos: mostramos cada señal que exista para que se
                     // entienda por qué recuperador llegó, no solo el que ganó.
-                    let señales = match (e.bm25, e.coseno) {
+                    let señales = match (e.bm25, e.cosine) {
                         (Some(b), Some(c)) => format!("bm25={b:.3} coseno={c:.3}"),
                         (Some(b), None) => format!("bm25={b:.3}"),
                         (None, Some(c)) => format!("coseno={c:.3}, solo vectorial"),
@@ -382,15 +382,15 @@ fn ejecutar(cli: Cli) -> Result<()> {
             // por qué quedó mal.
             let explicito = project.is_some();
             let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            let project = anathem::proyecto::resolver(project, &cwd);
-            let g = anathem::ingest::guardar_con_tema(&conn, &text, &project, tag, topic.as_deref(), None)?;
+            let project = anathem::project::resolve(project, &cwd);
+            let g = anathem::ingest::save_with_topic(&conn, &text, &project, tag, topic.as_deref(), None)?;
             let etiquetas = if g.tags.is_empty() { String::new() } else { format!(" [{}]", g.tags.join(", ")) };
             let como = if explicito { "" } else { " (detectado)" };
             println!("guardada memoria {} en {project}{como}{etiquetas}", g.id);
-            if let Some(msg) = g.describir() {
+            if let Some(msg) = g.describe() {
                 println!("{msg}");
             }
-            sincronizar_tras_escribir(&conn, &dir);
+            sync_after_write(&conn, &dir);
         }
         Cmd::Edit { id } => {
             let conn = anathem::db::open(&path)?;
@@ -408,16 +408,16 @@ fn ejecutar(cli: Cli) -> Result<()> {
             if !status.success() {
                 anyhow::bail!("{editor} salió con error, no se guardó nada");
             }
-            let nuevo = std::fs::read_to_string(&tmp)?;
+            let new_id = std::fs::read_to_string(&tmp)?;
             std::fs::remove_file(&tmp).ok();
-            if nuevo != body {
+            if new_id != body {
                 // `replace_body` rechunkea, y el cascade se lleva los
                 // vectores del texto viejo. Sin esto, los nuevos no los
                 // reconstruía nadie: la memoria editada quedaba invisible
                 // para la búsqueda vectorial hasta el próximo `mem reindex`.
-                anathem::edit::replace_body(&conn, id, &nuevo)?;
+                anathem::edit::replace_body(&conn, id, &new_id)?;
                 println!("memoria {id} actualizada");
-                sincronizar_tras_escribir(&conn, &dir);
+                sync_after_write(&conn, &dir);
             } else {
                 println!("sin cambios");
             }
@@ -432,7 +432,7 @@ fn ejecutar(cli: Cli) -> Result<()> {
             let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
             let n = anathem::edit::reindex(&conn)?;
             println!("reindexadas {n} memorias");
-            sincronizar_tras_escribir(&conn, &dir);
+            sync_after_write(&conn, &dir);
         }
         Cmd::Eval { evalset, label, out } => {
             let evalset = evalset.unwrap_or_else(|| {
@@ -441,8 +441,8 @@ fn ejecutar(cli: Cli) -> Result<()> {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new("."));
             let cfg = anathem::config::cargar(dir)?;
-            let p = anathem::paquete::resolver_y_avisar(&conn, dir);
-            let ctx = anathem::search::Contexto::de_lectura(p.as_ref(), cfg.peso_bm25);
+            let p = anathem::packstore::resolve_and_warn(&conn, dir);
+            let ctx = anathem::search::Contexto::de_lectura(p.as_ref(), cfg.bm25_weight);
             let r = anathem::evalrun::run(&conn, &evalset, &label, &ctx)?;
             println!(
                 "{}  recall@5={:.0}%  recall@50={:.0}%  MRR={:.3}  p50={:.1}ms  n={}",
@@ -483,51 +483,51 @@ fn ejecutar(cli: Cli) -> Result<()> {
         }
         Cmd::Topics => {
             let conn = anathem::db::open(&path)?;
-            let temas = anathem::maint::temas(&conn)?;
-            if temas.is_empty() {
+            let topics = anathem::maint::topics(&conn)?;
+            if topics.is_empty() {
                 println!("Sin claves de tema. Se crean guardando con `mem save \"...\" --topic <clave>`.");
             } else {
-                let ancho_p = temas.iter().map(|t| t.project.chars().count()).max().unwrap_or(0).max("proyecto".len());
-                let ancho_t = temas.iter().map(|t| t.topic.chars().count()).max().unwrap_or(0).max("tema".len());
+                let ancho_p = topics.iter().map(|t| t.project.chars().count()).max().unwrap_or(0).max("proyecto".len());
+                let ancho_t = topics.iter().map(|t| t.topic.chars().count()).max().unwrap_or(0).max("tema".len());
                 println!("{:<ancho_p$}  {:<ancho_t$}  {:>8}  vigente", "proyecto", "tema", "memorias");
-                for t in temas {
+                for t in topics {
                     let vigente = t.vigente.map_or("ninguna".to_string(), |v| v.to_string());
                     println!("{:<ancho_p$}  {:<ancho_t$}  {:>8}  {vigente}", t.project, t.topic, t.total);
                 }
             }
         }
-        Cmd::Import { desde, fusionar } => {
+        Cmd::Import { desde, merge } => {
             let conn = anathem::db::open(&path)?;
-            let r = anathem::importar::importar(&conn, &desde, fusionar)?;
+            let r = anathem::import::import_dir(&conn, &desde, merge)?;
             println!(
                 "importadas {} memorias, {} omitidas por estar ya, {} cadenas de supersession rearmadas",
-                r.insertadas, r.omitidas, r.cadenas
+                r.inserted, r.skipped, r.chains
             );
-            if r.insertadas > 0 {
+            if r.inserted > 0 {
                 println!("Si tenés paquete de vocabulario, corré `mem reindex` para los vectores.");
             }
         }
         Cmd::Update => {
-            anathem::actualizar::comprobar()?;
+            anathem::update::check_for_update()?;
         }
-        Cmd::Recent { project, todos, desde, limite } => {
+        Cmd::Recent { project, todos, desde, limit_ } => {
             let conn = anathem::db::open(&path)?;
-            let ventana = if desde.trim().eq_ignore_ascii_case("todo") {
+            let window = if desde.trim().eq_ignore_ascii_case("todo") {
                 None
             } else {
-                Some(anathem::reciente::duracion_en_segundos(&desde)?)
+                Some(anathem::recent::duration_in_seconds(&desde)?)
             };
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            let proyecto = if todos {
+            let project_ = if todos {
                 None
             } else {
-                Some(anathem::proyecto::resolver(project, &cwd))
+                Some(anathem::project::resolve(project, &cwd))
             };
             let dir = path.parent().unwrap_or(Path::new("."));
             let cfg = anathem::config::cargar(dir)?;
-            let items = anathem::reciente::listar(
-                &conn, proyecto.as_deref(), ventana, limite, cfg.extracto)?;
-            println!("{}", anathem::reciente::formatear(&items, proyecto.is_none()));
+            let items = anathem::recent::list_recent(
+                &conn, project_.as_deref(), window, limit_, cfg.excerpt)?;
+            println!("{}", anathem::recent::format_items(&items, project_.is_none()));
         }
         Cmd::History { id } => {
             let conn = anathem::db::open(&path)?;
@@ -551,7 +551,7 @@ fn ejecutar(cli: Cli) -> Result<()> {
             let dir = path.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
             match accion {
                 ModelCmd::Install { archivo } => {
-                    let i = anathem::paquete::instalar(&conn, &dir, &archivo)?;
+                    let i = anathem::packstore::install(&conn, &dir, &archivo)?;
                     println!(
                         "paquete {} instalado ({} dimensiones), {} fragmentos indexados",
                         i.nombre, i.dims, i.fragmentos
@@ -569,15 +569,15 @@ fn ejecutar(cli: Cli) -> Result<()> {
                         );
                     }
                 }
-                ModelCmd::Status => match anathem::vecstore::pack_registrado(&conn)? {
+                ModelCmd::Status => match anathem::vecstore::registered_pack(&conn)? {
                     None => println!("sin paquete: la búsqueda usa solo bm25"),
                     Some((nombre, sha, dims)) => {
-                        let (con, tot) = anathem::vecstore::cobertura(&conn, dims)?;
-                        let ruta = anathem::paquete::ruta(&dir, &nombre);
+                        let (con, tot) = anathem::vecstore::coverage(&conn, dims)?;
+                        let pack_path = anathem::packstore::pack_path(&dir, &nombre);
                         println!("paquete {nombre} ({dims} dimensiones, sha {})", &sha[..16.min(sha.len())]);
                         println!("cobertura: {con}/{tot} fragmentos");
-                        if !ruta.exists() {
-                            println!("FALTA el archivo {}: la búsqueda está degradada a bm25", ruta.display());
+                        if !pack_path.exists() {
+                            println!("FALTA el archivo {}: la búsqueda está degradada a bm25", pack_path.display());
                         } else if con < tot {
                             println!("hay {} fragmentos sin vector usable; corré `mem reindex`", tot - con);
                         }
@@ -595,7 +595,7 @@ fn ejecutar(cli: Cli) -> Result<()> {
                         }
                     }
                 },
-                ModelCmd::Remove => match anathem::paquete::quitar(&conn, &dir)? {
+                ModelCmd::Remove => match anathem::packstore::quitar(&conn, &dir)? {
                     Some(nombre) => {
                         println!("paquete {nombre} quitado; la búsqueda vuelve a ser solo bm25")
                     }

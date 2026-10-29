@@ -36,7 +36,7 @@ pub fn candidates(conn: &Connection, body: &str, project: &str, k: usize) -> Res
         budget_tokens: usize::MAX,
         // Esto compara cuerpos para detectar posibles duplicados, no arma
         // una respuesta para mostrar: sin recorte.
-        extracto: None,
+        excerpt: None,
     };
     // Se llama justo después de un insert, cuando el vector de la memoria
     // recién guardada puede no estar sincronizado todavía: el índice
@@ -97,7 +97,7 @@ pub fn link(conn: &Connection, nueva: i64, vieja: i64) -> Result<()> {
         None => anyhow::bail!("no existe la memoria nueva id:{nueva}"),
         Some("active") => {}
         Some(otro) => anyhow::bail!(
-            "la memoria nueva id:{nueva} no está activa (status={otro}); no puede reemplazar \
+            "la memoria nueva id:{nueva} no está activa (status={otro}); no puede replace_file \
              a otra memoria -- si ya fue superseded, esto formaría un ciclo"
         ),
     }

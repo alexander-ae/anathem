@@ -22,7 +22,7 @@ pub struct Query {
     /// entran más candidatos breves en el mismo presupuesto en vez de pocos
     /// fragmentos completos. `None` conserva el comportamiento de siempre:
     /// el fragmento entero cuenta contra el presupuesto.
-    pub extracto: Option<usize>,
+    pub excerpt: Option<usize>,
 }
 
 impl Default for Query {
@@ -33,7 +33,7 @@ impl Default for Query {
             tags: Vec::new(),
             limit: 10,
             budget_tokens: DEFAULT_BUDGET_TOKENS,
-            extracto: None,
+            excerpt: None,
         }
     }
 }
@@ -80,7 +80,7 @@ fn candidate_rows(
     );
     let mut params: Vec<Value> = vec![Value::Text(match_expr.to_string())];
 
-    sql.push_str(&filtros_de(q, &mut params));
+    sql.push_str(&filters_for(q, &mut params));
     sql.push_str(extra_where);
     sql.push_str(" order by score");
     if let Some(l) = limit {
@@ -114,7 +114,7 @@ fn candidate_rows(
 pub struct Explained {
     pub hit: SearchHit,
     pub bm25: Option<f64>,
-    pub coseno: Option<f32>,
+    pub cosine: Option<f32>,
 }
 
 /// Qué recuperadores están disponibles para esta operación.
@@ -125,33 +125,33 @@ pub struct Explained {
 /// registro de después es justamente la forma de terminar escribiendo
 /// vectores de un paquete caducado. Quien solo busca usa `de_lectura` y no
 /// tiene con qué escribir; quien además guarda usa `de_servidor`, que
-/// recibe el par entero tal como lo entrega `paquete::PaqueteVivo::actual`.
+/// recibe el par entero tal como lo entrega `packstore::PaqueteVivo::actual`.
 pub struct Contexto<'a> {
     pack: Option<&'a Pack>,
-    identidad: Option<&'a crate::vecstore::Identidad>,
-    pub peso_bm25: f64,
+    identidad: Option<&'a crate::vecstore::PackIdentity>,
+    pub bm25_weight: f64,
 }
 
 impl Contexto<'static> {
     /// Búsqueda sin capa vectorial: el comportamiento histórico.
     pub fn solo_bm25() -> Contexto<'static> {
-        Contexto { pack: None, identidad: None, peso_bm25: 1.0 }
+        Contexto { pack: None, identidad: None, bm25_weight: 1.0 }
     }
 }
 
 impl<'a> Contexto<'a> {
     /// Para buscar. Leer con el paquete equivocado da un resultado peor, no
     /// un índice mezclado, así que la lectura no necesita la identidad.
-    pub fn de_lectura(pack: Option<&'a Pack>, peso_bm25: f64) -> Contexto<'a> {
-        Contexto { pack, identidad: None, peso_bm25 }
+    pub fn de_lectura(pack: Option<&'a Pack>, bm25_weight: f64) -> Contexto<'a> {
+        Contexto { pack, identidad: None, bm25_weight }
     }
 
     /// Para el servidor MCP, que busca y también guarda.
     pub fn de_servidor(
-        activo: Option<(&'a Pack, &'a crate::vecstore::Identidad)>,
-        peso_bm25: f64,
+        activo: Option<(&'a Pack, &'a crate::vecstore::PackIdentity)>,
+        bm25_weight: f64,
     ) -> Contexto<'a> {
-        Contexto { pack: activo.map(|(p, _)| p), identidad: activo.map(|(_, i)| i), peso_bm25 }
+        Contexto { pack: activo.map(|(p, _)| p), identidad: activo.map(|(_, i)| i), bm25_weight }
     }
 
     /// El paquete con el que embeber la consulta, si hay.
@@ -161,7 +161,7 @@ impl<'a> Contexto<'a> {
 
     /// El par que exige `vecstore::sincronizar`. `None` en un contexto de
     /// lectura aunque tenga paquete: ahí no hay nada que escribir.
-    pub fn para_escribir(&self) -> Option<(&Pack, &crate::vecstore::Identidad)> {
+    pub fn para_escribir(&self) -> Option<(&Pack, &crate::vecstore::PackIdentity)> {
         match (self.pack, self.identidad) {
             (Some(p), Some(i)) => Some((p, i)),
             _ => None,
@@ -181,7 +181,7 @@ impl<'a> Contexto<'a> {
 /// notaba. El día que alguien agregara un filtro a `Query` y actualizara uno
 /// solo, el lado vectorial habría devuelto memorias que el léxico filtra, y
 /// ningún test lo habría visto.
-pub(crate) fn filtros_de(q: &Query, params: &mut Vec<Value>) -> String {
+pub(crate) fn filters_for(q: &Query, params: &mut Vec<Value>) -> String {
     let mut sql = String::new();
     if let Some(p) = &q.project {
         params.push(Value::Text(p.clone()));
@@ -289,9 +289,9 @@ pub fn run_explained(
             // con apariencia de resultado. Sin señal real, no hay nada que
             // recuperar por vector.
             let nulo = cv.iter().all(|&x| x == 0.0);
-            let vec_hits = if nulo { Vec::new() } else { crate::vecstore::buscar(conn, &cv, q, CANDIDATES)? };
+            let vec_hits = if nulo { Vec::new() } else { crate::vecstore::search_vectors(conn, &cv, q, CANDIDATES)? };
             for a in vec_hits {
-                cosenos.insert(a.memory_id, a.coseno);
+                cosenos.insert(a.memory_id, a.cosine);
                 orden_vec.push(a.memory_id);
                 if !best.contains_key(&a.memory_id) {
                     if let Some(par) = hit_de_chunk(conn, a.chunk_id)? {
@@ -310,7 +310,7 @@ pub fn run_explained(
     let fusionado: Vec<i64> = if orden_vec.is_empty() {
         orden_bm25
     } else {
-        crate::fusion::rrf(&orden_bm25, &orden_vec, ctx.peso_bm25)
+        crate::fusion::rrf(&orden_bm25, &orden_vec, ctx.bm25_weight)
     };
 
     // Las fijadas siguen primero, como siempre: la fusión ordena dentro de
@@ -342,7 +342,7 @@ pub fn run_explained(
         // breves no cambiaría nada. Recortar por caracteres, no bytes: el
         // corpus es en español con acentos y un corte a mitad de un UTF-8
         // rompería el fragmento (ver `chunk::split`).
-        if let Some(n) = q.extracto {
+        if let Some(n) = q.excerpt {
             hit.snippet = hit.snippet.chars().take(n).collect();
         }
         let cost = est_tokens(&hit.title) + est_tokens(&hit.snippet);
@@ -351,8 +351,8 @@ pub fn run_explained(
         }
         spent += cost;
         let bm25 = if hit.score < 0.0 { Some(hit.score) } else { None };
-        let coseno = cosenos.get(&id).copied();
-        out.push(Explained { hit, bm25, coseno });
+        let cosine = cosenos.get(&id).copied();
+        out.push(Explained { hit, bm25, cosine });
     }
     Ok(out)
 }

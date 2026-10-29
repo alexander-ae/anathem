@@ -1,7 +1,7 @@
 //! El export tiene que poder volver: restaurar un respaldo, mudar la memoria
 //! de máquina, sincronizar dos computadoras a mano con git.
 
-use anathem::{db, importar, ingest};
+use anathem::{db, import, ingest};
 use std::path::Path;
 use std::process::Command;
 
@@ -28,28 +28,28 @@ fn una_base_entera_sobrevive_la_vuelta_completa() {
     let origen = d.path().join("origen.db");
     {
         let conn = db::open(&origen).unwrap();
-        ingest::guardar_explicito(&conn, "primera nota con ticket ABC-1", "uno", vec!["alfa".into()])
+        ingest::save_explicit(&conn, "primera nota con ticket ABC-1", "uno", vec!["alfa".into()])
             .unwrap();
-        ingest::guardar_explicito(&conn, "segunda nota del proyecto dos", "dos", vec![]).unwrap();
+        ingest::save_explicit(&conn, "segunda nota del proyecto dos", "dos", vec![]).unwrap();
         // Una cadena de supersession, que es lo que obliga a remapear ids.
-        ingest::guardar_con_tema(&conn, "version vieja del estado", "uno", vec![], Some("estado"), None)
+        ingest::save_with_topic(&conn, "version vieja del estado", "uno", vec![], Some("estado"), None)
             .unwrap();
-        ingest::guardar_con_tema(&conn, "version nueva del estado", "uno", vec![], Some("estado"), None)
+        ingest::save_with_topic(&conn, "version nueva del estado", "uno", vec![], Some("estado"), None)
             .unwrap();
     }
     let exp = d.path().join("exp");
     let (ok, _, err) = mem(&origen, &["export", "--out", exp.to_str().unwrap()]);
     assert!(ok, "export falló: {err}");
 
-    let destino = d.path().join("destino.db");
-    let (ok, out, err) = mem(&destino, &["import", "--desde", exp.to_str().unwrap()]);
+    let target = d.path().join("destino.db");
+    let (ok, out, err) = mem(&target, &["import", "--desde", exp.to_str().unwrap()]);
     assert!(ok, "import falló: {err}");
     assert!(out.contains("importadas 4"), "salida: {out}");
 
-    assert_eq!(conteos(&origen), conteos(&destino), "la base importada tiene que ser equivalente");
+    assert_eq!(conteos(&origen), conteos(&target), "la base importada tiene que ser equivalente");
 
     // Y se puede buscar: los triggers del índice FTS5 corrieron.
-    let (ok, out, _) = mem(&destino, &["search", "segunda nota"]);
+    let (ok, out, _) = mem(&target, &["search", "segunda nota"]);
     assert!(ok);
     assert!(out.contains("segunda nota"), "la búsqueda no encuentra lo importado: {out}");
 }
@@ -60,7 +60,7 @@ fn importar_sobre_una_base_con_contenido_se_rechaza_sin_fusionar() {
     let origen = d.path().join("o.db");
     {
         let conn = db::open(&origen).unwrap();
-        ingest::guardar_explicito(&conn, "algo", "p", vec![]).unwrap();
+        ingest::save_explicit(&conn, "algo", "p", vec![]).unwrap();
     }
     let exp = d.path().join("exp");
     mem(&origen, &["export", "--out", exp.to_str().unwrap()]);
@@ -88,8 +88,8 @@ fn un_archivo_sin_frontmatter_no_rompe_la_importacion() {
         "---\nid: 1\nproject: \"p\"\ndescription: \"un titulo\"\ncreated: \"2026-01-01\"\n---\n\nel cuerpo\n",
     )
     .unwrap();
-    let destino = d.path().join("d.db");
-    let (ok, out, err) = mem(&destino, &["import", "--desde", exp.to_str().unwrap()]);
+    let target = d.path().join("d.db");
+    let (ok, out, err) = mem(&target, &["import", "--desde", exp.to_str().unwrap()]);
     assert!(ok, "{err}");
     assert!(out.contains("importadas 1"), "salida: {out}");
 }
@@ -97,8 +97,8 @@ fn un_archivo_sin_frontmatter_no_rompe_la_importacion() {
 #[test]
 fn se_leen_los_campos_que_el_export_escribe() {
     let txt = "---\nid: 7\nproject: \"api\"\ndescription: \"el titulo\"\ntags: [\"uno\", \"dos\"]\ncreated: \"2026-01-02\"\nupdated: \"2026-01-03\"\nstatus: \"superseded\"\nsource: \"migrated\"\npinned: true\ntopic: \"la-clave\"\next_id: \"ext-9\"\nsupersedes: 3\nevent_start: \"2026-01-01\"\nrefs:\n  - kind: \"ticket\"\n    value: \"ABC-1\"\n---\n\nel cuerpo de la memoria\n";
-    let m = importar::leer(txt).expect("tenía que leerse");
-    assert_eq!(m.id_viejo, Some(7));
+    let m = import::parse(txt).expect("tenía que leerse");
+    assert_eq!(m.old_id, Some(7));
     assert_eq!(m.project, "api");
     assert_eq!(m.title, "el titulo");
     assert_eq!(m.tags, vec!["uno", "dos"]);
@@ -113,7 +113,7 @@ fn se_leen_los_campos_que_el_export_escribe() {
     assert_eq!(m.body, "el cuerpo de la memoria");
 
     // Sin frontmatter no es una memoria.
-    assert!(importar::leer("solo texto suelto").is_none());
+    assert!(import::parse("solo texto suelto").is_none());
     // Con frontmatter pero sin proyecto tampoco.
-    assert!(importar::leer("---\nid: 1\n---\n\ncuerpo\n").is_none());
+    assert!(import::parse("---\nid: 1\n---\n\ncuerpo\n").is_none());
 }

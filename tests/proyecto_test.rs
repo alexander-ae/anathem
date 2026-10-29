@@ -1,4 +1,4 @@
-use anathem::proyecto::{detectar, resolver, SIN_PROYECTO};
+use anathem::project::{detectar, resolve, SIN_PROYECTO};
 use std::fs;
 use std::path::Path;
 
@@ -84,12 +84,12 @@ fn fuera_de_un_repo_no_detecta_nada() {
 fn un_project_explicito_le_gana_a_la_deteccion() {
     let d = tempfile::tempdir().unwrap();
     repo(d.path(), Some("git@host:g/detectado.git"));
-    assert_eq!(resolver(Some("elegido".into()), d.path()), "elegido");
-    assert_eq!(resolver(None, d.path()), "detectado");
+    assert_eq!(resolve(Some("elegido".into()), d.path()), "elegido");
+    assert_eq!(resolve(None, d.path()), "detectado");
 }
 
 #[test]
 fn sin_repo_y_sin_pedido_queda_el_generico() {
     let d = tempfile::tempdir().unwrap();
-    assert_eq!(resolver(None, d.path()), SIN_PROYECTO);
+    assert_eq!(resolve(None, d.path()), SIN_PROYECTO);
 }

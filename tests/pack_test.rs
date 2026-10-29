@@ -11,7 +11,7 @@ fn abre_y_reporta_sus_metadatos() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
-    let p = Pack::abrir(&r).unwrap();
+    let p = Pack::open_pack(&r).unwrap();
     assert_eq!(p.nombre(), "mini-es");
     assert_eq!(p.dims(), 4);
 }
@@ -21,7 +21,7 @@ fn un_solo_token_da_su_eje() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
-    let p = Pack::abrir(&r).unwrap();
+    let p = Pack::open_pack(&r).unwrap();
     let v = p.embeber("hola").unwrap();
     assert!((v[0] - 1.0).abs() < 1e-5, "esperaba el eje 0, salió {v:?}");
     assert!(v[1].abs() < 1e-5 && v[2].abs() < 1e-5 && v[3].abs() < 1e-5);
@@ -32,7 +32,7 @@ fn dos_tokens_promedian_sus_filas() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
-    let p = Pack::abrir(&r).unwrap();
+    let p = Pack::open_pack(&r).unwrap();
     let v = p.embeber("hola mundo").unwrap();
     let esperado = 1.0f32 / 2f32.sqrt();
     assert!((v[0] - esperado).abs() < 1e-5, "salió {v:?}");
@@ -46,7 +46,7 @@ fn el_sufijo_se_resegmenta_en_vez_de_caer_en_desconocido() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
-    let p = Pack::abrir(&r).unwrap();
+    let p = Pack::open_pack(&r).unwrap();
     let v = p.embeber("mundos").unwrap();
     assert!(v[1] > 0.1 && v[2] > 0.1, "esperaba mezcla de ▁mundo y s, salió {v:?}");
 }
@@ -56,7 +56,7 @@ fn texto_vacio_da_un_vector_nulo_sin_fallar() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
-    let p = Pack::abrir(&r).unwrap();
+    let p = Pack::open_pack(&r).unwrap();
     let v = p.embeber("").unwrap();
     assert_eq!(v.len(), 4);
     assert!(cos(&v, &v) < 1e-9, "esperaba el vector nulo, salió {v:?}");
@@ -67,7 +67,7 @@ fn rechaza_un_archivo_sin_la_marca() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("basura.anathem-pack");
     std::fs::write(&r, b"esto no es un paquete en absoluto").unwrap();
-    let e = Pack::abrir(&r).unwrap_err().to_string();
+    let e = Pack::open_pack(&r).unwrap_err().to_string();
     assert!(e.contains("ANPK"), "el error debe nombrar la marca: {e}");
 }
 
@@ -77,7 +77,7 @@ fn rechaza_una_version_que_no_entiende() {
     let r = d.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
     apoyo::corromper(&r, 4, 99); // el primer byte de la versión
-    let e = Pack::abrir(&r).unwrap_err().to_string();
+    let e = Pack::open_pack(&r).unwrap_err().to_string();
     assert!(e.contains("versión"), "el error debe nombrar la versión: {e}");
 }
 
@@ -88,7 +88,7 @@ fn rechaza_un_archivo_truncado() {
     apoyo::escribir_pack_mini(&r, "mini-es");
     let b = std::fs::read(&r).unwrap();
     std::fs::write(&r, &b[..b.len() - 5]).unwrap();
-    let e = Pack::abrir(&r).unwrap_err().to_string();
+    let e = Pack::open_pack(&r).unwrap_err().to_string();
     assert!(e.contains("truncad"), "el error debe nombrar la causa: {e}");
     assert!(e.contains("mini.anathem-pack"), "el error debe nombrar el archivo: {e}");
 }
@@ -108,7 +108,7 @@ fn rechaza_un_largo_de_tokenizador_corrupto_sin_paniquear() {
     for i in 0..8 {
         apoyo::corromper(&r, base + i, 0xFF);
     }
-    let e = Pack::abrir(&r).unwrap_err().to_string();
+    let e = Pack::open_pack(&r).unwrap_err().to_string();
     assert!(e.contains("tokenizador"), "el error debe nombrar la causa: {e}");
     assert!(e.contains("mini.anathem-pack"), "el error debe nombrar el archivo: {e}");
 }
@@ -136,7 +136,7 @@ fn rechaza_una_tabla_mas_chica_que_el_vocabulario() {
     let d = tempfile::tempdir().unwrap();
     let r = d.path().join("corto.anathem-pack");
     apoyo::escribir_pack_filas(&r, "corto-es", 4, &[vec![0, 0, 0, 0], vec![10, 0, 0, 0]]);
-    let e = Pack::abrir(&r).unwrap_err().to_string();
+    let e = Pack::open_pack(&r).unwrap_err().to_string();
     assert!(e.contains("tokenizador"), "el error debe explicar la incoherencia: {e}");
     assert!(e.contains("corto.anathem-pack"), "el error debe nombrar el archivo: {e}");
 }
@@ -160,7 +160,7 @@ fn acepta_un_added_token_con_id_fuera_de_la_tabla() {
         &[vec![0, 0, 0, 0], vec![10, 0, 0, 0], vec![0, 10, 0, 0], vec![0, 0, 10, 0]],
         apoyo::TOKENIZER_CON_AGREGADO_FUERA_DE_RANGO,
     );
-    let p = Pack::abrir(&r).expect("un added_token fuera de rango no invalida la tabla");
+    let p = Pack::open_pack(&r).expect("un added_token fuera de rango no invalida la tabla");
     assert_eq!(p.nombre(), "agregados-es");
     // Y sigue embebiendo igual que el fixture de siempre.
     let v = p.embeber("hola").unwrap();

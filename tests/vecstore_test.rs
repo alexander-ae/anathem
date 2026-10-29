@@ -20,7 +20,7 @@ fn fixture() -> (tempfile::TempDir, Connection, Pack) {
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     let r = dir.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
-    let p = Pack::abrir(&r).unwrap();
+    let p = Pack::open_pack(&r).unwrap();
     (dir, conn, p)
 }
 
@@ -31,7 +31,7 @@ fn sincronizar_llena_los_huecos_y_es_idempotente() {
     sembrar(&conn, "mundo");
     assert_eq!(apoyo::registrar_y_sincronizar(&conn, &p).escritos(), 2);
     assert_eq!(apoyo::registrar_y_sincronizar(&conn, &p).escritos(), 0, "no debe reembeber");
-    assert_eq!(vecstore::cobertura(&conn, p.dims()).unwrap(), (2, 2));
+    assert_eq!(vecstore::coverage(&conn, p.dims()).unwrap(), (2, 2));
 }
 
 #[test]
@@ -39,8 +39,8 @@ fn cobertura_muestra_el_hueco_de_lo_guardado_sin_paquete() {
     let (_d, conn, p) = fixture();
     sembrar(&conn, "hola");
     apoyo::registrar_y_sincronizar(&conn, &p);
-    sembrar(&conn, "mundo"); // guardada después, sin sincronizar
-    assert_eq!(vecstore::cobertura(&conn, p.dims()).unwrap(), (1, 2));
+    sembrar(&conn, "mundo"); // guardada después, sin sync
+    assert_eq!(vecstore::coverage(&conn, p.dims()).unwrap(), (1, 2));
 }
 
 #[test]
@@ -51,9 +51,9 @@ fn buscar_ordena_por_coseno() {
     apoyo::registrar_y_sincronizar(&conn, &p);
     let q = search::Query { text: String::new(), ..Default::default() };
     let v = p.embeber("hola").unwrap();
-    let r = vecstore::buscar(&conn, &v, &q, 10).unwrap();
+    let r = vecstore::search_vectors(&conn, &v, &q, 10).unwrap();
     assert_eq!(r[0].memory_id, hola, "la más parecida debe ir primera");
-    assert!(r[0].coseno > r[1].coseno);
+    assert!(r[0].cosine > r[1].cosine);
     assert!(r.iter().any(|a| a.memory_id == mundo));
 }
 
@@ -72,7 +72,7 @@ fn buscar_respeta_el_filtro_de_proyecto() {
     }).unwrap();
     apoyo::registrar_y_sincronizar(&conn, &p);
     let q = search::Query { project: Some("uno".into()), ..Default::default() };
-    let r = vecstore::buscar(&conn, &p.embeber("hola").unwrap(), &q, 10).unwrap();
+    let r = vecstore::search_vectors(&conn, &p.embeber("hola").unwrap(), &q, 10).unwrap();
     assert_eq!(r.len(), 1);
     assert_eq!(r[0].memory_id, a);
 }
@@ -83,23 +83,23 @@ fn buscar_ignora_las_memorias_no_activas() {
     let id = sembrar(&conn, "hola");
     apoyo::registrar_y_sincronizar(&conn, &p);
     conn.execute("update memories set status='forgotten' where id=?1", [id]).unwrap();
-    let r = vecstore::buscar(&conn, &p.embeber("hola").unwrap(), &search::Query::default(), 10).unwrap();
+    let r = vecstore::search_vectors(&conn, &p.embeber("hola").unwrap(), &search::Query::default(), 10).unwrap();
     assert!(r.is_empty(), "una memoria olvidada no puede salir en la búsqueda vectorial");
 }
 
 #[test]
 fn el_registro_del_paquete_va_y_vuelve() {
     let (_d, conn, _p) = fixture();
-    assert!(vecstore::pack_registrado(&conn).unwrap().is_none());
-    vecstore::registrar_pack(&conn, "en-es", "abc123", 256).unwrap();
+    assert!(vecstore::registered_pack(&conn).unwrap().is_none());
+    vecstore::register_pack(&conn, "en-es", "abc123", 256).unwrap();
     assert_eq!(
-        vecstore::pack_registrado(&conn).unwrap(),
+        vecstore::registered_pack(&conn).unwrap(),
         Some(("en-es".into(), "abc123".into(), 256))
     );
     // registrar de nuevo pisa, no duplica
-    vecstore::registrar_pack(&conn, "en-es-pt", "def456", 256).unwrap();
+    vecstore::register_pack(&conn, "en-es-pt", "def456", 256).unwrap();
     assert_eq!(
-        vecstore::pack_registrado(&conn).unwrap(),
+        vecstore::registered_pack(&conn).unwrap(),
         Some(("en-es-pt".into(), "def456".into(), 256))
     );
 }
@@ -109,10 +109,10 @@ fn olvidar_el_paquete_borra_registro_y_vectores() {
     let (_d, conn, p) = fixture();
     sembrar(&conn, "hola");
     apoyo::registrar_y_sincronizar(&conn, &p);
-    vecstore::registrar_pack(&conn, "mini-es", "abc", 4).unwrap();
-    vecstore::olvidar_pack(&conn).unwrap();
-    assert!(vecstore::pack_registrado(&conn).unwrap().is_none());
-    assert_eq!(vecstore::cobertura(&conn, p.dims()).unwrap(), (0, 1));
+    vecstore::register_pack(&conn, "mini-es", "abc", 4).unwrap();
+    vecstore::forget_pack(&conn).unwrap();
+    assert!(vecstore::registered_pack(&conn).unwrap().is_none());
+    assert_eq!(vecstore::coverage(&conn, p.dims()).unwrap(), (0, 1));
 }
 
 // Compañera del test de abajo, para Windows: `#[cfg(unix)]` sacaría el test
@@ -185,9 +185,9 @@ fn editar_una_memoria_invalida_sus_vectores() {
 
     let conn = rusqlite::Connection::open(&db).unwrap();
     assert_eq!(
-        vecstore::cobertura(&conn, p.dims()).unwrap(),
+        vecstore::coverage(&conn, p.dims()).unwrap(),
         (1, 1),
-        "después de `mem edit` la memoria tiene que quedar con su vector nuevo, \
+        "después de `mem edit` la memoria tiene que quedar con su vector new_id, \
          no sin vectores hasta el próximo `mem reindex`"
     );
     // Y el vector tiene que ser el del texto NUEVO: "mundo" es el eje 1.
@@ -235,14 +235,14 @@ fn buscar_colapsa_varios_fragmentos_de_la_misma_memoria() {
         .unwrap();
 
     let q = search::Query::default();
-    let r = vecstore::buscar(&conn, &p.embeber("hola").unwrap(), &q, 10).unwrap();
-    let aciertos: Vec<&vecstore::Acierto> = r.iter().filter(|a| a.memory_id == id).collect();
+    let r = vecstore::search_vectors(&conn, &p.embeber("hola").unwrap(), &q, 10).unwrap();
+    let aciertos: Vec<&vecstore::VectorHit> = r.iter().filter(|a| a.memory_id == id).collect();
     assert_eq!(aciertos.len(), 1, "la memoria debe aparecer una sola vez, no una por fragmento");
     assert_eq!(
         aciertos[0].chunk_id, esperado_id,
         "debe quedarse con el fragmento más parecido, no con cualquiera"
     );
-    assert!(aciertos[0].coseno > 0.0, "el fragmento elegido debe tener coseno positivo con \"hola\"");
+    assert!(aciertos[0].cosine > 0.0, "el fragmento elegido debe tener coseno positivo con \"hola\"");
 }
 
 #[test]
@@ -254,7 +254,7 @@ fn pack_registrado_propaga_errores_reales_en_vez_de_silenciarlos() {
     // la tabla `meta`) y confirmamos que se propaga en vez de esconderse.
     let (_d, conn, _p) = fixture();
     conn.execute("drop table meta", []).unwrap();
-    let err = vecstore::pack_registrado(&conn).unwrap_err();
+    let err = vecstore::registered_pack(&conn).unwrap_err();
     assert!(
         err.to_string().contains("no such table"),
         "un error real de sqlite no debe convertirse en None; error visto: {err}"
@@ -289,17 +289,17 @@ fn sincronizar_no_escribe_un_solo_vector_con_una_identidad_caducada() {
     let (_d, conn, p) = fixture();
     sembrar(&conn, "hola");
     let caducada = ("mini-es".to_string(), "sha-de-a".to_string(), p.dims());
-    vecstore::registrar_pack(&conn, "otro-es", "sha-de-b", p.dims()).unwrap();
+    vecstore::register_pack(&conn, "otro-es", "sha-de-b", p.dims()).unwrap();
 
-    let r = vecstore::sincronizar(&conn, &p, &caducada).unwrap();
+    let r = vecstore::sync(&conn, &p, &caducada).unwrap();
 
     assert_eq!(
         r,
-        vecstore::Sincronizacion::Abandonada(0),
+        vecstore::SyncOutcome::Abandonada(0),
         "con la identidad caducada el lote se abandona, no se escribe"
     );
     assert_eq!(
-        vecstore::cobertura(&conn, p.dims()).unwrap(),
+        vecstore::coverage(&conn, p.dims()).unwrap(),
         (0, 1),
         "no puede haber entrado un solo vector del paquete que ya no está registrado"
     );
@@ -322,7 +322,7 @@ fn sincronizar_abandona_a_mitad_de_camino_si_el_paquete_cambia_entre_lotes() {
     let total = 300usize; // más de un lote (el lote son 256)
     sembrar_pendientes(&conn, total);
     let identidad = ("mini-es".to_string(), "sha-de-a".to_string(), p.dims());
-    vecstore::registrar_pack(&conn, &identidad.0, &identidad.1, identidad.2).unwrap();
+    vecstore::register_pack(&conn, &identidad.0, &identidad.1, identidad.2).unwrap();
     conn.execute_batch(
         "create trigger cambia_el_paquete after insert on chunk_vectors
          begin
@@ -331,7 +331,7 @@ fn sincronizar_abandona_a_mitad_de_camino_si_el_paquete_cambia_entre_lotes() {
     )
     .unwrap();
 
-    let r = vecstore::sincronizar(&conn, &p, &identidad).unwrap();
+    let r = vecstore::sync(&conn, &p, &identidad).unwrap();
 
     assert!(r.abandonada(), "el cambio de paquete a mitad de camino tiene que abandonar: {r:?}");
     let escritos: i64 =
@@ -354,9 +354,9 @@ fn el_lado_vectorial_respeta_los_mismos_filtros_que_el_lexico() {
     let db = d.path().join("mem.db");
     let conn = anathem::db::open(&db).unwrap();
 
-    anathem::ingest::guardar_explicito(&conn, "nota del proyecto uno", "uno", vec!["alfa".into()])
+    anathem::ingest::save_explicit(&conn, "nota del proyecto uno", "uno", vec!["alfa".into()])
         .unwrap();
-    anathem::ingest::guardar_explicito(&conn, "nota del proyecto dos", "dos", vec!["beta".into()])
+    anathem::ingest::save_explicit(&conn, "nota del proyecto dos", "dos", vec!["beta".into()])
         .unwrap();
 
     // Vectores iguales para todos: así el coseno no desempata y lo único que
@@ -383,9 +383,9 @@ fn el_lado_vectorial_respeta_los_mismos_filtros_que_el_lexico() {
         tags: vec![],
         limit: 10,
         budget_tokens: 10_000,
-        extracto: None,
+        excerpt: None,
     };
-    let r = anathem::vecstore::buscar(&conn, &consulta, &con_proyecto, 50).unwrap();
+    let r = anathem::vecstore::search_vectors(&conn, &consulta, &con_proyecto, 50).unwrap();
     assert_eq!(r.len(), 1, "el filtro de proyecto tiene que valer también acá: {r:?}");
 
     let con_tag = anathem::search::Query {
@@ -394,9 +394,9 @@ fn el_lado_vectorial_respeta_los_mismos_filtros_que_el_lexico() {
         tags: vec!["beta".into()],
         limit: 10,
         budget_tokens: 10_000,
-        extracto: None,
+        excerpt: None,
     };
-    let r = anathem::vecstore::buscar(&conn, &consulta, &con_tag, 50).unwrap();
+    let r = anathem::vecstore::search_vectors(&conn, &consulta, &con_tag, 50).unwrap();
     assert_eq!(r.len(), 1, "el filtro de tags tiene que valer también acá: {r:?}");
 
     // Y sin filtros, los dos.
@@ -406,8 +406,8 @@ fn el_lado_vectorial_respeta_los_mismos_filtros_que_el_lexico() {
         tags: vec![],
         limit: 10,
         budget_tokens: 10_000,
-        extracto: None,
+        excerpt: None,
     };
-    let r = anathem::vecstore::buscar(&conn, &consulta, &sin, 50).unwrap();
+    let r = anathem::vecstore::search_vectors(&conn, &consulta, &sin, 50).unwrap();
     assert_eq!(r.len(), 2, "sin filtros tienen que venir las dos: {r:?}");
 }

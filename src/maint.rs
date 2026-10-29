@@ -76,7 +76,7 @@ pub struct Tema {
 
 /// Las claves de tema que existen, ordenadas por proyecto y clave. La misma
 /// clave en dos proyectos son dos filas, porque son dos temas.
-pub fn temas(conn: &Connection) -> Result<Vec<Tema>> {
+pub fn topics(conn: &Connection) -> Result<Vec<Tema>> {
     let mut stmt = conn.prepare(
         "select project, topic, count(*),
                 max(case when status = 'active' then id end)

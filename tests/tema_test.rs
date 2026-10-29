@@ -233,8 +233,8 @@ fn al_reemplazar_no_se_listan_otras_claves() {
 fn la_busqueda_vectorial_tampoco_devuelve_la_memoria_reemplazada() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    let vieja = ingest::guardar_con_tema(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
-    let nueva = ingest::guardar_con_tema(&conn, PAGOS_NUEVO, "p", vec![], Some("pagos"), None).unwrap();
+    let vieja = ingest::save_with_topic(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
+    let nueva = ingest::save_with_topic(&conn, PAGOS_NUEVO, "p", vec![], Some("pagos"), None).unwrap();
 
     // El mismo vector para los fragmentos de las dos: si alguna se filtra, es
     // por el estado y no por el parecido.
@@ -249,7 +249,7 @@ fn la_busqueda_vectorial_tampoco_devuelve_la_memoria_reemplazada() {
     }
 
     let q = search::Query { text: "pagos".into(), ..Default::default() };
-    let hits = anathem::vecstore::buscar(&conn, &[1.0, 0.0], &q, 10).unwrap();
+    let hits = anathem::vecstore::search_vectors(&conn, &[1.0, 0.0], &q, 10).unwrap();
     let ids: Vec<i64> = hits.iter().map(|h| h.memory_id).collect();
     assert_eq!(ids, vec![nueva.id], "solo la vigente puede salir por vector: {ids:?}");
 }
@@ -260,7 +260,7 @@ fn la_busqueda_vectorial_tampoco_devuelve_la_memoria_reemplazada() {
 fn si_el_enlace_falla_no_queda_la_memoria_nueva_a_medias() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    let primera = ingest::guardar_con_tema(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
+    let primera = ingest::save_with_topic(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
     // Un trigger que aborta el supersede simula cualquier falla del enlace.
     conn.execute_batch(
         "create trigger no_superseder before update of status on memories
@@ -268,7 +268,7 @@ fn si_el_enlace_falla_no_queda_la_memoria_nueva_a_medias() {
     )
     .unwrap();
 
-    let err = ingest::guardar_con_tema(&conn, PAGOS_NUEVO, "p", vec![], Some("pagos"), None);
+    let err = ingest::save_with_topic(&conn, PAGOS_NUEVO, "p", vec![], Some("pagos"), None);
     assert!(err.is_err(), "la falla del enlace tiene que propagarse");
 
     let n: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
@@ -745,9 +745,9 @@ fn el_indice_unico_no_molesta_a_lo_que_no_es_la_vigente() {
 fn revivir_una_olvidada_cuando_ya_hay_vigente_falla_en_vez_de_dejar_dos_activas() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    let vieja = ingest::guardar_con_tema(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
+    let vieja = ingest::save_with_topic(&conn, PAGOS_VIEJO, "p", vec![], Some("pagos"), None).unwrap();
     anathem::maint::forget(&conn, vieja.id).unwrap();
-    ingest::guardar_con_tema(&conn, PAGOS_NUEVO, "p", vec![], Some("pagos"), None).unwrap();
+    ingest::save_with_topic(&conn, PAGOS_NUEVO, "p", vec![], Some("pagos"), None).unwrap();
 
     let r = conn.execute("update memories set status = 'active' where id = ?1", [vieja.id]);
     assert!(r.is_err(), "revivir la olvidada habría dejado dos activas para la clave");

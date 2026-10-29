@@ -30,7 +30,7 @@
 //! "sincronizado" y la búsqueda no encuentra el texto nuevo. Comprobarlo
 //! (`integrity-check`) es un `insert`, y doctor no escribe.
 
-use crate::{config, pack::Pack, paquete, tags, vecstore};
+use crate::{config, pack::Pack, packstore, tags, vecstore};
 use rusqlite::{Connection, OpenFlags};
 use std::path::Path;
 
@@ -59,7 +59,7 @@ pub const SALIDA_ROTO: i32 = 2;
 const EJEMPLOS: usize = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Nivel {
+pub enum Level {
     /// Todo en orden.
     Bien,
     /// Información: algo que conviene saber y que no es un problema.
@@ -70,20 +70,20 @@ pub enum Nivel {
     Mal,
 }
 
-impl Nivel {
+impl Level {
     fn simbolo(self) -> &'static str {
         match self {
-            Nivel::Bien => "✓",
-            Nivel::Info => "i",
-            Nivel::Aviso => "!",
-            Nivel::Mal => "✗",
+            Level::Bien => "✓",
+            Level::Info => "i",
+            Level::Aviso => "!",
+            Level::Mal => "✗",
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Linea {
-    pub nivel: Nivel,
+    pub nivel: Level,
     pub texto: String,
 }
 
@@ -97,20 +97,20 @@ impl Seccion {
     fn nueva(titulo: &'static str) -> Self {
         Seccion { titulo, lineas: Vec::new() }
     }
-    fn agregar(&mut self, nivel: Nivel, texto: impl Into<String>) {
+    fn agregar(&mut self, nivel: Level, texto: impl Into<String>) {
         self.lineas.push(Linea { nivel, texto: texto.into() });
     }
     fn bien(&mut self, texto: impl Into<String>) {
-        self.agregar(Nivel::Bien, texto);
+        self.agregar(Level::Bien, texto);
     }
     fn info(&mut self, texto: impl Into<String>) {
-        self.agregar(Nivel::Info, texto);
+        self.agregar(Level::Info, texto);
     }
     fn aviso(&mut self, texto: impl Into<String>) {
-        self.agregar(Nivel::Aviso, texto);
+        self.agregar(Level::Aviso, texto);
     }
     fn mal(&mut self, texto: impl Into<String>) {
-        self.agregar(Nivel::Mal, texto);
+        self.agregar(Level::Mal, texto);
     }
 }
 
@@ -120,18 +120,18 @@ pub struct Informe {
 }
 
 impl Informe {
-    fn contar(&self, nivel: Nivel) -> usize {
+    fn contar(&self, nivel: Level) -> usize {
         self.secciones.iter().flat_map(|s| &s.lineas).filter(|l| l.nivel == nivel).count()
     }
 
     /// Cuántas comprobaciones salieron mal. Es lo que decide el código de
     /// salida: los avisos y la información no cuentan.
     pub fn problemas(&self) -> usize {
-        self.contar(Nivel::Mal)
+        self.contar(Level::Mal)
     }
 
     pub fn avisos(&self) -> usize {
-        self.contar(Nivel::Aviso)
+        self.contar(Level::Aviso)
     }
 
     pub fn render(&self) -> String {
@@ -261,7 +261,7 @@ fn atrapar(s: &mut Seccion, que: &str, f: impl FnOnce(&mut Seccion) -> anyhow::R
 /// toma locks ni toca el WAL. Si el `-wal` existe, hay alguien escribiendo o
 /// quedó una escritura sin consolidar, y ignorarlo mostraría una foto
 /// vieja: ahí se abre normal, que lo lee y no crea nada nuevo.
-fn abrir_solo_lectura(db: &Path) -> rusqlite::Result<Connection> {
+fn open_read_only(db: &Path) -> rusqlite::Result<Connection> {
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
@@ -303,7 +303,7 @@ fn base(db: &Path) -> (Seccion, Option<Connection>) {
     }
     // Solo lectura, y a propósito no `db::open`: ver la documentación del
     // módulo.
-    let conn = match abrir_solo_lectura(db) {
+    let conn = match open_read_only(db) {
         Ok(c) => c,
         Err(e) => {
             s.mal(format!("no se pudo abrir {}: {e}", db.display()));
@@ -316,7 +316,7 @@ fn base(db: &Path) -> (Seccion, Option<Connection>) {
     match entero(&conn, "select count(*) from sqlite_master where name = 'memories'") {
         Err(e) => {
             s.mal(format!(
-                "{} no se pudo leer como base SQLite: {e}. ¿Es el archivo correcto? \
+                "{} no se pudo parse como base SQLite: {e}. ¿Es el archivo correcto? \
                  Si está corrupto, restaurá una copia.",
                 db.display()
             ));
@@ -331,11 +331,11 @@ fn base(db: &Path) -> (Seccion, Option<Connection>) {
         }
         Ok(_) => s.bien(format!("{} abre bien", db.display())),
     }
-    comprobar_base(&conn, &mut s);
+    check_database(&conn, &mut s);
     (s, Some(conn))
 }
 
-fn comprobar_base(conn: &Connection, s: &mut Seccion) {
+fn check_database(conn: &Connection, s: &mut Seccion) {
     match tablas_vectoriales_ausentes(conn) {
         Ok(v) if !v.is_empty() => s.info(format!(
             "la base es anterior a la capa vectorial (faltan las tablas {}); se actualiza \
@@ -349,7 +349,7 @@ fn comprobar_base(conn: &Connection, s: &mut Seccion) {
     atrapar(s, "el índice FTS5", |s| indice_fts(conn, s));
     atrapar(s, "los huérfanos", |s| huerfanos(conn, s));
     atrapar(s, "las cadenas de supersession", |s| supersession(conn, s));
-    atrapar(s, "las claves de tema", |s| claves_de_tema(conn, s));
+    atrapar(s, "las claves de tema", |s| topic_keys(conn, s));
 }
 
 fn conteos(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
@@ -465,16 +465,16 @@ fn supersession(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn claves_de_tema(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
+fn topic_keys(conn: &Connection, s: &mut Seccion) -> anyhow::Result<()> {
     // Una base de antes de las claves de tema no tiene la columna, y no hay
     // nada que decir de un invariante que todavía no existe. No se agrega
     // acá: arreglarlo es cosa de `db::open`, que lo hace al primer comando
     // que escribe.
-    let tiene_columna = entero(
+    let has_column = entero(
         conn,
         "select count(*) from pragma_table_info('memories') where name = 'topic'",
     )? > 0;
-    if !tiene_columna {
+    if !has_column {
         s.info(
             "la base es anterior a las claves de tema; se actualiza sola la próxima vez \
              que un comando la abra para escribir",
@@ -512,7 +512,7 @@ fn vectorial(conn: &Connection, dir: &Path) -> Seccion {
         laterales(&mut s, dir);
         return s;
     }
-    match vecstore::pack_registrado(conn) {
+    match vecstore::registered_pack(conn) {
         Err(e) => s.mal(format!("no se pudo leer el paquete registrado: {e:#}")),
         Ok(None) => s.info(
             "sin paquete de vocabulario: la búsqueda es léxica (bm25), que es el modo \
@@ -521,7 +521,7 @@ fn vectorial(conn: &Connection, dir: &Path) -> Seccion {
         Ok(Some((nombre, _sha, dims))) => {
             s.bien(format!("paquete {nombre}, {dims} dimensiones"));
             archivo_del_paquete(&mut s, dir, &nombre, dims);
-            atrapar(&mut s, "la cobertura", |s| cobertura(conn, s, dims));
+            atrapar(&mut s, "la cobertura", |s| coverage(conn, s, dims));
         }
     }
     // La marca de instalación a medias es de la base, no del archivo: se
@@ -539,34 +539,34 @@ fn vectorial(conn: &Connection, dir: &Path) -> Seccion {
 }
 
 fn archivo_del_paquete(s: &mut Seccion, dir: &Path, nombre: &str, dims: usize) {
-    let ruta = paquete::ruta(dir, nombre);
-    if !ruta.is_file() {
+    let pack_path = packstore::pack_path(dir, nombre);
+    if !pack_path.is_file() {
         s.mal(format!(
             "falta el archivo {}: la búsqueda está degradada a bm25. Reinstalalo con \
              `mem model install <archivo>`",
-            ruta.display()
+            pack_path.display()
         ));
         return;
     }
-    match Pack::abrir(&ruta) {
+    match Pack::open_pack(&pack_path) {
         Err(e) => s.mal(format!(
-            "el archivo {} no se pudo abrir ({e:#}): la búsqueda está degradada a bm25. \
+            "el archivo {} no se pudo open_pack ({e:#}): la búsqueda está degradada a bm25. \
              Reinstalalo con `mem model install <archivo>`",
-            ruta.display()
+            pack_path.display()
         )),
         Ok(p) if p.nombre() != nombre || p.dims() != dims => s.aviso(format!(
             "el archivo {} es el paquete {} ({} dimensiones) y la base indexó con {nombre} \
              ({dims} dimensiones): la próxima búsqueda reindexa",
-            ruta.display(),
+            pack_path.display(),
             p.nombre(),
             p.dims()
         )),
-        Ok(_) => s.bien(format!("archivo presente y legible: {}", ruta.display())),
+        Ok(_) => s.bien(format!("archivo presente y legible: {}", pack_path.display())),
     }
 }
 
-fn cobertura(conn: &Connection, s: &mut Seccion, dims: usize) -> anyhow::Result<()> {
-    let (con, tot) = vecstore::cobertura(conn, dims)?;
+fn coverage(conn: &Connection, s: &mut Seccion, dims: usize) -> anyhow::Result<()> {
+    let (con, tot) = vecstore::coverage(conn, dims)?;
     let vectores = entero(conn, "select count(*) from chunk_vectors")? as usize;
     let inservibles = vectores.saturating_sub(con);
     let nota = if inservibles > 0 {
@@ -578,7 +578,7 @@ fn cobertura(conn: &Connection, s: &mut Seccion, dims: usize) -> anyhow::Result<
         s.bien(format!("cobertura: {con}/{tot} fragmentos con vector usable{nota}"));
     } else {
         s.mal(format!(
-            "cobertura: {con}/{tot} fragmentos con vector usable; faltan {}{nota}. \
+            "coverage: {con}/{tot} fragmentos con vector usable; faltan {}{nota}. \
              Corré `mem reindex`",
             tot - con
         ));
@@ -587,10 +587,10 @@ fn cobertura(conn: &Connection, s: &mut Seccion, dims: usize) -> anyhow::Result<
 }
 
 /// Restos de una instalación interrumpida en el directorio de paquetes: el
-/// archivo que `paquete::reemplazar` aparta mientras pone el nuevo
-/// (`*.reemplazando-*`) y el temporal de `paquete::instalar` (`.instalando-*`).
+/// archivo que `packstore::reemplazar` aparta mientras pone el nuevo
+/// (`*.reemplazando-*`) y el temporal de `packstore::instalar` (`.instalando-*`).
 fn laterales(s: &mut Seccion, dir: &Path) {
-    let carpeta = paquete::directorio(dir);
+    let carpeta = packstore::packs_dir(dir);
     let Ok(entradas) = std::fs::read_dir(&carpeta) else {
         return;
     };
@@ -615,16 +615,16 @@ fn laterales(s: &mut Seccion, dir: &Path) {
 fn configuracion(dir: &Path) -> Seccion {
     let mut s = Seccion::nueva("Configuración");
 
-    let ruta = dir.join("config.json");
+    let pack_path = dir.join("config.json");
     // `cargar` falla ante un archivo inválido: acá se atrapa y se reporta.
     match config::cargar(dir) {
         Ok(c) => {
             let valores = format!(
                 "peso_bm25={:?}, candidatos={}, extracto={}",
-                c.peso_bm25, c.candidatos, c.extracto
+                c.bm25_weight, c.candidates, c.excerpt
             );
-            if ruta.exists() {
-                s.bien(format!("{} válido: {valores}", ruta.display()));
+            if pack_path.exists() {
+                s.bien(format!("{} válido: {valores}", pack_path.display()));
             } else {
                 s.bien(format!("sin config.json: valores por defecto ({valores})"));
             }
@@ -635,11 +635,11 @@ fn configuracion(dir: &Path) -> Seccion {
         )),
     }
 
-    let ruta = dir.join("tags.json");
+    let pack_path = dir.join("tags.json");
     match tags::load_rules(Some(dir)) {
         Ok(reglas) => {
-            if ruta.exists() {
-                s.bien(format!("{} válido: {} reglas", ruta.display(), reglas.len()));
+            if pack_path.exists() {
+                s.bien(format!("{} válido: {} reglas", pack_path.display(), reglas.len()));
             } else {
                 s.bien(format!(
                     "sin tags.json: taxonomía por defecto ({} reglas)",

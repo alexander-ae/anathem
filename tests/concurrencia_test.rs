@@ -135,9 +135,9 @@ fn buscar_no_falla_aunque_no_pueda_reindexar() {
     // devuelve EISDIR —y ENOTEMPTY si el kernel llegara a mirar el contenido
     // primero— también para root. Ningún uid puede reemplazar un directorio
     // poblado por un archivo; no es una comprobación de permisos.
-    let destino = paquetes.join("otro-es.anathem-pack");
-    std::fs::create_dir(&destino).unwrap();
-    std::fs::write(destino.join("ocupado"), b"x").unwrap();
+    let target = paquetes.join("otro-es.anathem-pack");
+    std::fs::create_dir(&target).unwrap();
+    std::fs::write(target.join("ocupado"), b"x").unwrap();
 
     let o = mem(&db, &["search", "hola"]);
 
@@ -158,7 +158,7 @@ fn buscar_no_falla_aunque_no_pueda_reindexar() {
     // Y no puede haber quedado nada a medias: el registro sigue nombrando al
     // archivo que existe.
     let conn = rusqlite::Connection::open(&db).unwrap();
-    let (nombre, _, _) = anathem::vecstore::pack_registrado(&conn).unwrap().unwrap();
+    let (nombre, _, _) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
     assert!(
         paquetes.join(format!("{nombre}.anathem-pack")).exists(),
         "el registro quedó apuntando a un archivo que no existe: {nombre}"
@@ -253,7 +253,7 @@ fn un_install_concurrente_no_deja_vectores_de_dos_paquetes() {
     );
 
     let conn = rusqlite::Connection::open(&db).unwrap();
-    let (nombre, _, dims) = anathem::vecstore::pack_registrado(&conn).unwrap().unwrap();
+    let (nombre, _, dims) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
     assert_eq!(nombre, "otro-es", "el último que adoptó fue el install de B");
 
     // Ningún texto de este test contiene la pieza "s", así que con `otro-es`
@@ -281,6 +281,6 @@ fn un_install_concurrente_no_deja_vectores_de_dos_paquetes() {
     // Y el desenlace aceptable sí tiene que haber pasado: el índice que
     // queda es el de B, completo, porque su `sincronizar` no lo interrumpió
     // nadie.
-    let (con, tot) = anathem::vecstore::cobertura(&conn, dims).unwrap();
+    let (con, tot) = anathem::vecstore::coverage(&conn, dims).unwrap();
     assert_eq!(con, tot, "el paquete que ganó tiene que terminar su propio índice");
 }

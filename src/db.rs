@@ -23,7 +23,7 @@ create table if not exists memories (
   access_count  integer not null default 0,
   supersedes_id integer references memories(id),
   ext_id        text unique,
-  topic         text   -- clave de tema; ver `ingest::guardar_con_tema`
+  topic         text   -- clave de topic_label; ver `ingest::save_with_topic`
 );
 
 create table if not exists memory_tags (
@@ -108,12 +108,12 @@ pub fn open(path: &Path) -> Result<Connection> {
     // volvería a fallar por una carrera de milisegundos.
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
     conn.execute_batch(SCHEMA)?;
-    agregar_columna_topic(&conn)?;
-    agregar_columnas_de_traspaso(&conn)?;
+    add_topic_column(&conn)?;
+    add_handoff_columns(&conn)?;
     Ok(conn)
 }
 
-fn tiene_columna(conn: &Connection, nombre: &str) -> Result<bool> {
+fn has_column(conn: &Connection, nombre: &str) -> Result<bool> {
     let n: i64 = conn.query_row(
         "select count(*) from pragma_table_info('memories') where name = ?1",
         [nombre],
@@ -122,8 +122,8 @@ fn tiene_columna(conn: &Connection, nombre: &str) -> Result<bool> {
     Ok(n > 0)
 }
 
-fn tiene_columna_topic(conn: &Connection) -> Result<bool> {
-    tiene_columna(conn, "topic")
+fn has_topic_column(conn: &Connection) -> Result<bool> {
+    has_column(conn, "topic")
 }
 
 /// Agrega una columna que puede faltar en una base vieja, tolerando que otro
@@ -131,13 +131,13 @@ fn tiene_columna_topic(conn: &Connection) -> Result<bool> {
 /// la CLI y el servidor MCP pueden abrir la misma base a la vez, los dos ven
 /// la columna ausente, y el segundo `alter` falla con "duplicate column
 /// name". Si tras fallar la columna ya está, el resultado es el que se quería.
-fn agregar_columna(conn: &Connection, nombre: &str, tipo: &str) -> Result<()> {
-    if tiene_columna(conn, nombre)? {
+fn add_column(conn: &Connection, nombre: &str, tipo: &str) -> Result<()> {
+    if has_column(conn, nombre)? {
         return Ok(());
     }
     let sql = format!("alter table memories add column {nombre} {tipo}");
     if let Err(e) = conn.execute(&sql, []) {
-        if !tiene_columna(conn, nombre)? {
+        if !has_column(conn, nombre)? {
             return Err(e.into());
         }
     }
@@ -152,8 +152,8 @@ fn agregar_columna(conn: &Connection, nombre: &str, tipo: &str) -> Result<()> {
 /// preserva los datos: no se copia nada ni se reconstruye la tabla, así que no
 /// hay ventana donde se puedan perder filas. Si la columna vieja ya no está
 /// —el caso de todas las bases nuevas— no se toca nada.
-fn renombrar_columnas_al_ingles(conn: &Connection) -> Result<()> {
-    for (tabla, viejo, nuevo) in [
+fn rename_columns_to_english(conn: &Connection) -> Result<()> {
+    for (tabla, old, new_id) in [
         ("memories", "agente", "agent"),
         ("memories", "creado_ts", "created_ts"),
         ("meta", "clave", "key"),
@@ -161,7 +161,7 @@ fn renombrar_columnas_al_ingles(conn: &Connection) -> Result<()> {
     ] {
         let existe: i64 = conn.query_row(
             "select count(*) from pragma_table_info(?1) where name = ?2",
-            [tabla, viejo],
+            [tabla, old],
             |r| r.get(0),
         )?;
         if existe == 0 {
@@ -170,13 +170,13 @@ fn renombrar_columnas_al_ingles(conn: &Connection) -> Result<()> {
         // El índice viejo referencia la columna por su nombre anterior; se
         // saca antes de renombrar y se vuelve a crear más abajo con el nuevo.
         conn.execute("drop index if exists idx_mem_project_creado", [])?;
-        let sql = format!("alter table \"{tabla}\" rename column \"{viejo}\" to \"{nuevo}\"");
+        let sql = format!("alter table \"{tabla}\" rename column \"{old}\" to \"{new_id}\"");
         if let Err(e) = conn.execute(&sql, []) {
             // Otro proceso pudo ganar la carrera, igual que con las columnas
             // nuevas: si ya quedó renombrada, el resultado es el que se quería.
             let ya: i64 = conn.query_row(
                 "select count(*) from pragma_table_info(?1) where name = ?2",
-                [tabla, nuevo],
+                [tabla, new_id],
                 |r| r.get(0),
             )?;
             if ya == 0 {
@@ -196,10 +196,10 @@ fn renombrar_columnas_al_ingles(conn: &Connection) -> Result<()> {
 ///
 /// `agente` lo llena el servidor MCP con el nombre que el cliente manda en el
 /// `initialize`; lo guardado desde la CLI queda sin agente, que es la verdad.
-fn agregar_columnas_de_traspaso(conn: &Connection) -> Result<()> {
-    renombrar_columnas_al_ingles(conn)?;
-    agregar_columna(conn, "agent", "text")?;
-    agregar_columna(conn, "created_ts", "text")?;
+fn add_handoff_columns(conn: &Connection) -> Result<()> {
+    rename_columns_to_english(conn)?;
+    add_column(conn, "agent", "text")?;
+    add_column(conn, "created_ts", "text")?;
     // Sirve a la consulta de `mem recent`, que filtra por proyecto y ordena
     // por fecha descendente.
     conn.execute(
@@ -219,10 +219,10 @@ fn agregar_columnas_de_traspaso(conn: &Connection) -> Result<()> {
 /// servidor MCP): los dos ven la columna ausente y el segundo `alter` falla
 /// con "duplicate column name". Si tras fallar la columna ya está, el otro
 /// ganó la carrera y el resultado es el que se quería.
-fn agregar_columna_topic(conn: &Connection) -> Result<()> {
-    if !tiene_columna_topic(conn)? {
+fn add_topic_column(conn: &Connection) -> Result<()> {
+    if !has_topic_column(conn)? {
         if let Err(e) = conn.execute("alter table memories add column topic text", []) {
-            if !tiene_columna_topic(conn)? {
+            if !has_topic_column(conn)? {
                 return Err(e.into());
             }
         }

@@ -16,10 +16,10 @@ pub const K: f64 = 60.0;
 ///
 /// Sobre el valor por defecto de 1,0 y por qué no hay uno que gane en las dos
 /// direcciones, ver `docs/superpowers/medicion-corpus-real.md`.
-pub fn rrf(bm25: &[i64], vectorial: &[i64], peso_bm25: f64) -> Vec<i64> {
+pub fn rrf(bm25: &[i64], vectorial: &[i64], bm25_weight: f64) -> Vec<i64> {
     let mut punto: HashMap<i64, f64> = HashMap::new();
     for (i, id) in bm25.iter().enumerate() {
-        *punto.entry(*id).or_insert(0.0) += peso_bm25 / (K + (i + 1) as f64);
+        *punto.entry(*id).or_insert(0.0) += bm25_weight / (K + (i + 1) as f64);
     }
     for (i, id) in vectorial.iter().enumerate() {
         *punto.entry(*id).or_insert(0.0) += 1.0 / (K + (i + 1) as f64);

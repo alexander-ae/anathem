@@ -280,7 +280,7 @@ fn el_export_preserva_todo_lo_necesario_para_migrar() {
 
     let salida = dir.path().join("out");
     anathem::export::to_markdown(&conn, &salida).unwrap();
-    let leer = |id: i64| -> String {
+    let parse = |id: i64| -> String {
         let mut encontrado = None;
         for e in walk(&salida) {
             let s = std::fs::read_to_string(&e).unwrap();
@@ -289,7 +289,7 @@ fn el_export_preserva_todo_lo_necesario_para_migrar() {
         encontrado.unwrap_or_else(|| panic!("no se exportó la memoria {id}"))
     };
 
-    let v = leer(vieja);
+    let v = parse(vieja);
     assert!(v.contains("ext_id: \"EXT-123\""), "falta ext_id:\n{v}");
     assert!(v.contains("pinned: true"), "falta pinned:\n{v}");
     assert!(v.contains("kind: \"ticket\"") && v.contains("value: \"ABC-112\""), "faltan refs:\n{v}");
@@ -297,7 +297,7 @@ fn el_export_preserva_todo_lo_necesario_para_migrar() {
     assert!(v.contains("source: \"migrated\""), "falta source:\n{v}");
     assert!(v.contains("status: \"superseded\""), "la vieja quedó superseded:\n{v}");
 
-    let n = leer(nueva);
+    let n = parse(nueva);
     assert!(n.contains(&format!("supersedes: {vieja}")), "falta la cadena:\n{n}");
     assert!(n.contains("event_start: \"2026-08-01\""), "falta event_start:\n{n}");
     assert!(!n.contains("ext_id:"), "no debe emitir ext_id vacío:\n{n}");

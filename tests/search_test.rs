@@ -162,7 +162,7 @@ fn con_paquete_aparece_lo_que_bm25_no_encuentra() {
     let conn = anathem::db::open(&dir.path().join("t.db")).unwrap();
     let r = dir.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
-    let p = anathem::pack::Pack::abrir(&r).unwrap();
+    let p = anathem::pack::Pack::open_pack(&r).unwrap();
     seed(&conn, "x", "p", "hola");
     seed(&conn, "y", "p", "mundo");
     apoyo::registrar_y_sincronizar(&conn, &p);
@@ -183,7 +183,7 @@ fn las_memorias_fijadas_siguen_primero_con_fusion() {
     let conn = anathem::db::open(&dir.path().join("t.db")).unwrap();
     let r = dir.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
-    let p = anathem::pack::Pack::abrir(&r).unwrap();
+    let p = anathem::pack::Pack::open_pack(&r).unwrap();
     seed(&conn, "x", "p", "hola");
     let fijada = seed(&conn, "y", "p", "mundo");
     anathem::maint::pin(&conn, fijada, true).unwrap();
@@ -206,7 +206,7 @@ fn consulta_sin_tokens_conocidos_no_da_resultados_espurios() {
     let conn = anathem::db::open(&dir.path().join("t.db")).unwrap();
     let r = dir.path().join("mini.anathem-pack");
     apoyo::escribir_pack_mini(&r, "mini-es");
-    let p = anathem::pack::Pack::abrir(&r).unwrap();
+    let p = anathem::pack::Pack::open_pack(&r).unwrap();
     seed(&conn, "x", "p", "hola");
     seed(&conn, "y", "p", "mundo");
     apoyo::registrar_y_sincronizar(&conn, &p);
@@ -248,18 +248,18 @@ fn el_extracto_deja_entrar_mas_candidatos_en_el_mismo_presupuesto() {
         text: "faro".into(),
         limit: 12,
         budget_tokens: 300,
-        extracto: None,
+        excerpt: None,
         ..Default::default()
     };
-    let con_recorte = search::Query { extracto: Some(20), ..sin_recorte.clone() };
+    let con_recorte = search::Query { excerpt: Some(20), ..sin_recorte.clone() };
 
     let hits_sin = search::run_explained(&conn, &sin_recorte, &ctx).unwrap();
     let hits_con = search::run_explained(&conn, &con_recorte, &ctx).unwrap();
 
     assert!(
         hits_con.len() > hits_sin.len(),
-        "con extracto recortado tienen que entrar más candidatos en el mismo presupuesto: \
-         sin recorte {} candidatos, con recorte {}",
+        "con excerpt recortado tienen que entrar más candidates en el mismo presupuesto: \
+         sin recorte {} candidates, con recorte {}",
         hits_sin.len(),
         hits_con.len()
     );
@@ -274,7 +274,7 @@ fn el_extracto_recorta_el_fragmento_a_n_caracteres() {
         text: "faro".into(),
         limit: 12,
         budget_tokens: usize::MAX,
-        extracto: Some(20),
+        excerpt: Some(20),
         ..Default::default()
     };
     let hits = search::run_explained(&conn, &q, &ctx).unwrap();
@@ -311,7 +311,7 @@ fn el_extracto_no_parte_un_caracter_multibyte() {
             text: "áéíóúñ".into(),
             limit: 1,
             budget_tokens: usize::MAX,
-            extracto: Some(n),
+            excerpt: Some(n),
             ..Default::default()
         };
         let hits = search::run_explained(&conn, &q, &search::Contexto::solo_bm25()).unwrap();
@@ -328,7 +328,7 @@ fn el_extracto_no_parte_un_caracter_multibyte() {
 fn extracto_none_deja_el_fragmento_completo_como_antes() {
     let (_d, conn) = fixture();
     let q_viejo = search::Query { text: "cache staleness".into(), ..Default::default() };
-    let q_explicito = search::Query { text: "cache staleness".into(), extracto: None, ..Default::default() };
+    let q_explicito = search::Query { text: "cache staleness".into(), excerpt: None, ..Default::default() };
     let ctx = search::Contexto::solo_bm25();
 
     let hits_viejo = search::run_explained(&conn, &q_viejo, &ctx).unwrap();

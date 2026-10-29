@@ -25,7 +25,7 @@ pub fn replace_body(conn: &Connection, id: i64, body: &str) -> Result<()> {
             id,
             body,
             chrono::Local::now().format("%Y-%m-%d").to_string(),
-            ingest::titulo_de(body)
+            ingest::title_from(body)
         ],
     )?;
     rechunk(&tx, id, body)?;

@@ -31,10 +31,10 @@ fn escritura(conn: &Connection) -> rusqlite::Result<Transaction<'_>> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Acierto {
+pub struct VectorHit {
     pub memory_id: i64,
     pub chunk_id: i64,
-    pub coseno: f32,
+    pub cosine: f32,
 }
 
 fn a_blob(v: &[f32]) -> Vec<u8> {
@@ -49,7 +49,7 @@ fn de_blob(b: &[u8]) -> Vec<f32> {
     b.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect()
 }
 
-fn anotar_identidad(
+fn record_identity(
     conn: &Connection,
     nombre: &str,
     sha: &str,
@@ -69,8 +69,8 @@ fn anotar_identidad(
     Ok(())
 }
 
-pub fn registrar_pack(conn: &Connection, nombre: &str, sha: &str, dims: usize) -> Result<()> {
-    anotar_identidad(conn, nombre, sha, dims)?;
+pub fn register_pack(conn: &Connection, nombre: &str, sha: &str, dims: usize) -> Result<()> {
+    record_identity(conn, nombre, sha, dims)?;
     Ok(())
 }
 
@@ -89,7 +89,7 @@ pub fn registrar_pack(conn: &Connection, nombre: &str, sha: &str, dims: usize) -
 pub fn adoptar_pack(conn: &Connection, nombre: &str, sha: &str, dims: usize) -> Result<()> {
     let tx = escritura(conn)?;
     tx.execute("delete from chunk_vectors", [])?;
-    anotar_identidad(&tx, nombre, sha, dims)?;
+    record_identity(&tx, nombre, sha, dims)?;
     tx.execute("delete from meta where key = ?1", [INSTALANDO])?;
     tx.commit()?;
     Ok(())
@@ -116,7 +116,7 @@ pub fn adoptar_pack(conn: &Connection, nombre: &str, sha: &str, dims: usize) -> 
 const INSTALANDO: &str = "pack_instalando";
 
 /// Anota que se está por reemplazar el archivo del paquete `nombre`.
-pub fn marcar_instalacion(conn: &Connection, nombre: &str) -> Result<()> {
+pub fn mark_install(conn: &Connection, nombre: &str) -> Result<()> {
     let tx = escritura(conn)?;
     tx.execute(
         "insert into meta (key, value) values (?1, ?2)
@@ -141,7 +141,7 @@ pub fn instalacion_pendiente(conn: &Connection) -> Result<Option<String>> {
 /// Saca la marca. Para cuando la instalación falló antes de tocar el archivo
 /// —el rename no llegó a pasar— o para una marca huérfana que ya se sabe que
 /// no describe ningún riesgo.
-pub fn limpiar_instalacion(conn: &Connection) -> Result<()> {
+pub fn clear_install_mark(conn: &Connection) -> Result<()> {
     let tx = escritura(conn)?;
     tx.execute("delete from meta where key = ?1", [INSTALANDO])?;
     tx.commit()?;
@@ -153,13 +153,13 @@ pub fn limpiar_instalacion(conn: &Connection) -> Result<()> {
 /// sha es la única de las tres que distingue dos builds del mismo nombre y
 /// las mismas dimensiones —el caso de actualizar `en-es`—, así que las tres
 /// van juntas siempre.
-pub type Identidad = (String, String, usize);
+pub type PackIdentity = (String, String, usize);
 
-pub fn pack_registrado(conn: &Connection) -> Result<Option<Identidad>> {
+pub fn registered_pack(conn: &Connection) -> Result<Option<PackIdentity>> {
     // No usar `.ok()`: eso convertiría cualquier error real de sqlite (tabla
     // ausente, base corrupta) en `None`, indistinguible de "no hay paquete
     // registrado". Degradar a bm25 está bien; callarse un error real no.
-    let leer = |k: &str| -> Result<Option<String>> {
+    let parse = |k: &str| -> Result<Option<String>> {
         match conn.query_row("select value from meta where key = ?1", [k], |r| {
             r.get::<_, String>(0)
         }) {
@@ -168,13 +168,13 @@ pub fn pack_registrado(conn: &Connection) -> Result<Option<Identidad>> {
             Err(e) => Err(e.into()),
         }
     };
-    match (leer("pack_nombre")?, leer("pack_sha256")?, leer("pack_dims")?) {
+    match (parse("pack_nombre")?, parse("pack_sha256")?, parse("pack_dims")?) {
         (Some(n), Some(s), Some(d)) => Ok(Some((n, s, d.parse()?))),
         _ => Ok(None),
     }
 }
 
-pub fn olvidar_pack(conn: &Connection) -> Result<()> {
+pub fn forget_pack(conn: &Connection) -> Result<()> {
     let tx = escritura(conn)?;
     tx.execute("delete from chunk_vectors", [])?;
     tx.execute(
@@ -188,7 +188,7 @@ pub fn olvidar_pack(conn: &Connection) -> Result<()> {
 
 /// Cómo terminó una corrida de `sincronizar`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Sincronizacion {
+pub enum SyncOutcome {
     /// No quedó ningún fragmento sin vector. Se escribieron `n` nuevos.
     Completa(usize),
     /// Otro proceso cambió el paquete registrado mientras este embebía. El
@@ -203,16 +203,16 @@ pub enum Sincronizacion {
     Abandonada(usize),
 }
 
-impl Sincronizacion {
+impl SyncOutcome {
     /// Cuántos vectores se escribieron, haya terminado como haya terminado.
     pub fn escritos(self) -> usize {
         match self {
-            Sincronizacion::Completa(n) | Sincronizacion::Abandonada(n) => n,
+            SyncOutcome::Completa(n) | SyncOutcome::Abandonada(n) => n,
         }
     }
 
     pub fn abandonada(self) -> bool {
-        matches!(self, Sincronizacion::Abandonada(_))
+        matches!(self, SyncOutcome::Abandonada(_))
     }
 }
 
@@ -246,7 +246,7 @@ impl Sincronizacion {
 /// mismo lock, la registrada. Los lotes ya escritos no hacen falta
 /// deshacerlos: quien cambie la identidad pasa por `adoptar_pack`, que borra
 /// `chunk_vectors` entero.
-pub fn sincronizar(conn: &Connection, pack: &Pack, esperada: &Identidad) -> Result<Sincronizacion> {
+pub fn sync(conn: &Connection, pack: &Pack, esperada: &PackIdentity) -> Result<SyncOutcome> {
     let mut total = 0usize;
     loop {
         // Los pendientes se recalculan en cada vuelta: entre lote y lote,
@@ -273,8 +273,8 @@ pub fn sincronizar(conn: &Connection, pack: &Pack, esperada: &Identidad) -> Resu
         // embebió este lote sigue siendo el registrado? Si no, se abandona
         // sin escribir nada. La transacción muere sin `commit` y no deja
         // rastro.
-        if pack_registrado(&tx)?.as_ref() != Some(esperada) {
-            return Ok(Sincronizacion::Abandonada(total));
+        if registered_pack(&tx)?.as_ref() != Some(esperada) {
+            return Ok(SyncOutcome::Abandonada(total));
         }
         for (id, blob) in &vectores {
             // Dos cosas pueden haber pasado desde el `select` de arriba, y
@@ -300,7 +300,7 @@ pub fn sincronizar(conn: &Connection, pack: &Pack, esperada: &Identidad) -> Resu
             break;
         }
     }
-    Ok(Sincronizacion::Completa(total))
+    Ok(SyncOutcome::Completa(total))
 }
 
 /// (fragmentos con vector **usable**, fragmentos totales). Un hueco significa
@@ -312,7 +312,7 @@ pub fn sincronizar(conn: &Connection, pack: &Pack, esperada: &Identidad) -> Resu
 /// justo cuando el agujero es total. Con `count(*)` a secas, el único
 /// diagnóstico que existe para hacer visible el hueco decía 2/2 mientras la
 /// búsqueda vectorial no devolvía absolutamente nada.
-pub fn cobertura(conn: &Connection, dims: usize) -> Result<(usize, usize)> {
+pub fn coverage(conn: &Connection, dims: usize) -> Result<(usize, usize)> {
     let con: i64 = conn.query_row(
         "select count(*) from chunk_vectors where length(vec) = ?1",
         [(dims * 4) as i64],
@@ -325,12 +325,12 @@ pub fn cobertura(conn: &Connection, dims: usize) -> Result<(usize, usize)> {
 /// Las `limite` memorias más parecidas a `consulta`, con los mismos filtros
 /// que aplica la búsqueda léxica. Cada memoria aparece una sola vez, con su
 /// fragmento más parecido.
-pub fn buscar(
+pub fn search_vectors(
     conn: &Connection,
     consulta: &[f32],
     q: &Query,
-    limite: usize,
-) -> Result<Vec<Acierto>> {
+    limit_: usize,
+) -> Result<Vec<VectorHit>> {
     let mut sql = String::from(
         "select m.id, v.chunk_id, v.vec
            from chunk_vectors v
@@ -342,7 +342,7 @@ pub fn buscar(
     // El mismo filtro que usa la búsqueda léxica, de una sola fuente: si los
     // dos lados filtraran distinto, el vector devolvería memorias que bm25
     // descarta y la fusión las mezclaría sin que nada lo note.
-    sql.push_str(&crate::search::filtros_de(q, &mut ps));
+    sql.push_str(&crate::search::filters_for(q, &mut ps));
     let mut stmt = conn.prepare(&sql)?;
     let filas = stmt.query_map(rusqlite::params_from_iter(ps.iter()), |r| {
         Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, Vec<u8>>(2)?))
@@ -361,18 +361,18 @@ pub fn buscar(
             *e = (cid, cos);
         }
     }
-    let mut out: Vec<Acierto> = mejor
+    let mut out: Vec<VectorHit> = mejor
         .into_iter()
-        .map(|(memory_id, (chunk_id, coseno))| Acierto { memory_id, chunk_id, coseno })
+        .map(|(memory_id, (chunk_id, cosine))| VectorHit { memory_id, chunk_id, cosine })
         .collect();
     // Mayor coseno primero; a igual coseno, menor id, por la misma razón de
     // determinismo que en `fusion::rrf` y en `search::run_explained`.
     out.sort_by(|a, b| {
-        b.coseno
-            .partial_cmp(&a.coseno)
+        b.cosine
+            .partial_cmp(&a.cosine)
             .unwrap_or(std::cmp::Ordering::Equal)
             .then(a.memory_id.cmp(&b.memory_id))
     });
-    out.truncate(limite);
+    out.truncate(limit_);
     Ok(out)
 }

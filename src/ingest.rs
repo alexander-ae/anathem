@@ -10,7 +10,7 @@ const VALID_REF_KINDS: [&str; 3] = ["ticket", "pr", "sha"];
 
 pub fn insert(conn: &Connection, m: &NewMemory) -> Result<i64> {
     let tx = conn.unchecked_transaction()?;
-    let id = insertar(&tx, m, None)?;
+    let id = insert_row(&tx, m, None)?;
     tx.commit()?;
     Ok(id)
 }
@@ -21,7 +21,7 @@ pub fn insert(conn: &Connection, m: &NewMemory) -> Result<i64> {
 /// de archivo de cada memoria y la migración desde otros sistemas. Esta es una
 /// columna aparte, para poder contestar "qué pasó hace un rato" sin tocar nada
 /// de lo anterior.
-fn ahora_con_hora() -> String {
+fn now_with_time() -> String {
     chrono::Local::now().to_rfc3339()
 }
 
@@ -29,7 +29,7 @@ fn ahora_con_hora() -> String {
 /// límite. `insert` lo envuelve en la suya; el guardado con clave de tema lo
 /// corre dentro de la que también cubre el supersede, para que ambas cosas
 /// ocurran juntas o ninguna.
-fn insertar(tx: &Connection, m: &NewMemory, agente: Option<&str>) -> Result<i64> {
+fn insert_row(tx: &Connection, m: &NewMemory, agent: Option<&str>) -> Result<i64> {
     tx.execute(
         "insert into memories
            (project, title, body, created, updated, event_start, event_end,
@@ -37,7 +37,7 @@ fn insertar(tx: &Connection, m: &NewMemory, agente: Option<&str>) -> Result<i64>
          values (?1, ?2, ?3, ?4, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![m.project, m.title, m.body, m.created,
                 m.event_start, m.event_end, m.source, m.ext_id,
-                agente, ahora_con_hora()],
+                agent, now_with_time()],
     )?;
     let id = tx.last_insert_rowid();
 
@@ -80,7 +80,7 @@ fn insertar(tx: &Connection, m: &NewMemory, agente: Option<&str>) -> Result<i64>
 /// deriva del cuerpo: si un camino lo calcula distinto —o no lo recalcula al
 /// cambiar el cuerpo— la memoria queda mostrando un título que ya no
 /// describe lo que contiene.
-pub fn titulo_de(texto: &str) -> String {
+pub fn title_from(texto: &str) -> String {
     texto
         .lines()
         .map(str::trim)
@@ -91,26 +91,26 @@ pub fn titulo_de(texto: &str) -> String {
         .collect()
 }
 
-pub fn guardar_explicito(
+pub fn save_explicit(
     conn: &Connection,
     texto: &str,
     project: &str,
     tags_dados: Vec<String>,
 ) -> Result<(i64, Vec<String>)> {
-    let g = guardar_con_tema(conn, texto, project, tags_dados, None, None)?;
+    let g = save_with_topic(conn, texto, project, tags_dados, None, None)?;
     Ok((g.id, g.tags))
 }
 
 /// La memoria que un guardado con clave de tema dejó `superseded`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Reemplazada {
+pub struct Replaced {
     pub id: i64,
     pub title: String,
 }
 
 /// Resultado de `guardar_con_tema`.
 #[derive(Debug, Clone)]
-pub struct Guardado {
+pub struct Saved {
     pub id: i64,
     pub project: String,
     pub tags: Vec<String>,
@@ -118,7 +118,7 @@ pub struct Guardado {
     pub topic: Option<String>,
     /// La memoria que quedó superseded, sea por la clave de tema o por un
     /// `supersedes` explícito.
-    pub reemplazada: Option<Reemplazada>,
+    pub reemplazada: Option<Replaced>,
     /// La clave no tenía ninguna memoria activa antes de este guardado.
     pub clave_nueva: bool,
     /// Solo cuando la clave resultó nueva: las demás claves que tienen una
@@ -136,7 +136,7 @@ pub struct Guardado {
 /// una clave legítimamente nueva. Lo que la normalización no arregla
 /// (`stack-frontend` contra `stack-del-frontend`) lo hace visible
 /// `Guardado::otras_claves`.
-pub fn normalizar_tema(clave: &str) -> Result<String> {
+pub fn normalize_topic(clave: &str) -> Result<String> {
     let t = clave.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
     if t.is_empty() {
         bail!("la clave de tema no puede estar vacía");
@@ -152,15 +152,15 @@ const MAX_CLAVES_LISTADAS: usize = 30;
 /// la base, es culpa de la entrada y se puede contar tal cual a quien llamó:
 /// MCP lo devuelve como texto de la tool y no como "error interno".
 #[derive(Debug)]
-pub struct PedidoInvalido(pub String);
+pub struct BadRequest(pub String);
 
-impl std::fmt::Display for PedidoInvalido {
+impl std::fmt::Display for BadRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }
 }
 
-impl std::error::Error for PedidoInvalido {}
+impl std::error::Error for BadRequest {}
 
 /// `guardar_explicito` con clave de tema y/o `supersedes` opcionales.
 ///
@@ -189,15 +189,15 @@ impl std::error::Error for PedidoInvalido {}
 /// simultáneos con la misma clave verían la misma vigente y dejarían dos
 /// memorias activas para un tema; `immediate` toma el lock de escritura antes
 /// de leer y el segundo espera al primero.
-pub fn guardar_con_tema(
+pub fn save_with_topic(
     conn: &Connection,
     texto: &str,
     project: &str,
     tags_dados: Vec<String>,
     topic: Option<&str>,
     supersedes: Option<i64>,
-) -> Result<Guardado> {
-    guardar_con_tema_de(conn, texto, project, tags_dados, topic, supersedes, None)
+) -> Result<Saved> {
+    save_with_topic_by(conn, texto, project, tags_dados, topic, supersedes, None)
 }
 
 /// Igual que `guardar_con_tema`, anotando qué agente lo guardó.
@@ -208,16 +208,16 @@ pub fn guardar_con_tema(
 /// del `initialize`. Lo guardado desde la CLI no tiene agente, y está bien
 /// que así sea.
 #[allow(clippy::too_many_arguments)]
-pub fn guardar_con_tema_de(
+pub fn save_with_topic_by(
     conn: &Connection,
     texto: &str,
     project: &str,
     tags_dados: Vec<String>,
     topic: Option<&str>,
     supersedes: Option<i64>,
-    agente: Option<&str>,
-) -> Result<Guardado> {
-    let topic = topic.map(normalizar_tema).transpose()?;
+    agent: Option<&str>,
+) -> Result<Saved> {
+    let topic = topic.map(normalize_topic).transpose()?;
     let tags = if tags_dados.is_empty() {
         crate::tags::classify(texto).map_err(|e| anyhow::anyhow!(e))?
     } else {
@@ -225,7 +225,7 @@ pub fn guardar_con_tema_de(
     };
     let m = NewMemory {
         project: project.to_string(),
-        title: titulo_de(texto),
+        title: title_from(texto),
         body: texto.to_string(),
         created: chrono::Local::now().format("%Y-%m-%d").to_string(),
         event_start: None,
@@ -238,9 +238,9 @@ pub fn guardar_con_tema_de(
 
     if topic.is_none() && supersedes.is_none() {
         let tx = conn.unchecked_transaction()?;
-        let id = insertar(&tx, &m, agente)?;
+        let id = insert_row(&tx, &m, agent)?;
         tx.commit()?;
-        return Ok(Guardado {
+        return Ok(Saved {
             id, project: project.to_string(), tags, topic: None,
             reemplazada: None, clave_nueva: false, otras_claves: Vec::new(),
         });
@@ -267,9 +267,9 @@ pub fn guardar_con_tema_de(
                 })
                 .optional()?;
             match fila {
-                None => return Err(PedidoInvalido(format!("no existe la memoria id:{sid}")).into()),
+                None => return Err(BadRequest(format!("no existe la memoria id:{sid}")).into()),
                 Some((st, _)) if st != "active" => {
-                    return Err(PedidoInvalido(format!(
+                    return Err(BadRequest(format!(
                         "la memoria id:{sid} no está activa (status={st}); no hay nada que reemplazar"
                     ))
                     .into())
@@ -281,7 +281,7 @@ pub fn guardar_con_tema_de(
     };
     if let (Some((v, _)), Some((e, _))) = (&vigente, &explicita) {
         if v != e {
-            return Err(PedidoInvalido(format!(
+            return Err(BadRequest(format!(
                 "la clave «{}» ya tiene la memoria activa id:{v} y supersedes apunta a id:{e}: \
                  una memoria nueva reemplaza a una sola. Dejá solo `topic` para actualizar la \
                  vigente, o solo `supersedes` para corregir esa otra.",
@@ -293,7 +293,7 @@ pub fn guardar_con_tema_de(
 
     let clave_nueva = topic.is_some() && vigente.is_none();
     let objetivo = explicita.or(vigente);
-    let id = insertar(&tx, &m, agente)?;
+    let id = insert_row(&tx, &m, agent)?;
     if let Some((vieja, _)) = &objetivo {
         crate::supersede::link(&tx, id, *vieja)?;
     }
@@ -301,16 +301,16 @@ pub fn guardar_con_tema_de(
         tx.execute("update memories set topic = ?2 where id = ?1", params![id, t])?;
     }
     let otras_claves = match (&topic, &objetivo) {
-        (Some(t), None) => claves_activas(&tx, project, t)?,
+        (Some(t), None) => active_topic_keys(&tx, project, t)?,
         _ => Vec::new(),
     };
     tx.commit()?;
-    Ok(Guardado {
+    Ok(Saved {
         id,
         project: project.to_string(),
         tags,
         topic,
-        reemplazada: objetivo.map(|(id, title)| Reemplazada { id, title }),
+        reemplazada: objetivo.map(|(id, title)| Replaced { id, title }),
         clave_nueva,
         otras_claves,
     })
@@ -318,7 +318,7 @@ pub fn guardar_con_tema_de(
 
 /// Las claves de tema con una memoria activa en `project`, menos `excepto`,
 /// ordenadas. Se recorta a `MAX_CLAVES_LISTADAS`.
-fn claves_activas(conn: &Connection, project: &str, excepto: &str) -> Result<Vec<String>> {
+fn active_topic_keys(conn: &Connection, project: &str, excepto: &str) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
         "select distinct topic from memories
           where project = ?1 and topic is not null and topic <> ?2 and status = 'active'
@@ -330,7 +330,7 @@ fn claves_activas(conn: &Connection, project: &str, excepto: &str) -> Result<Vec
     Ok(claves)
 }
 
-impl Guardado {
+impl Saved {
     /// Lo que pasó con el reemplazo y la clave de tema, en español, o `None`
     /// si no hubo ni una cosa ni la otra. Lo usan la CLI y MCP para que digan
     /// lo mismo.
@@ -341,7 +341,7 @@ impl Guardado {
     /// tipeo produce el mismo "no había nada" que una clave legítimamente
     /// nueva, y sin la lista nadie puede distinguirlos. Cuesta texto solo en
     /// ese caso.
-    pub fn describir(&self) -> Option<String> {
+    pub fn describe(&self) -> Option<String> {
         let reemplazo = self.reemplazada.as_ref().map(|r| {
             format!(
                 "reemplaza a la memoria {} («{}»), que queda superseded. `mem history {}` \

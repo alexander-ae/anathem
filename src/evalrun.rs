@@ -61,7 +61,7 @@ pub fn run(
 ) -> Result<EvalResult> {
     let raw = std::fs::read_to_string(evalset)
         .with_context(|| format!(
-            "no se pudo leer el eval set en {}.\n\n\
+            "no se pudo parse el eval set en {}.\n\n\
              Un eval set es un archivo JSON con las consultas contra las que medir la\n\
              recuperación, y qué memorias deberían encontrar. Sin él no hay nada que medir.\n\
              Formato mínimo:\n\
@@ -83,7 +83,7 @@ pub fn run(
             // El eval mide recuperación, no inyección: recortar el fragmento
             // falsearía sus cifras. Ya es el valor por defecto, pero se deja
             // explícito para que no dependa de que `Default` no cambie.
-            extracto: None,
+            excerpt: None,
             ..Default::default()
         };
         let t0 = Instant::now();

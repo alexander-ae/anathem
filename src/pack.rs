@@ -15,7 +15,7 @@ const VERSION: u32 = 1;
 
 #[derive(Debug)]
 pub struct Pack {
-    mapa: Mmap,
+    map_: Mmap,
     tok: Tokenizer,
     nombre: String,
     dims: usize,
@@ -33,33 +33,33 @@ pub struct Pack {
 /// punteros (con overflow-checks, el default de `cargo test`, eso paniquea
 /// en vez de devolver un error). El desborde y el archivo simplemente
 /// truncado terminan en el mismo `Err`, nombrando el archivo y el campo.
-fn tomar<'a>(m: &'a [u8], o: &mut usize, n: usize, ruta: &Path, campo: &str) -> Result<&'a [u8]> {
+fn take_bytes<'a>(m: &'a [u8], o: &mut usize, n: usize, pack_path: &Path, campo: &str) -> Result<&'a [u8]> {
     let fin = o
         .checked_add(n)
         .filter(|&fin| fin <= m.len())
         .with_context(|| {
-            format!("el paquete {} termina antes de lo declarado: falta {campo}", ruta.display())
+            format!("el paquete {} termina antes de lo declarado: falta {campo}", pack_path.display())
         })?;
     let s = &m[*o..fin];
     *o = fin;
     Ok(s)
 }
 
-fn u32_en(m: &[u8], o: &mut usize, ruta: &Path, campo: &str) -> Result<u32> {
-    let f = tomar(m, o, 4, ruta, campo)?;
+fn u32_en(m: &[u8], o: &mut usize, pack_path: &Path, campo: &str) -> Result<u32> {
+    let f = take_bytes(m, o, 4, pack_path, campo)?;
     Ok(u32::from_le_bytes(f.try_into().unwrap()))
 }
 
-fn u64_en(m: &[u8], o: &mut usize, ruta: &Path, campo: &str) -> Result<u64> {
-    let f = tomar(m, o, 8, ruta, campo)?;
+fn u64_en(m: &[u8], o: &mut usize, pack_path: &Path, campo: &str) -> Result<u64> {
+    let f = take_bytes(m, o, 8, pack_path, campo)?;
     Ok(u64::from_le_bytes(f.try_into().unwrap()))
 }
 
-fn f32s_en(m: &[u8], o: &mut usize, n: usize, ruta: &Path, campo: &str) -> Result<Vec<f32>> {
+fn f32s_en(m: &[u8], o: &mut usize, n: usize, pack_path: &Path, campo: &str) -> Result<Vec<f32>> {
     let largo = n.checked_mul(4).with_context(|| {
-        format!("el paquete {} declara un {campo} demasiado grande", ruta.display())
+        format!("el paquete {} declara un {campo} demasiado grande", pack_path.display())
     })?;
-    let f = tomar(m, o, largo, ruta, campo)?;
+    let f = take_bytes(m, o, largo, pack_path, campo)?;
     Ok(f.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect())
 }
 
@@ -68,35 +68,35 @@ impl Pack {
     /// arranque costaría hashear decenas de megabytes y penalizaría a quien
     /// ni siquiera usa la capa vectorial. El sha se verifica una sola vez, al
     /// instalar (ver `mem model install`).
-    pub fn abrir(ruta: &Path) -> Result<Pack> {
-        let archivo = std::fs::File::open(ruta)
-            .with_context(|| format!("no se pudo abrir el paquete {}", ruta.display()))?;
-        let mapa = unsafe { Mmap::map(&archivo)? };
-        if mapa.len() < 20 || &mapa[0..4] != MARCA {
-            bail!("{} no es un paquete de anathem: falta la marca ANPK", ruta.display());
+    pub fn open_pack(pack_path: &Path) -> Result<Pack> {
+        let archivo = std::fs::File::open(pack_path)
+            .with_context(|| format!("no se pudo abrir el paquete {}", pack_path.display()))?;
+        let map_ = unsafe { Mmap::map(&archivo)? };
+        if map_.len() < 20 || &map_[0..4] != MARCA {
+            bail!("{} no es un paquete de anathem: falta la marca ANPK", pack_path.display());
         }
         let mut o = 4usize;
-        let version = u32_en(&mapa, &mut o, ruta, "versión")?;
+        let version = u32_en(&map_, &mut o, pack_path, "versión")?;
         if version != VERSION {
             bail!(
                 "el paquete {} declara la versión {version} y este binario entiende la {VERSION}",
-                ruta.display()
+                pack_path.display()
             );
         }
-        let dims = u32_en(&mapa, &mut o, ruta, "dimensiones")? as usize;
-        let n_tokens = u32_en(&mapa, &mut o, ruta, "cantidad de tokens")? as usize;
-        let largo_nombre = u32_en(&mapa, &mut o, ruta, "largo del nombre")? as usize;
+        let dims = u32_en(&map_, &mut o, pack_path, "dimensiones")? as usize;
+        let n_tokens = u32_en(&map_, &mut o, pack_path, "cantidad de tokens")? as usize;
+        let largo_nombre = u32_en(&map_, &mut o, pack_path, "largo del nombre")? as usize;
         if dims == 0 || n_tokens == 0 {
-            bail!("el paquete {} declara 0 dimensiones o 0 tokens", ruta.display());
+            bail!("el paquete {} declara 0 dimensiones o 0 tokens", pack_path.display());
         }
-        let nombre_bytes = tomar(&mapa, &mut o, largo_nombre, ruta, "nombre")?;
+        let nombre_bytes = take_bytes(&map_, &mut o, largo_nombre, pack_path, "nombre")?;
         let nombre = std::str::from_utf8(nombre_bytes)
-            .with_context(|| format!("el nombre del paquete {} no es UTF-8 válido", ruta.display()))?
+            .with_context(|| format!("el nombre del paquete {} no es UTF-8 válido", pack_path.display()))?
             .to_string();
-        let largo_tok = u64_en(&mapa, &mut o, ruta, "largo del tokenizador")? as usize;
-        let crudo = tomar(&mapa, &mut o, largo_tok, ruta, "tokenizador")?;
+        let largo_tok = u64_en(&map_, &mut o, pack_path, "largo del tokenizador")? as usize;
+        let crudo = take_bytes(&map_, &mut o, largo_tok, pack_path, "tokenizador")?;
         let tok = Tokenizer::from_bytes(crudo).map_err(|e| {
-            anyhow::anyhow!("el tokenizador del paquete {} no se pudo leer: {e}", ruta.display())
+            anyhow::anyhow!("el tokenizador del paquete {} no se pudo leer: {e}", pack_path.display())
         })?;
         // Un paquete cuya tabla es más chica que el vocabulario del
         // tokenizador abre, instala y reporta cobertura completa: `embeber`
@@ -120,22 +120,22 @@ impl Pack {
             bail!(
                 "el paquete {} declara {n_tokens} filas pero su tokenizador tiene {piezas} \
                  piezas: la tabla está incompleta y el paquete produciría vectores nulos",
-                ruta.display()
+                pack_path.display()
             );
         }
-        let escalas = f32s_en(&mapa, &mut o, dims, ruta, "escalas")?;
-        let minimos = f32s_en(&mapa, &mut o, dims, ruta, "mínimos")?;
+        let escalas = f32s_en(&map_, &mut o, dims, pack_path, "escalas")?;
+        let minimos = f32s_en(&map_, &mut o, dims, pack_path, "mínimos")?;
         let tam_tabla = n_tokens.checked_mul(dims).with_context(|| {
-            format!("el paquete {} declara una tabla demasiado grande", ruta.display())
+            format!("el paquete {} declara una tabla demasiado grande", pack_path.display())
         })?;
         let inicio_tabla = o;
         let fin_tabla = o.checked_add(tam_tabla).with_context(|| {
-            format!("el paquete {} declara una tabla demasiado grande", ruta.display())
+            format!("el paquete {} declara una tabla demasiado grande", pack_path.display())
         })?;
-        if mapa.len() < fin_tabla {
-            bail!("la tabla del paquete {} está truncada", ruta.display());
+        if map_.len() < fin_tabla {
+            bail!("la tabla del paquete {} está truncada", pack_path.display());
         }
-        Ok(Pack { mapa, tok, nombre, dims, n_tokens, escalas, minimos, inicio_tabla })
+        Ok(Pack { map_, tok, nombre, dims, n_tokens, escalas, minimos, inicio_tabla })
     }
 
     pub fn nombre(&self) -> &str {
@@ -162,7 +162,7 @@ impl Pack {
                 continue;
             }
             let a = self.inicio_tabla + i * self.dims;
-            let fila = &self.mapa[a..a + self.dims];
+            let fila = &self.map_[a..a + self.dims];
             for d in 0..self.dims {
                 v[d] += fila[d] as f32 * self.escalas[d] + self.minimos[d];
             }
@@ -188,9 +188,9 @@ impl Pack {
 }
 
 /// sha256 del archivo completo, en hexadecimal minúsculo.
-pub fn sha256(ruta: &Path) -> Result<String> {
-    let mut f = std::fs::File::open(ruta)
-        .with_context(|| format!("no se pudo abrir {}", ruta.display()))?;
+pub fn sha256(pack_path: &Path) -> Result<String> {
+    let mut f = std::fs::File::open(pack_path)
+        .with_context(|| format!("no se pudo abrir {}", pack_path.display()))?;
     let mut h = Sha256::new();
     std::io::copy(&mut f, &mut h)?;
     Ok(format!("{:x}", h.finalize()))
