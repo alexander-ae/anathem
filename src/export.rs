@@ -147,8 +147,25 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
             );
         }
         std::fs::create_dir_all(&d)?;
-        let name = format!("{}-{}-{id}.md", f.created, slug(&f.title));
+        // `created` gets the same treatment as `project`, and for the same
+        // reason: it is not always generated here. `import::parse` reads it
+        // verbatim out of a `.md` frontmatter and `migrate::run` out of the
+        // export's JSONL, so a hostile bundle can put `../..` in it and the
+        // next `mem export` would write outside `dir` — the directory guard
+        // above never looks at the file name (finding M-1). `slug()`
+        // already keeps the title to alphanumerics.
+        let name = format!("{}-{}-{id}.md", safe_component(&f.created), slug(&f.title));
         let path = d.join(&name);
+        // Same defence in depth as the directory check: state the invariant
+        // rather than trusting the neighbouring function to keep holding
+        // it. The whole route, and not just its parent, has to stay inside
+        // the output directory.
+        if path.parent() != Some(d.as_path()) {
+            anyhow::bail!(
+                "mem export: la memoria {id} produjo un nombre de archivo fuera del directorio de salida: {}",
+                path.display()
+            );
+        }
         // The id suffix makes a collision structurally impossible (id is
         // the primary key), but should one happen anyway we would rather
         // warn and not overwrite a file already written in this same run,
