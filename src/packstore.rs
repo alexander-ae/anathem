@@ -455,6 +455,14 @@ pub fn install(conn: &Connection, dir: &Path, file: &Path) -> Result<Installed> 
             .context(format!("no se pudo instalar el paquete en {}", target.display())));
     }
 
+    // Read-only from here on (finding B-2): the pack stays memory-mapped
+    // for as long as a server lives, and truncating a mapped file raises
+    // SIGBUS. Nothing in anathem writes over it in place, but a stray `>`
+    // or a half-finished download would. It does not get in the way of the
+    // next install: `rename` needs permission on the directory, not on the
+    // file. See `permisos::solo_lectura`.
+    let _ = crate::permisos::solo_lectura(&target);
+
     // Clears the mark in the same transaction in which it adopts.
     vecstore::adopt_pack(conn, &name, &sha, dims)?;
     let p = Pack::open_pack(&target)?;
@@ -484,6 +492,20 @@ pub fn remove_pack(conn: &Connection, dir: &Path) -> Result<Option<String>> {
 }
 
 /// Verifies the `.sha256` travelling beside the pack, if one travels at all.
+///
+/// A missing sidecar is not an error here, and that is deliberate: `mem
+/// model install` is also how a pack built locally with
+/// `tools/construir_paquete.py` gets installed, and that one has no sidecar
+/// to check against. What `install` **does** guarantee on its own is that
+/// the copy it puts in place is byte-for-byte the file it was handed (it
+/// re-hashes the copy), so the gap is only in "is this the pack the project
+/// published", which no local check can answer anyway.
+///
+/// Closing that gap properly needs a signature — a key published somewhere
+/// other than the artifact — and that is a decision with key custody
+/// attached, tracked separately in finding M-3. The installer, which is
+/// where a pack arrives from the network, now refuses to proceed when it
+/// cannot verify (`scripts/instalar.sh`); this path is the local one.
 fn verify_signature(file: &Path, sha: &str) -> Result<()> {
     let firma = file.with_file_name(format!(
         "{}.sha256",
