@@ -143,3 +143,42 @@ fn search_memory_returns_twenty_candidates_by_default() {
         .lines().filter(|l| l.starts_with("[id:")).count();
     assert_eq!(n, 20, "con 25 memorias que matchean, sin limit deben volver los 20 candidatos por defecto");
 }
+
+// --- B-4: what a caller may ask for has a ceiling ------------------------
+
+#[test]
+fn search_memory_clamps_an_absurd_limit_and_budget() {
+    // `limit` and `budget` come straight off the request. Asking for a
+    // billion of each has to come back with an answer, promptly, not with
+    // an error and not with the process thinking about it.
+    let d = tempfile::tempdir().unwrap();
+    let conn = anathem::db::open(&d.path().join("m.db")).unwrap();
+    for i in 0..5 {
+        anathem::ingest::save_explicit(&conn, &format!("nota {i} sobre cache"), "p", vec![])
+            .unwrap();
+    }
+    let cfg = anathem::config::Config::default();
+    let ctx = anathem::search::SearchContext::bm25_only();
+
+    let req = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": "search_memory", "arguments": {
+            "query": "cache",
+            "limit": u64::MAX,
+            "budget": u64::MAX
+        }}
+    });
+    let comienzo = std::time::Instant::now();
+    let res = anathem::mcp::handle(&conn, &ctx, &cfg, &req).unwrap().unwrap();
+    assert!(comienzo.elapsed() < std::time::Duration::from_secs(5), "tardó demasiado");
+    let texto = res["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(texto.contains("cache"), "tenía que devolver resultados igual: {texto}");
+}
+
+#[test]
+fn a_very_long_query_does_not_grow_the_fts_expression_without_bound() {
+    let largo: String = (0..5_000).map(|i| format!("palabra{i} ")).collect();
+    let expr = anathem::search::to_match(&largo);
+    let ramas = expr.matches(" OR ").count() + 1;
+    assert!(ramas <= 50, "la expresión creció a {ramas} ramas");
+}

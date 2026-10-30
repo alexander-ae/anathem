@@ -169,3 +169,58 @@ fn it_accepts_an_added_token_whose_id_is_outside_the_table() {
     let v = p.embed("<mask> hola").unwrap();
     assert!((v[0] - 1.0).abs() < 1e-5, "esperaba el eje 0, salió {v:?}");
 }
+
+// --- A-1: the declared name is a path, and has to be an inert one ---------
+//
+// `packstore::pack_path` builds `paquetes/{name}.anathem-pack` out of the
+// name the file itself declares. `Path::join` neither neutralises `..` nor
+// refuses an absolute path: it replaces the base with it. So a name is not a
+// label, it is a write primitive, and `open_pack` is the one place that can
+// refuse it before any `Pack` exists carrying it.
+
+/// Every shape that would escape `paquetes/`, and the reason it would.
+fn hostile_names() -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("../../../../tmp/escapado", "parent directories"),
+        ("..", "the parent itself"),
+        (".", "the directory itself"),
+        ("/tmp/absoluto", "an absolute path replaces the base"),
+        ("sub/dir", "a separator makes two components"),
+        ("sub\\dir", "the Windows separator, on any platform"),
+        (".oculto", "a leading dot"),
+        ("C:windows", "a Windows drive prefix"),
+        ("", "the empty name"),
+    ]
+}
+
+#[test]
+fn it_rejects_a_name_that_would_not_be_a_plain_file_name() {
+    for (name, por_que) in hostile_names() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path().join("hostil.anathem-pack");
+        support::write_pack_mini(&r, name);
+        let e = Pack::open_pack(&r)
+            .expect_err(&format!("tendría que rechazar {name:?}: {por_que}"))
+            .to_string();
+        assert!(
+            e.contains("nombre"),
+            "el error debe decir que el problema es el nombre ({por_que}): {e}"
+        );
+        assert!(
+            e.contains("hostil.anathem-pack"),
+            "el error debe nombrar el archivo ({por_que}): {e}"
+        );
+    }
+}
+
+#[test]
+fn it_accepts_the_names_real_packs_use() {
+    for name in ["en-es", "en_es", "es", "paquete.v2", "EN-ES-2026"] {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path().join("bueno.anathem-pack");
+        support::write_pack_mini(&r, name);
+        let p = Pack::open_pack(&r)
+            .unwrap_or_else(|e| panic!("{name:?} es un nombre legítimo y fue rechazado: {e}"));
+        assert_eq!(p.name(), name);
+    }
+}

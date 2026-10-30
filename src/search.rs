@@ -10,6 +10,29 @@ use std::sync::OnceLock;
 pub const DEFAULT_BUDGET_TOKENS: usize = 1200;
 const CANDIDATES: usize = 200;
 
+/// Ceilings for what a caller may ask for (finding B-4).
+///
+/// `limit` and `budget` arrive straight off an MCP request and used to be
+/// taken as given, so one call could ask for a billion candidates and a
+/// budget to match. The caller is the local agent rather than a stranger,
+/// so this is robustness and not a breach — but a model that writes
+/// `limit: 100000` because it was feeling thorough should get a large
+/// answer, not an unresponsive one.
+///
+/// `MAX_LIMIT` sits above `CANDIDATES` on purpose: the lexical pool is
+/// capped at `CANDIDATES` anyway, and pinned memories come in over and
+/// above it, so a legitimate caller can still ask for more than the pool.
+pub const MAX_LIMIT: usize = 500;
+pub const MAX_BUDGET_TOKENS: usize = 100_000;
+
+/// The most terms `to_match` will put into one FTS5 expression.
+///
+/// Every term becomes a quoted `OR` branch, so without a ceiling the size
+/// of the query SQLite has to plan is set by the length of the text handed
+/// in. Fifty is far past any real query: the measurements behind
+/// `Config::candidates` were run on queries of a handful of words.
+const MAX_TERMS: usize = 50;
+
 #[derive(Debug, Clone)]
 pub struct Query {
     pub text: String,
@@ -48,6 +71,7 @@ fn word_re() -> &'static Regex {
 pub fn to_match(text: &str) -> String {
     let terms: Vec<String> = word_re()
         .find_iter(text)
+        .take(MAX_TERMS)
         .map(|m| format!("\"{}\"", m.as_str().replace('"', "")))
         .collect();
     terms.join(" OR ")
@@ -245,7 +269,13 @@ pub fn run_explained(
         // score limit N` can leave out a relevant but verbose pinned memory
         // once the candidate pool exceeds N (in the real corpus, a common
         // connective like "que" already matches >700 chunks).
-        rows.extend(candidate_rows(conn, &m, q, " and m.pinned = 1", None)?);
+        // The cap is `CANDIDATES` and not `None` (finding B-4). The
+        // guarantee this query exists for is unchanged in practice —
+        // pinning is a deliberate act, so no real corpus has two hundred
+        // pinned memories matching one query — but a query with no `LIMIT`
+        // at all makes the work SQLite does depend on the size of the
+        // corpus rather than on what was asked for.
+        rows.extend(candidate_rows(conn, &m, q, " and m.pinned = 1", Some(CANDIDATES))?);
 
         // SQLite's bm25() returns negative values; more negative is better.
         // We deduplicate by keeping the best (most negative) chunk per

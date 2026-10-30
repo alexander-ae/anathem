@@ -117,6 +117,15 @@ fn write_pack_wide(pack_path: &std::path::Path, name: &str) {
     for _ in 0..dims { b.extend_from_slice(&1.0f32.to_le_bytes()); }
     for _ in 0..dims { b.extend_from_slice(&0.0f32.to_le_bytes()); }
     for f in rows { b.extend_from_slice(&f); }
+    // An installed pack is 0400 (finding B-2), and some of these tests
+    // overwrite one in place on purpose to simulate a swap by hand. Taking
+    // the write bit back is the same deliberate step that would take
+    // outside the tests.
+    #[cfg(unix)]
+    if pack_path.exists() {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(pack_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
     std::fs::write(pack_path, b).unwrap();
 }
 

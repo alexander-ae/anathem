@@ -38,6 +38,13 @@ sh instalar.sh --configurar-path --sin-paquete
 sh instalar.sh --etiqueta v0.1.0
 ```
 
+Todo lo que se baja se comprueba contra su sha256, y si no se puede comprobar
+—porque la release no trae el `.sha256`, o porque la máquina no tiene
+`sha256sum` ni `shasum`— el instalador se detiene en vez de seguir. Eso
+detecta una descarga corrupta o cortada, que es la falla común; no detecta una
+release adulterada, porque el sha viaja junto al archivo. Si de verdad no
+podés verificar y aceptás el riesgo, `--sin-verificar` lo saltea.
+
 Con `--conectar` también lo registra en tus agentes: en Claude Code con
 `claude mcp add --scope user`, y en opencode editando su configuración (o
 creándola, si opencode está instalado y todavía no la tiene). Si alguna de las

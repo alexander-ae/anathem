@@ -110,7 +110,47 @@ pub fn open(path: &Path) -> Result<Connection> {
     conn.execute_batch(SCHEMA)?;
     add_topic_column(&conn)?;
     add_handoff_columns(&conn)?;
+    restringir(path);
     Ok(conn)
+}
+
+/// Leaves the database and its directory readable only by their owner.
+///
+/// It holds every note the agents saved, and the default umask gives it
+/// `0644`: on a shared machine any other local user reads the lot (finding
+/// B-1). It runs on **every** open and not only on creation, because the
+/// databases worth protecting are precisely the ones an earlier version
+/// already left at `0644`.
+///
+/// It runs after `SCHEMA`, not before: that batch is what switches the
+/// journal to WAL, and the `-wal`/`-shm` files — which carry the same
+/// content as the database — do not exist until then. SQLite gives them the
+/// database's own mode from that point on, so narrowing all three here is
+/// enough for every later run.
+///
+/// Nothing here can fail the open. A database on a filesystem with no Unix
+/// modes works perfectly well, and refusing to open it over a permission
+/// that cannot exist would be trading a real feature for an imaginary
+/// guarantee; `restringir_a_dueno` warns on stderr instead.
+fn restringir(path: &Path) {
+    if let Some(parent) = path.parent() {
+        if parent.as_os_str().is_empty() {
+            // `--db mem.db`: the parent is the working directory, which is
+            // not ours to narrow.
+        } else {
+            let _ = crate::permisos::restringir_a_dueno(parent);
+        }
+    }
+    let anexo = |sufijo: &str| {
+        let mut s = path.as_os_str().to_os_string();
+        s.push(sufijo);
+        std::path::PathBuf::from(s)
+    };
+    for p in [path.to_path_buf(), anexo("-wal"), anexo("-shm")] {
+        if p.exists() {
+            let _ = crate::permisos::restringir_a_dueno(&p);
+        }
+    }
 }
 
 fn has_column(conn: &Connection, name: &str) -> Result<bool> {

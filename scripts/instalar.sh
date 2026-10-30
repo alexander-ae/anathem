@@ -19,6 +19,7 @@ SIN_PAQUETE=0
 CONFIGURAR_PATH=0
 CONECTAR=0
 COMPILAR=0
+SIN_VERIFICAR=0
 ETIQUETA="latest"
 
 uso() {
@@ -29,6 +30,7 @@ Uso: scripts/instalar.sh [opciones]
   --etiqueta <vX.Y.Z>   instala esa release en vez de la última
   --paquete <archivo>   usa un paquete de vocabulario ya descargado
   --sin-paquete         no instala paquete (búsqueda solo léxica)
+  --sin-verificar       sigue aunque no se pueda comprobar el sha256
   --configurar-path     agrega el directorio de instalación a tu shell
   --conectar            registra anathem como servidor MCP en Claude Code
   --prefijo <dir>       dónde instalar el binario (por defecto ~/.local/bin)
@@ -46,6 +48,7 @@ while [ $# -gt 0 ]; do
     --etiqueta) ETIQUETA="${2:?--etiqueta necesita una versión}"; shift 2 ;;
     --paquete) PAQUETE="${2:?--paquete necesita un archivo}"; shift 2 ;;
     --sin-paquete) SIN_PAQUETE=1; shift ;;
+    --sin-verificar) SIN_VERIFICAR=1; shift ;;
     --configurar-path) CONFIGURAR_PATH=1; shift ;;
     --conectar) CONECTAR=1; shift ;;
     --prefijo) PREFIJO="${2:?--prefijo necesita un directorio}"; shift 2 ;;
@@ -93,6 +96,13 @@ bajar() {
 # El sha viene de la misma release que el binario, así que no protege contra
 # una release adulterada —para eso haría falta una firma— pero sí contra una
 # descarga truncada o corrupta, que es la falla común.
+#
+# Lo que NO hace es dejar pasar algo sin comprobar. Antes, cuando la máquina
+# no tenía ni sha256sum ni shasum, esta función avisaba y devolvía 0: la
+# instalación seguía como si hubiera verificado. Un fallo abierto en el único
+# control de integridad que existe tiene que detener la instalación, no
+# anotarse al pasar. Quien de verdad no pueda verificar lo dice con
+# --sin-verificar, y entonces es una decisión y no un accidente.
 verificar_sha() {
   esperado="$(cut -d' ' -f1 < "$2")"
   if command -v sha256sum >/dev/null 2>&1; then
@@ -100,14 +110,33 @@ verificar_sha() {
   elif command -v shasum >/dev/null 2>&1; then
     obtenido="$(shasum -a 256 "$1" | cut -d' ' -f1)"
   else
-    aviso "sin sha256sum ni shasum: no puedo verificar la descarga"
-    return 0
+    if [ "$SIN_VERIFICAR" -eq 1 ]; then
+      aviso "sin sha256sum ni shasum, y --sin-verificar: sigo sin comprobar la descarga"
+      return 0
+    fi
+    malo "no encuentro sha256sum ni shasum, así que no puedo comprobar la descarga."
+    echo "    Instalá coreutils (Linux) o usá --sin-verificar si aceptás el riesgo." >&2
+    return 1
   fi
   if [ "$esperado" != "$obtenido" ]; then
     malo "el archivo bajado no coincide con su sha256; descarga corrupta."
     return 1
   fi
   ok "sha256 verificado"
+}
+
+# Falta el .sha256 de un archivo que acabamos de bajar.
+#
+# Mismo criterio: una release sin su sha es una release que no se puede
+# comprobar, y seguir en silencio convierte el control en decorado.
+sin_sha_disponible() {
+  if [ "$SIN_VERIFICAR" -eq 1 ]; then
+    aviso "la release no trae el .sha256 de $1, y --sin-verificar: sigo"
+    return 0
+  fi
+  malo "la release no trae el .sha256 de $1, así que no puedo comprobarlo."
+  echo "    Revisá https://gitlab.com/$REPO/-/releases, o usá --sin-verificar." >&2
+  return 1
 }
 
 # GitLab resuelve `permalink/latest` a la release más nueva y redirige al
@@ -175,9 +204,12 @@ else
   if bajar "$(url_release "$ARCHIVO.sha256")" "$TEMPORAL/$ARCHIVO.sha256" 2>/dev/null; then
     verificar_sha "$TEMPORAL/$ARCHIVO" "$TEMPORAL/$ARCHIVO.sha256" || exit 1
   else
-    aviso "la release no trae .sha256; sigo sin verificar"
+    sin_sha_disponible "$ARCHIVO" || exit 1
   fi
-  tar -C "$TEMPORAL" -xzf "$TEMPORAL/$ARCHIVO"
+  # Solo el miembro que nos interesa, y sin arrastrar el dueño que venga
+  # grabado en el tar: el archivo lo armó otra máquina y no tiene por qué
+  # decidir nada sobre esta.
+  tar -C "$TEMPORAL" --no-same-owner -xzf "$TEMPORAL/$ARCHIVO" mem
   ORIGEN="$TEMPORAL/mem"
   [ -f "$ORIGEN" ] || { malo "el archivo bajado no contiene el binario mem"; exit 1; }
 fi
@@ -235,6 +267,8 @@ else
     if bajar "$(url_release "en-es.anathem-pack")" "$TEMPORAL/en-es.anathem-pack"; then
       if bajar "$(url_release "en-es.anathem-pack.sha256")" "$TEMPORAL/en-es.anathem-pack.sha256" 2>/dev/null; then
         verificar_sha "$TEMPORAL/en-es.anathem-pack" "$TEMPORAL/en-es.anathem-pack.sha256" || exit 1
+      else
+        sin_sha_disponible "en-es.anathem-pack" || exit 1
       fi
       PAQUETE="$TEMPORAL/en-es.anathem-pack"
     else

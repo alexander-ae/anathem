@@ -73,7 +73,27 @@ pub fn write_pack_with_tokenizer(
         assert_eq!(f.len(), dims, "cada fila tiene que medir dims bytes");
         b.extend_from_slice(f);
     }
+    // An already-installed pack is 0400 (finding B-2): the file stays
+    // memory-mapped while a server lives, and truncating a mapped file
+    // raises SIGBUS, so nothing gets to write over it by accident. Several
+    // tests do overwrite one in place, on purpose, to simulate another
+    // process swapping the pack underneath — which outside the tests takes
+    // exactly this same deliberate step. The mode stops accidents, not
+    // intent, so the fixture takes the write bit back before writing.
+    hacer_escribible(pack_path);
     std::fs::write(pack_path, b).unwrap();
+}
+
+/// Gives a file its owner's write bit back, if it exists. See the comment in
+/// `write_pack_with_tokenizer`.
+pub fn hacer_escribible(pack_path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if pack_path.exists() {
+            std::fs::set_permissions(pack_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        }
+    }
 }
 
 /// Writes a pack of 4 tokens and 4 dimensions at `path`.
