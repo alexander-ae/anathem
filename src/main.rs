@@ -1,3 +1,4 @@
+use anathem::permisos::restringir_a_dueno;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
@@ -403,8 +404,25 @@ fn run(cli: Cli) -> Result<()> {
                 [id],
                 |r| r.get(0),
             )?;
-            let tmp = std::env::temp_dir().join(format!("anathem-edit-{id}.md"));
+            // The temporary used to be `temp_dir()/anathem-edit-{id}.md`: a
+            // fixed, guessable name in a world-writable directory, created
+            // with the default umask and without O_EXCL. On a shared host
+            // that is two problems — the memory's body was readable by any
+            // other user while the editor had it open, and whoever got
+            // there first could leave a symlink at that path, so the write
+            // landed on a file of theirs and what came back into the
+            // database was their text, not the user's.
+            //
+            // A private directory, 0700, holding a 0600 file with a random
+            // name closes both. Both the directory and the file are removed
+            // when `carpeta` drops, which — unlike the old `remove_file` on
+            // the happy path — also covers the editor exiting with an
+            // error.
+            let carpeta = tempfile::Builder::new().prefix("anathem-edit-").tempdir()?;
+            restringir_a_dueno(carpeta.path())?;
+            let tmp = carpeta.path().join(format!("{id}.md"));
             std::fs::write(&tmp, &body)?;
+            restringir_a_dueno(&tmp)?;
             let editor = std::env::var("EDITOR")
                 .unwrap_or_else(|_| default_editor(cfg!(windows)).to_string());
             let status = std::process::Command::new(&editor).arg(&tmp).status()?;
@@ -412,7 +430,6 @@ fn run(cli: Cli) -> Result<()> {
                 anyhow::bail!("{editor} salió con error, no se guardó nada");
             }
             let new_id = std::fs::read_to_string(&tmp)?;
-            std::fs::remove_file(&tmp).ok();
             if new_id != body {
                 // `replace_body` re-chunks, and the cascade takes the old
                 // text's vectors with it. Without this, nobody rebuilt the

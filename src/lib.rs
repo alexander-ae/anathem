@@ -15,6 +15,7 @@ pub mod mcp;
 pub mod migrate;
 pub mod model;
 pub mod pack;
+pub mod permisos;
 pub mod packstore;
 pub mod project;
 pub mod recent;
