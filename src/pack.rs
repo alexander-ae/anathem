@@ -63,6 +63,59 @@ fn f32s_en(m: &[u8], o: &mut usize, n: usize, pack_path: &Path, campo: &str) -> 
     Ok(f.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect())
 }
 
+/// The longest name a pack may declare. Real ones are `en-es`; the cap is
+/// there so a name cannot be a payload in its own right.
+const MAX_NAME: usize = 64;
+
+/// Rejects a declared name that is not a plain file name.
+///
+/// The name is not a label: `packstore::pack_path` builds
+/// `paquetes/{name}.anathem-pack` out of it, and `Path::join` neither
+/// neutralises `..` nor refuses an absolute path — it replaces the base
+/// with it. A pack declaring `../../../../home/alguien/.bashrc` would have
+/// `install` deposit its own bytes there, `reconcile` rename over it, and
+/// `remove` delete whatever lives at that path. The bytes of the pack are
+/// the attacker's, so that is arbitrary code execution at the next shell.
+///
+/// It is checked here, where the name is first read from the file, so no
+/// `Pack` can ever exist carrying one that is not a plain file name, and
+/// every path that builds a route out of `p.name()` inherits the guarantee
+/// without repeating the check.
+///
+/// Both separators are rejected on every platform, not only the local one:
+/// a pack built on Linux gets installed on Windows, and a name that is one
+/// component here can be two there. `:` goes with them for the same reason
+/// — `C:evil` is an ordinary name on Unix and a drive-relative path on
+/// Windows.
+pub fn validate_name(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("está vacío".into());
+    }
+    if name.chars().count() > MAX_NAME {
+        return Err(format!("tiene más de {MAX_NAME} caracteres"));
+    }
+    if name == "." || name == ".." {
+        return Err(format!("es «{name}», que nombra un directorio y no un archivo"));
+    }
+    if name.starts_with('.') {
+        return Err("empieza con un punto".into());
+    }
+    if let Some(c) = name.chars().find(|&c| c == '/' || c == '\\' || c == ':') {
+        return Err(format!("contiene «{c}», que separa componentes de una ruta"));
+    }
+    if let Some(c) = name.chars().find(|c| c.is_control()) {
+        return Err(format!("contiene el carácter de control U+{:04X}", c as u32));
+    }
+    // Belt and braces against anything the explicit checks above do not
+    // name: whatever the platform makes of these bytes, it has to come out
+    // as exactly one ordinary component.
+    let mut comps = Path::new(name).components();
+    match (comps.next(), comps.next()) {
+        (Some(std::path::Component::Normal(c)), None) if c == name => Ok(()),
+        _ => Err("no es un nombre de archivo simple".into()),
+    }
+}
+
 impl Pack {
     /// Opens and validates a pack. It does **not** verify the sha256: doing
     /// so on every startup would mean hashing tens of megabytes and would
@@ -93,7 +146,47 @@ impl Pack {
         let name = std::str::from_utf8(name_bytes)
             .with_context(|| format!("el nombre del paquete {} no es UTF-8 válido", pack_path.display()))?
             .to_string();
+        // Before anything else that costs: the name becomes a filesystem
+        // path downstream, so a hostile one is refused here and never
+        // reaches a `Pack`. See `validate_name`.
+        if let Err(por_que) = validate_name(&name) {
+            bail!(
+                "el nombre que declara el paquete {} {por_que}; \
+                 un paquete nombra su archivo, así que tiene que ser un nombre de archivo simple",
+                pack_path.display()
+            );
+        }
         let tok_len = u64_en(&mapping, &mut o, pack_path, "largo del tokenizador")? as usize;
+        // Everything the rest of the header commits the file to, added up
+        // and compared against what the file actually measures, **before**
+        // handing the tokenizer's bytes to `tokenizers` and its C regex
+        // engine. A pack that is evidently malformed — a truncated table, a
+        // length that overflows — should never reach that parser, which is
+        // by far the largest surface this format exposes.
+        //
+        // `saturating_mul` and not `checked_mul`: a product that saturates
+        // to `usize::MAX` fails the comparison against what is left of the
+        // file just the same, and the error then names the field that is
+        // out of range instead of a generic overflow.
+        let restante = mapping.len() - o; // take_bytes garantiza o <= len
+        let mut necesario = 0usize;
+        for (campo, n) in [
+            ("el tokenizador", tok_len),
+            ("las escalas", dims.saturating_mul(4)),
+            ("los mínimos", dims.saturating_mul(4)),
+            ("la tabla", n_tokens.saturating_mul(dims)),
+        ] {
+            necesario = necesario
+                .checked_add(n)
+                .filter(|&t| t <= restante)
+                .with_context(|| {
+                    format!(
+                        "el paquete {} está truncado: declara para {campo} un tamaño que el \
+                         archivo no cubre, y quedan {restante} bytes",
+                        pack_path.display()
+                    )
+                })?;
+        }
         let raw = take_bytes(&mapping, &mut o, tok_len, pack_path, "tokenizador")?;
         let tok = Tokenizer::from_bytes(raw).map_err(|e| {
             anyhow::anyhow!("el tokenizador del paquete {} no se pudo leer: {e}", pack_path.display())

@@ -44,3 +44,35 @@ fn a_corrupt_pack_degrades_to_bm25_without_breaking_search() {
         "el aviso debe decir que la búsqueda quedó degradada a bm25: {err}"
     );
 }
+
+/// A-1, second half: a name that escapes `paquetes/` may already be sitting
+/// in `meta`, written by a version from before `pack::validate_name`
+/// existed. Reading it has to degrade to bm25 and say so, not hand the name
+/// to `rename` or `remove_file`.
+#[test]
+fn a_poisoned_pack_name_in_the_database_degrades_to_bm25() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("m.db");
+    mem(&db, &["init"]);
+    mem(&db, &["save", "El cache del breakdown no se justifica por staleness"]);
+
+    {
+        let conn = anathem::db::open(&db).unwrap();
+        // Exactly what an old binary would have stored after installing a
+        // pack that declared this name.
+        anathem::vecstore::register_pack(&conn, "../../../escapado", "deadbeef", 4).unwrap();
+    }
+
+    let (out, err, ok) = mem(&db, &["search", "cache staleness"]);
+    assert!(ok, "un nombre envenenado no puede tumbar la búsqueda: stderr={err}");
+    assert!(out.contains("cache"), "la búsqueda debe seguir devolviendo bm25: {out}");
+    assert!(
+        err.contains("escapado"),
+        "el aviso debe nombrar el registro que rechazó: {err}"
+    );
+    // And nothing was created or removed outside the packs directory.
+    assert!(
+        !dir.path().parent().unwrap().join("escapado.anathem-pack").exists(),
+        "no se puede haber tocado nada fuera de paquetes/"
+    );
+}

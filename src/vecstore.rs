@@ -170,7 +170,22 @@ pub fn registered_pack(conn: &Connection) -> Result<Option<PackIdentity>> {
         }
     };
     match (parse("pack_nombre")?, parse("pack_sha256")?, parse("pack_dims")?) {
-        (Some(n), Some(s), Some(d)) => Ok(Some((n, s, d.parse()?))),
+        (Some(n), Some(s), Some(d)) => {
+            // `pack_path` turns this name into a route on disk, so it gets
+            // the same scrutiny as the one read from a pack file. Here it
+            // matters for a database written by a version from before that
+            // check existed, or edited by hand: refusing it sends
+            // `resolve_inner` down its degraded path — bm25 with a warning
+            // — instead of letting a poisoned name reach `rename` or
+            // `remove_file`. See `pack::validate_name`.
+            if let Err(por_que) = crate::pack::validate_name(&n) {
+                anyhow::bail!(
+                    "el nombre de paquete registrado en la base ({n:?}) {por_que}; \
+                     reinstalá el paquete con `mem model install`"
+                );
+            }
+            Ok(Some((n, s, d.parse()?)))
+        }
         _ => Ok(None),
     }
 }
