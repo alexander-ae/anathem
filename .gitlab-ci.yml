@@ -61,13 +61,25 @@ auditar:dependencias:
   variables:
     CARGO_HOME: $CI_PROJECT_DIR/.cargo
   cache:
-    key: auditar-$CI_COMMIT_REF_SLUG
+    # Una clave sola para todas las ramas, al revés que los demás jobs. Lo
+    # único que guarda es el binario de cargo-audit, que no depende de la
+    # rama ni del código: con `$CI_COMMIT_REF_SLUG` cada rama nueva arrancaba
+    # con caché fría y volvía a compilarlo, que es exactamente lo que la
+    # guarda de `before_script` quiere evitar.
+    key: auditar-cargo-audit
     paths:
-      - .cargo/
+      - .cargo/bin/
   before_script:
+    # `cargo install` compila cargo-audit desde fuente: varios minutos, y se
+    # pagarían en cada corrida. El binario queda en `$CARGO_HOME/bin`, que
+    # este job ya cachea, así que solo se compila la primera vez y cuando la
+    # caché se pierde. Sin esta guarda, el job de seguridad terminaba siendo
+    # de los más caros del pipeline, que es justo lo que no queremos de algo
+    # pensado para correr siempre.
+    #
     # 0.22 o más: las versiones anteriores no parsean los avisos con CVSS 4.0
-    #  y se caen al cargar la base entera.
-    - cargo install cargo-audit --locked --version "^0.22"
+    # y se caen al cargar la base entera.
+    - test -x "$CARGO_HOME/bin/cargo-audit" || cargo install cargo-audit --locked --version "^0.22"
   script:
     - cargo audit --deny warnings
 
@@ -88,6 +100,20 @@ probar:windows:
     - cargo test --locked
     - cargo run --locked --quiet -- --version
   allow_failure: true
+  # No en cada push. Medido sobre los 24 pipelines que llegó a correr este
+  # proyecto: este job solo se llevó el 79% de todo el tiempo de CI —unos 14
+  # minutos por corrida, contra 2 del de Linux— y es `allow_failure`, así que
+  # nunca frenó nada. Falló 3 de 24 veces sin consecuencia alguna. Pagar eso
+  # en cada push agotó la cuota mensual en dos días.
+  #
+  # Donde sí tiene que correr es antes de una etiqueta, que es cuando "probado
+  # en Windows" pasa a ser una afirmación sobre algo que la gente se baja.
+  # Fuera de ahí queda manual: está a un clic cuando se toca algo que lo
+  # merece —rutas, archivos, procesos— y no cuesta nada cuando no.
+  rules:
+    - if: $CI_COMMIT_TAG
+    - when: manual
+      allow_failure: true
 
 construir:linux:
   stage: construir
