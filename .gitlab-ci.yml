@@ -43,6 +43,34 @@ probar:linux:
     - cargo run --locked --quiet -- --db prueba.db search "prueba"
     - cargo run --locked --quiet -- --db prueba.db doctor
 
+# Avisos de seguridad de las dependencias (hallazgo M-4).
+#
+# No había ninguno: el árbol se enteraba de una vulnerabilidad cuando alguien
+# la leía en otro lado. `cargo audit` compara Cargo.lock contra la base de
+# RustSec, que es exactamente el trabajo que nadie va a hacer a mano.
+#
+# No bloquea: el aviso suele llegar antes que el arreglo —una dependencia
+# transitiva sin versión parchada todavía— y dejar la publicación detenida
+# por algo que no se puede arreglar ese día entrena a ignorar el rojo. Falla
+# visible y no fatal, que es lo que un proyecto de una persona puede sostener.
+auditar:dependencias:
+  stage: probar
+  needs: []
+  image: rust:1-bookworm
+  allow_failure: true
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo
+  cache:
+    key: auditar-$CI_COMMIT_REF_SLUG
+    paths:
+      - .cargo/
+  before_script:
+    # 0.22 o más: las versiones anteriores no parsean los avisos con CVSS 4.0
+    #  y se caen al cargar la base entera.
+    - cargo install cargo-audit --locked --version "^0.22"
+  script:
+    - cargo audit --deny warnings
+
 probar:windows:
   stage: probar
   tags:

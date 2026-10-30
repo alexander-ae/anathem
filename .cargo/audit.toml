@@ -1,0 +1,30 @@
+# Configuración de `cargo audit` (hallazgo M-4).
+#
+# El job de CI corre con `--deny warnings`, así que un aviso nuevo rompe la
+# etapa. Eso solo sirve si la lista de avisos conocidos está vacía o
+# justificada: un rojo permanente se vuelve invisible en una semana.
+#
+# Lo que se ignora acá no son vulnerabilidades —`cargo audit` no encuentra
+# ninguna— sino crates transitivas marcadas como sin mantenimiento. Cada una
+# lleva por qué se acepta y qué la sacaría de la lista. Conviene revisarlas
+# cuando se actualicen las dependencias directas.
+
+[advisories]
+ignore = [
+    # paste 1.0.15 — sin mantenimiento desde 2024-10.
+    #
+    # Entra por `rusqlite`, y es una macro de concatenación de
+    # identificadores que se ejecuta en tiempo de compilación: no queda
+    # nada suyo en el binario. No hay vulnerabilidad asociada, solo el
+    # autor retirándose. Sale de esta lista cuando rusqlite deje de
+    # depender de ella.
+    "RUSTSEC-2024-0436",
+
+    # unsafe-libyaml 0.2.11 — sin mantenimiento desde 2024-03.
+    #
+    # Entra por `serde_yaml`, que es **dev-dependency**: la usan los tests
+    # para leer el frontmatter que produce `mem export`. No viaja en el
+    # binario publicado, así que no alcanza a ningún usuario. Sale de esta
+    # lista el día que los tests lean ese YAML con otra cosa.
+    "RUSTSEC-2024-0449",
+]
