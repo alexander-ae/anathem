@@ -106,10 +106,35 @@ en memorias que pasaron el filtro.
   formato se valida al abrir: magia, versión, dimensiones y tamaños, con
   lecturas acotadas. Un paquete corrupto hace fallar la apertura, no la
   búsqueda: la capa vectorial se apaga y queda bm25.
+
+  El **nombre** que declara el paquete también se valida, y no es un
+  detalle: ese nombre decide la ruta del archivo instalado
+  (`paquetes/<nombre>.anathem-pack`), así que uno con `..` o absoluto
+  escribía donde quisiera con el contenido que quisiera. Tiene que ser un
+  nombre de archivo simple o el paquete no se abre.
+
+  Una vez instalado queda de solo lectura. No es secreto —el paquete es una
+  descarga pública— sino que está mapeado en memoria mientras viva el
+  servidor, y truncar un archivo mapeado tumba el proceso con SIGBUS.
+  Reinstalar sigue funcionando: reemplaza el archivo con un `rename`, que
+  pide permiso sobre el directorio y no sobre el archivo.
+
+  Lo que el sha256 **no** da es autenticidad: viene de la misma release que
+  el paquete, así que detecta una descarga corrupta y no una release
+  adulterada. Para eso haría falta una firma, que todavía no hay. Lo que sí
+  cambió es que el instalador ya no sigue de largo cuando no puede
+  verificar: si falta el `.sha256`, o la máquina no tiene con qué calcularlo,
+  se detiene. Para saltearlo hay que pedirlo con `--sin-verificar`.
 - **`config.json` y `tags.json`** son tuyos y locales; si están rotos,
   anathem falla ruidosamente en vez de seguir con valores que no pediste.
 - **La base** es un archivo SQLite sin cifrar. Quien pueda leer tu disco
-  puede leer tus memorias; anathem no agrega protección ahí.
+  puede leer tus memorias; anathem no agrega protección ahí. Lo que sí hace
+  es no dejarlas legibles para **otros usuarios de la misma máquina**: la
+  base, sus archivos `-wal`/`-shm` y el directorio que los contiene quedan
+  en 0600 y 0700 cada vez que se abren, no solo al crearse —una base vieja
+  creada en 0644 se corrige sola—. Lo mismo vale para el temporal que usa
+  `mem edit` mientras tenés el editor abierto, que vive en un directorio
+  privado y desaparece con él aunque el editor falle.
 - **El binario** no se actualiza solo y no ejecuta nada que venga de la base.
 
 ## Si encontrás algo
