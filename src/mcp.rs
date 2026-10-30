@@ -80,15 +80,22 @@ fn call_tool(
             let tags_arg: Vec<String> = args["tags"].as_array().map(|a| {
                 a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()
             }).unwrap_or_default();
+            // Clamped, not rejected (finding B-4): a model that asks for
+            // more than the ceiling wants a big answer, and the useful
+            // reply to that is the biggest one allowed rather than an
+            // error it has to learn to work around.
             let budget = args["budget"].as_u64().map(|b| b as usize)
-                .unwrap_or(search::DEFAULT_BUDGET_TOKENS);
+                .unwrap_or(search::DEFAULT_BUDGET_TOKENS)
+                .min(search::MAX_BUDGET_TOKENS);
 
             let q = search::Query {
                 text: text.clone(), project: project.clone(),
                 tags: tags_arg,
                 // `limit` can still override `cfg.candidates` (20) per
                 // call, just as it used to override the fixed 10.
-                limit: args["limit"].as_u64().map(|l| l as usize).unwrap_or(cfg.candidates),
+                limit: args["limit"].as_u64().map(|l| l as usize)
+                    .unwrap_or(cfg.candidates)
+                    .min(search::MAX_LIMIT),
                 budget_tokens: budget,
                 // Trimming to `cfg.excerpt` characters is what lets many
                 // short candidates fit in the same token budget instead of a
