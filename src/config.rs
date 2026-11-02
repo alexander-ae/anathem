@@ -52,12 +52,20 @@ pub struct Config {
     /// off with 0. If the project saw no activity in the window, nothing is
     /// sent at all.
     #[serde(default = "default_handoff_items")]
-    #[serde(rename = "traspaso_items")]
+    // The key was `traspaso_items` until 0.2.1, when it moved to the field's own
+    // English name. The alias is kept so a config.json written before
+    // that keeps loading with no warning and no error; it costs one
+    // attribute and saves someone their settings on an upgrade.
+    #[serde(alias = "traspaso_items")]
     pub handoff_items: usize,
 
     /// How far back to look for that summary: `6h`, `2d`. Defaults to 24h.
     #[serde(default = "default_handoff_window")]
-    #[serde(rename = "traspaso_ventana")]
+    // The key was `traspaso_ventana` until 0.2.1, when it moved to the field's own
+    // English name. The alias is kept so a config.json written before
+    // that keeps loading with no warning and no error; it costs one
+    // attribute and saves someone their settings on an upgrade.
+    #[serde(alias = "traspaso_ventana")]
     pub handoff_window: String,
 
     /// After how many seconds without searching the server releases the
@@ -70,7 +78,11 @@ pub struct Config {
     /// — on the order of 90 ms — on the next search, which by definition
     /// comes after a gap.
     #[serde(default = "release_after_default")]
-    #[serde(rename = "soltar_paquete_tras")]
+    // The key was `soltar_paquete_tras` until 0.2.1, when it moved to the field's own
+    // English name. The alias is kept so a config.json written before
+    // that keeps loading with no warning and no error; it costs one
+    // attribute and saves someone their settings on an upgrade.
+    #[serde(alias = "soltar_paquete_tras")]
     pub release_pack_after: u64,
 }
 
