@@ -350,8 +350,8 @@ Para el cuerpo completo de alguna, `get_memory` con su id; para ver más atrás,
 Desde la terminal, lo mismo:
 
 ```bash
-mem recent --desde 6h      # este proyecto
-mem recent --todos         # todos
+mem recent --since 6h      # este proyecto
+mem recent --all           # todos
 ```
 
 Eso viaja en el campo `instructions` del `initialize`, que el protocolo define

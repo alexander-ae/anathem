@@ -121,13 +121,13 @@ enum Cmd {
         #[arg(long)]
         project: Option<String>,
         /// Todos los proyectos, no solo uno
-        #[arg(long = "todos", conflicts_with = "project")]
+        #[arg(long = "all", alias = "todos", conflicts_with = "project")]
         all_projects: bool,
-        /// Ventana hacia atrás: 6h, 90m, 2d. Por defecto 24h; `--desde todo` no acota
-        #[arg(long = "desde", value_name = "DESDE", default_value = "24h")]
+        /// Ventana hacia atrás: 6h, 90m, 2d. Por defecto 24h; `--since todo` no acota
+        #[arg(long = "since", alias = "desde", value_name = "SINCE", default_value = "24h")]
         since: String,
         /// Cuántas memorias como máximo
-        #[arg(long = "limite", value_name = "LIMITE", default_value_t = 15)]
+        #[arg(long = "limit", alias = "limite", value_name = "LIMIT", default_value_t = 15)]
         limit: usize,
     },
     /// Muestra la cadena de supersession de una memoria, de la más nueva a la más vieja
@@ -138,11 +138,11 @@ enum Cmd {
     /// sincronizar dos computadoras a mano
     Import {
         /// Carpeta que escribió `mem export --out`
-        #[arg(long = "desde", value_name = "DESDE")]
+        #[arg(long = "from", alias = "desde", value_name = "FROM")]
         from: PathBuf,
         /// Importar sobre una base que ya tiene memorias, agregando solo lo
         /// que falte
-        #[arg(long = "fusionar")]
+        #[arg(long = "merge", alias = "fusionar")]
         merge: bool,
     },
     /// Comprueba si hay una versión más nueva publicada

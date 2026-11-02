@@ -152,14 +152,14 @@ búsqueda es solo léxica. El instalador lo baja solo; a mano se instala con
 | `topics` | Lista las claves de tema: proyecto, cuántas memorias tuvo cada una y el id de la vigente | `mem topics` |
 | `edit <id>` | Edita el cuerpo de una memoria en `$EDITOR` | `mem edit 42` |
 | `export --out <dir>` | Exporta todo a markdown con frontmatter, un archivo por memoria, sin perder nada ([formato](docs/formato-de-export.md)) | `mem export --out export/` |
-| `import --desde <dir>` | Lee lo que escribió `export`: restaurar un respaldo, mudar la memoria de máquina, o sincronizar dos computadoras a mano con git. Exige una base vacía salvo que pases `--fusionar`, que agrega solo lo que falte | `mem import --desde export/` |
+| `import --from <dir>` | Lee lo que escribió `export`: restaurar un respaldo, mudar la memoria de máquina, o sincronizar dos computadoras a mano con git. Exige una base vacía salvo que pases `--merge`, que agrega solo lo que falte | `mem import --from export/` |
 | `reindex` | Reconstruye chunks y el índice FTS5 desde `memories.body` | `mem reindex` |
 | `supersede <nueva> <vieja>` | Marca `vieja` como reemplazada por `nueva`; deja de salir en búsquedas | `mem supersede 42 43` |
 | `pin <id>` | Fija una memoria para que sobreviva el recorte de candidatos de la búsqueda | `mem pin 17` |
 | `unpin <id>` | Quita el pin | `mem unpin 17` |
 | `forget <id>` | Saca una memoria de la búsqueda sin borrar la fila | `mem forget 88` |
 | `history <id>` | Muestra la cadena de supersession de una memoria, de la más nueva a la más vieja | `mem history 42` |
-| `recent` | Qué se guardó últimamente, de más nuevo a más viejo, y qué agente lo guardó. Es lo contrario de `search`, que ordena por relevancia. `--desde` acepta `6h`, `90m`, `2d` o `todo`; por defecto 24h | `mem recent --desde 6h` |
+| `recent` | Qué se guardó últimamente, de más nuevo a más viejo, y qué agente lo guardó. Es lo contrario de `search`, que ordena por relevancia. `--since` acepta `6h`, `90m`, `2d` o `todo`; por defecto 24h | `mem recent --since 6h` |
 | `eval --evalset <json>` | Corre el harness de evaluación | `mem eval --evalset eval/evalset.json --out eval/results/anathem-bm25.json` |
 | `serve` | Arranca el servidor MCP sobre stdio (5 tools: `search_memory`, `save_memory`, `get_memory`, `list_tags`, `recent_memories`) | `mem serve` |
 | `model install <archivo>` | Instala un paquete de vocabulario (`.anathem-pack`) y reindexa todos los fragmentos | `mem model install mini-es.anathem-pack` |
@@ -278,7 +278,7 @@ arranca sin saber qué hizo el anterior. `mem recent` contesta eso: lo último
 que se guardó en el proyecto, de más nuevo a más viejo, con quién lo guardó.
 
 ```
-$ mem recent --desde 6h
+$ mem recent --since 6h
 2026-10-29T10:11  [opencode]  [tema: estado-del-refactor]
   id:128  Quedó a medias la migración de los tests de integración
   Los de `auth` ya pasan; faltan los de `billing`, que dependen del fixture viejo.
