@@ -60,7 +60,7 @@ Esto es fiable porque no depende de adivinar intenciones: es una propiedad
 estructural, se cumple o no, y un test la comprueba.
 
 **Fiable — una memoria no puede ocupar el prompt.** Cada título se recorta y
-la cantidad de memorias del traspaso está acotada por `traspaso_items`. Sin
+la cantidad de memorias del traspaso está acotada por `handoff_items`. Sin
 eso, una sola nota larga podría empujar afuera al resto del prompt.
 
 **Parcial — el bloque está etiquetado.** El texto dice explícitamente que lo
@@ -95,7 +95,7 @@ en memorias que pasaron el filtro.
 - **`mem forget <id>`** saca una memoria de la búsqueda sin borrarla, y
   `mem supersede` la reemplaza. Las dos son reversibles.
 - **Bajá o apagá el traspaso** si no lo querés en el prompt de sistema:
-  `"traspaso_items": 0` en `config.json`. La tool `recent_memories` sigue
+  `"handoff_items": 0` en `config.json`. La tool `recent_memories` sigue
   disponible para cuando el agente la pida.
 - **No importes carpetas ajenas** sin leerlas, igual que no correrías un
   script que te pasaron.

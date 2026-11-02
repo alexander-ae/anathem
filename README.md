@@ -152,14 +152,14 @@ búsqueda es solo léxica. El instalador lo baja solo; a mano se instala con
 | `topics` | Lista las claves de tema: proyecto, cuántas memorias tuvo cada una y el id de la vigente | `mem topics` |
 | `edit <id>` | Edita el cuerpo de una memoria en `$EDITOR` | `mem edit 42` |
 | `export --out <dir>` | Exporta todo a markdown con frontmatter, un archivo por memoria, sin perder nada ([formato](docs/formato-de-export.md)) | `mem export --out export/` |
-| `import --desde <dir>` | Lee lo que escribió `export`: restaurar un respaldo, mudar la memoria de máquina, o sincronizar dos computadoras a mano con git. Exige una base vacía salvo que pases `--fusionar`, que agrega solo lo que falte | `mem import --desde export/` |
+| `import --from <dir>` | Lee lo que escribió `export`: restaurar un respaldo, mudar la memoria de máquina, o sincronizar dos computadoras a mano con git. Exige una base vacía salvo que pases `--merge`, que agrega solo lo que falte | `mem import --from export/` |
 | `reindex` | Reconstruye chunks y el índice FTS5 desde `memories.body` | `mem reindex` |
 | `supersede <nueva> <vieja>` | Marca `vieja` como reemplazada por `nueva`; deja de salir en búsquedas | `mem supersede 42 43` |
 | `pin <id>` | Fija una memoria para que sobreviva el recorte de candidatos de la búsqueda | `mem pin 17` |
 | `unpin <id>` | Quita el pin | `mem unpin 17` |
 | `forget <id>` | Saca una memoria de la búsqueda sin borrar la fila | `mem forget 88` |
 | `history <id>` | Muestra la cadena de supersession de una memoria, de la más nueva a la más vieja | `mem history 42` |
-| `recent` | Qué se guardó últimamente, de más nuevo a más viejo, y qué agente lo guardó. Es lo contrario de `search`, que ordena por relevancia. `--desde` acepta `6h`, `90m`, `2d` o `todo`; por defecto 24h | `mem recent --desde 6h` |
+| `recent` | Qué se guardó últimamente, de más nuevo a más viejo, y qué agente lo guardó. Es lo contrario de `search`, que ordena por relevancia. `--since` acepta `6h`, `90m`, `2d` o `todo`; por defecto 24h | `mem recent --since 6h` |
 | `eval --evalset <json>` | Corre el harness de evaluación | `mem eval --evalset eval/evalset.json --out eval/results/anathem-bm25.json` |
 | `serve` | Arranca el servidor MCP sobre stdio (5 tools: `search_memory`, `save_memory`, `get_memory`, `list_tags`, `recent_memories`) | `mem serve` |
 | `model install <archivo>` | Instala un paquete de vocabulario (`.anathem-pack`) y reindexa todos los fragmentos | `mem model install mini-es.anathem-pack` |
@@ -202,10 +202,10 @@ candidatos y el cambio no serviría de nada.
 Los dos valores se ajustan en `config.json`, junto a la base:
 
 ```json
-{ "candidatos": 20, "extracto": 120 }
+{ "candidates": 20, "excerpt": 120 }
 ```
 
-En un corpus de documentos cortos conviene bajar `candidatos`: medido sobre
+En un corpus de documentos cortos conviene bajar `candidates`: medido sobre
 mMARCO, con pasajes de ~250 caracteres, el techo satura en 10 y pedir más es
 desperdicio. Con memorias largas, que es para lo que anathem existe, el salto
 de 10 a 20 es el que duplica el techo.
@@ -261,7 +261,7 @@ O sea que estar quieto cuesta 12 MB y volver cuesta 60 ms, una vez. El plazo
 se ajusta en `config.json`; con `0` no se suelta nunca:
 
 ```json
-{ "soltar_paquete_tras": 300 }
+{ "release_pack_after": 300 }
 ```
 
 Soltarlo incluye pedirle al asignador que devuelva las páginas al sistema.
@@ -278,7 +278,7 @@ arranca sin saber qué hizo el anterior. `mem recent` contesta eso: lo último
 que se guardó en el proyecto, de más nuevo a más viejo, con quién lo guardó.
 
 ```
-$ mem recent --desde 6h
+$ mem recent --since 6h
 2026-10-29T10:11  [opencode]  [tema: estado-del-refactor]
   id:128  Quedó a medias la migración de los tests de integración
   Los de `auth` ya pasan; faltan los de `billing`, que dependen del fixture viejo.
@@ -346,10 +346,10 @@ Cuesta tokens en cada sesión, así que es corto, y se apaga o se achica desde
 `config.json`:
 
 ```json
-{ "traspaso_items": 5, "traspaso_ventana": "24h" }
+{ "handoff_items": 5, "handoff_window": "24h" }
 ```
 
-Con `"traspaso_items": 0` no se manda nada. Y si el proyecto no tuvo actividad
+Con `"handoff_items": 0` no se manda nada. Y si el proyecto no tuvo actividad
 en la ventana, tampoco: no se gastan tokens en decir que no pasó nada.
 
 Para saber qué **archivos** tocó el otro agente, `git diff` es mejor que

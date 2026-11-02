@@ -121,13 +121,13 @@ enum Cmd {
         #[arg(long)]
         project: Option<String>,
         /// Todos los proyectos, no solo uno
-        #[arg(long = "todos", conflicts_with = "project")]
+        #[arg(long = "all", alias = "todos", conflicts_with = "project")]
         all_projects: bool,
-        /// Ventana hacia atrás: 6h, 90m, 2d. Por defecto 24h; `--desde todo` no acota
-        #[arg(long = "desde", value_name = "DESDE", default_value = "24h")]
+        /// Ventana hacia atrás: 6h, 90m, 2d. Por defecto 24h; `--since todo` no acota
+        #[arg(long = "since", alias = "desde", value_name = "SINCE", default_value = "24h")]
         since: String,
         /// Cuántas memorias como máximo
-        #[arg(long = "limite", value_name = "LIMITE", default_value_t = 15)]
+        #[arg(long = "limit", alias = "limite", value_name = "LIMIT", default_value_t = 15)]
         limit: usize,
     },
     /// Muestra la cadena de supersession de una memoria, de la más nueva a la más vieja
@@ -138,11 +138,11 @@ enum Cmd {
     /// sincronizar dos computadoras a mano
     Import {
         /// Carpeta que escribió `mem export --out`
-        #[arg(long = "desde", value_name = "DESDE")]
+        #[arg(long = "from", alias = "desde", value_name = "FROM")]
         from: PathBuf,
         /// Importar sobre una base que ya tiene memorias, agregando solo lo
         /// que falte
-        #[arg(long = "fusionar")]
+        #[arg(long = "merge", alias = "fusionar")]
         merge: bool,
     },
     /// Comprueba si hay una versión más nueva publicada
@@ -391,7 +391,7 @@ fn run(cli: Cli) -> Result<()> {
             let labels = if g.tags.is_empty() { String::new() } else { format!(" [{}]", g.tags.join(", ")) };
             let como = if explicito { "" } else { " (detectado)" };
             println!("guardada memoria {} en {project}{como}{labels}", g.id);
-            if let Some(msg) = g.describe() {
+            if let Some(msg) = g.describe(anathem::lang::Lang::Es) {
                 println!("{msg}");
             }
             sync_after_write(&conn, &dir);
@@ -535,7 +535,7 @@ fn run(cli: Cli) -> Result<()> {
             let window = if since.trim().eq_ignore_ascii_case("todo") {
                 None
             } else {
-                Some(anathem::recent::duration_in_seconds(&since)?)
+                Some(anathem::recent::duration_in_seconds(&since, anathem::lang::Lang::Es)?)
             };
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let project_ = if all_projects {
@@ -547,7 +547,7 @@ fn run(cli: Cli) -> Result<()> {
             let cfg = anathem::config::load(dir)?;
             let items = anathem::recent::list_recent(
                 &conn, project_.as_deref(), window, limit, cfg.excerpt)?;
-            println!("{}", anathem::recent::format_items(&items, project_.is_none()));
+            println!("{}", anathem::recent::format_items(&items, project_.is_none(), anathem::lang::Lang::Es));
         }
         Cmd::History { id } => {
             let conn = anathem::db::open(&path)?;

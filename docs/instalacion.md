@@ -350,8 +350,8 @@ Para el cuerpo completo de alguna, `get_memory` con su id; para ver más atrás,
 Desde la terminal, lo mismo:
 
 ```bash
-mem recent --desde 6h      # este proyecto
-mem recent --todos         # todos
+mem recent --since 6h      # este proyecto
+mem recent --all           # todos
 ```
 
 Eso viaja en el campo `instructions` del `initialize`, que el protocolo define
@@ -367,7 +367,7 @@ MCP.
 Cuesta tokens en cada sesión, así que se ajusta en `config.json`:
 
 ```json
-{ "traspaso_items": 5, "traspaso_ventana": "24h" }
+{ "handoff_items": 5, "handoff_window": "24h" }
 ```
 
 Con `0` se apaga. Si el proyecto no tuvo actividad en la ventana, no se manda

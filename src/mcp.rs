@@ -19,41 +19,45 @@ fn text_result(s: String) -> Value {
     json!({"content": [{"type": "text", "text": s}]})
 }
 
-fn tool_defs() -> Value {
+/// The tool definitions, exposed for the test that keeps the `[topic: ...]`
+/// label and the description that tells the model to reuse it from drifting
+/// apart. See `the_topic_label_and_the_tool_description_agree`.
+#[doc(hidden)]
+pub fn tool_defs() -> Value {
     json!([
       {"name": "search_memory",
-       "description": "Busca en la memoria del proyecto. Devuelve, por defecto, hasta 20 candidatos con el título y un EXTRACTO CORTO (~120 caracteres) de cada uno, con su id — a propósito: es la primera etapa de una búsqueda en dos pasos. El extracto es suficiente para reconocer si una memoria es la que buscás, pero NO es su contenido completo, así que no lo cites ni lo des por completo. Cuando identifiques cuál (o cuáles) de los candidatos sirven, pedí su cuerpo entero con la tool `get_memory` usando el id. La búsqueda base es léxica (BM25): encuentra memorias que COMPARTEN PALABRAS con la consulta, no que signifiquen lo mismo. Por eso conviene consultar con los sustantivos que probablemente estén escritos en la memoria, no con la forma en que lo preguntarías en voz alta. \"quien soy\" no encuentra nada por bm25; \"nombre apellido perfil usuario\" sí. Si esta instalación tiene un paquete de vocabulario instalado (`mem model status`), la búsqueda además fusiona similitud vectorial, que sí puede encontrar memorias parecidas en significado aunque no compartan palabras exactas — pero no asumas que está disponible: seguí formulando con sustantivos concretos por si esta instalación no lo tiene. Si una búsqueda vuelve vacía o con resultados irrelevantes, reformulá agregando sinónimos y términos concretos del dominio antes de concluir que la memoria no existe.",
+       "description": "Search the project's memory. By default it returns up to 20 candidates, each with its title and a SHORT EXCERPT (~120 characters) plus its id — deliberately: this is the first stage of a two-step search. The excerpt is enough to recognise whether a memory is the one you want, but it is NOT the full body, so do not quote it or treat it as complete. Once you identify which candidate (or candidates) help, ask for the whole body with the `get_memory` tool, using the id. The base search is lexical (BM25): it finds memories that SHARE WORDS with the query, not ones that mean the same thing. So it pays to query with the nouns likely to be written in the memory, not with the phrasing you would use out loud. \"who am i\" finds nothing by bm25; \"name surname profile user\" does. If this installation has a vocabulary pack installed (`mem model status`), the search also fuses vector similarity, which can find memories close in meaning even without shared words — but do not assume it is available: keep phrasing with concrete nouns in case this installation lacks it. If a search comes back empty or irrelevant, rephrase with synonyms and concrete domain terms before concluding the memory does not exist.",
        "inputSchema": {"type": "object", "required": ["query"], "properties": {
           "query": {"type": "string"},
           "project": {"type": "string"},
           "tags": {"type": "array", "items": {"type": "string"}},
-          "budget": {"type": "integer", "description": "Presupuesto de tokens; por defecto 1200"},
-          "limit": {"type": "integer", "description": "Cuántos candidatos como máximo; por defecto 20. Cada uno trae solo un extracto corto: para el cuerpo completo de alguno, usar get_memory con su id."}}}},
+          "budget": {"type": "integer", "description": "Token budget; 1200 by default"},
+          "limit": {"type": "integer", "description": "How many candidates at most; 20 by default. Each one carries only a short excerpt: for the full body of one, use get_memory with its id."}}}},
       {"name": "save_memory",
-       "description": "Guarda una memoria inmediatamente. Usar cuando el usuario pida recordar algo, o al cerrar una tarea con un hallazgo que valga la pena conservar.\n\nCORRECCIONES Y DATOS QUE CAMBIARON. Si lo que guardás es una VERSIÓN ACTUALIZADA de algo que ya está guardado —una corrección del usuario, un dato que cambió, una decisión revisada— y no un hecho nuevo e independiente, tenés que decirlo, o la memoria vieja sigue apareciendo en las búsquedas y compite con la nueva. Hay dos parámetros, para dos situaciones:\n\n- `supersedes` (id de una memoria): cuando corregís UNA MEMORIA CONCRETA QUE YA EXISTE y que encontraste con `search_memory`. La memoria vieja deja de aparecer en las búsquedas (no se borra; queda en el historial). Funciona con cualquier memoria activa, tenga o no clave de tema: es el camino para todo lo que se guardó antes. Tiene que ser el id de la memoria que quedó obsoleta, no de una parecida.\n- `topic` (clave de tema): cuando el asunto va a SEGUIR EVOLUCIONANDO y querés que cada versión futura reemplace a la anterior sin tener que buscar su id. La memoria nueva reemplaza a la activa con la misma clave en el mismo proyecto. Elegí una frase corta, estable, en minúsculas, que nombre el ASUNTO y no el contenido —`stack-del-frontend`, `politica-de-ramas`, `proveedor-de-pagos`— y usá la misma cada vez. Si la memoria que corregís aparece en `search_memory` con `[tema: clave]`, usá EXACTAMENTE esa clave. La clave se normaliza (minúsculas, espacios colapsados) pero fuera de eso es exacta: `stack-del-frontend` y `stack-frontend` son temas distintos. Si la clave resulta nueva, la respuesta lista las claves que ya existen en el proyecto: si ves ahí la que querías, volvé a guardar con esa. Una clave nueva NO reemplaza a una memoria vieja que se guardó sin clave: para esa usá `supersedes`.\n\nPodés pasar los dos a la vez (corregir una memoria concreta y dejar fijada la clave para las próximas); si apuntan a memorias distintas, no se guarda y la respuesta explica por qué. NO uses ninguno para hechos independientes, ni repitas una clave en cosas que no son versiones una de otra: la anterior desaparecería de las búsquedas. La respuesta dice a qué memoria reemplazó, con su id.",
+       "description": "Saves a memory immediately. Use it when the user asks to remember something, or when closing a task with a finding worth keeping.\n\nCORRECTIONS AND FACTS THAT CHANGED. If what you are saving is an UPDATED VERSION of something already saved — a correction from the user, a fact that changed, a revised decision — and not a new independent fact, you have to say so, or the old memory keeps showing up in searches and competes with the new one. There are two parameters, for two situations:\n\n- `supersedes` (a memory id): when you are correcting ONE SPECIFIC EXISTING MEMORY that you found with `search_memory`. The old one stops appearing in searches (it is not deleted; it stays in the history). It works with any active memory, with or without a topic key: it is the route for everything saved earlier. It has to be the id of the memory that became obsolete, not of a similar one.\n- `topic` (a topic key): when the subject will KEEP EVOLVING and you want each future version to replace the previous one without having to look up its id. The new memory replaces the active one under the same key in the same project. Pick a short, stable, lowercase phrase that names the SUBJECT and not the content — `frontend-stack`, `branching-policy`, `payment-provider` — and use the same one every time. If the memory you are correcting shows up in `search_memory` with `[topic: key]`, use EXACTLY that key. The key is normalised (lowercase, whitespace collapsed) but beyond that it is exact: `frontend-stack` and `front-stack` are different topics. If the key turns out to be new, the response lists the keys that already exist in the project: if you see the one you meant there, save again with that one. A new key does NOT replace an old memory saved without one: for that, use `supersedes`.\n\nYou can pass both at once (correct a specific memory and pin the key for next time); if they point at different memories, nothing is saved and the response explains why. Do NOT use either for independent facts, and do not repeat a key across things that are not versions of one another: the previous one would disappear from searches. The response says which memory it replaced, with its id.",
        "inputSchema": {"type": "object", "required": ["text"], "properties": {
           "text": {"type": "string"},
           "project": {"type": "string"},
           "tags": {"type": "array", "items": {"type": "string"}},
-          "topic": {"type": "string", "description": "Clave de tema, opcional. Ponela si el asunto va a seguir evolucionando: reemplaza a la memoria activa con la misma clave en el mismo proyecto. Frase corta y estable que nombra el asunto, p. ej. `politica-de-ramas`."},
-          "supersedes": {"type": "integer", "description": "Id de una memoria concreta y activa que esta corrige y reemplaza, opcional. Es la que dejará de aparecer en las búsquedas. Usalo para corregir algo ya guardado, tenga o no clave de tema."}}}},
+          "topic": {"type": "string", "description": "Topic key, optional. Set it if the subject will keep evolving: it replaces the active memory under the same key in the same project. A short, stable phrase naming the subject, e.g. `branching-policy`."},
+          "supersedes": {"type": "integer", "description": "Id of a specific, active memory that this one corrects and replaces, optional. It is the one that will stop appearing in searches. Use it to correct something already saved, with or without a topic key."}}}},
       {"name": "recent_memories",
-       "description": "Qué se guardó últimamente en este proyecto, de más nuevo a más viejo, con quién lo guardó. Sirve para retomar un trabajo o para ver qué dejó otro agente; para buscar por tema, usar search_memory, que ordena por relevancia y no por fecha.",
+       "description": "What was saved lately in this project, newest first, and who saved it. Useful for picking work back up or seeing what another agent left behind; to search by subject use search_memory, which ranks by relevance rather than date.",
        "inputSchema": {"type": "object", "properties": {
           "project": {"type": "string"},
-          "since": {"type": "string", "description": "Ventana hacia atrás: 6h, 90m, 2d. Por defecto 24h."},
-          "limit": {"type": "integer", "description": "Máximo de memorias; por defecto 15."}}}},
+          "since": {"type": "string", "description": "How far back: 6h, 90m, 2d. 24h by default."},
+          "limit": {"type": "integer", "description": "At most this many memories; 15 by default."}}}},
       {"name": "get_memory",
-       "description": "Devuelve el cuerpo completo de una memoria por su id.",
+       "description": "Returns the full body of a memory by its id.",
        "inputSchema": {"type": "object", "required": ["id"], "properties": {
           "id": {"type": "integer"}}}},
       {"name": "list_tags",
-       "description": "Lista los tags existentes con cuántas memorias tiene cada uno.",
+       "description": "Lists the existing tags with how many memories each one has.",
        "inputSchema": {"type": "object", "properties": {}}}
     ])
 }
 
-/// ` [tema: key]` when the memory has a topic key, or empty. It is shown in
+/// ` [topic: key]` when the memory has a topic key, or empty. It is shown in
 /// search and in `get_memory` because it is the only way for the model to
 /// know which key to reuse when saving a correction to what it just found:
 /// without seeing it, it would have to guess, and a guessed key that does
@@ -62,7 +66,7 @@ fn topic_label_of(conn: &Connection, id: i64) -> String {
     let t: Option<String> = conn
         .query_row("select topic from memories where id = ?1", [id], |r| r.get(0))
         .unwrap_or(None);
-    t.map(|t| format!(" [tema: {t}]")).unwrap_or_default()
+    t.map(|t| format!(" [topic: {t}]")).unwrap_or_default()
 }
 
 fn call_tool(
@@ -109,7 +113,7 @@ fn call_tool(
             logsearch::record(conn, &text, project.as_deref(), &ids, used)?;
 
             if hits.is_empty() {
-                return Ok(text_result("Sin resultados.".into()));
+                return Ok(text_result("No results.".into()));
             }
             let body = hits.iter()
                 .map(|h| format!(
@@ -123,7 +127,7 @@ fn call_tool(
         "save_memory" => {
             let text = args["text"].as_str().unwrap_or_default();
             if text.trim().is_empty() {
-                return Ok(text_result("No se guardó: el texto está vacío.".into()));
+                return Ok(text_result("Not saved: the text is empty.".into()));
             }
             // With no `project`, it is derived from the repository the
             // server runs in. The agent launches it standing in the project,
@@ -152,25 +156,25 @@ fn call_tool(
                     Some(id) => Some(id),
                     None => {
                         return Ok(text_result(
-                            "No se guardó: `supersedes` tiene que ser el id numérico de una memoria.".into(),
+                            "Not saved: `supersedes` has to be the numeric id of a memory.".into(),
                         ))
                     }
                 },
             };
             let g = match ingest::save_with_topic_by(
-                conn, text, &project, given_tags, topic, supersedes, agent) {
+                conn, text, &project, given_tags, topic, supersedes, agent, crate::lang::Lang::En) {
                 Ok(g) => g,
                 // A request that cannot be fulfilled is not an internal
                 // error: the model has to read what to fix, and nothing was
                 // saved.
                 Err(e) => match e.downcast_ref::<ingest::BadRequest>() {
-                    Some(p) => return Ok(text_result(format!("No se guardó: {p}"))),
+                    Some(p) => return Ok(text_result(format!("Not saved: {p}"))),
                     None => return Err(e),
                 },
             };
             let (id, tag_list) = (g.id, g.tags.clone());
             let title = ingest::title_from(text);
-            let aviso_tema = g.describe().map(|m| format!("\n{m}")).unwrap_or_default();
+            let aviso_tema = g.describe(crate::lang::Lang::En).map(|m| format!("\n{m}")).unwrap_or_default();
 
             // `LivePack` revalidated the pack when the message began, but
             // embedding a large backlog can take minutes and in that time
@@ -183,9 +187,9 @@ fn call_tool(
                     // a `mem reindex`. Returning an error here would report
                     // a successful save as failed.
                     eprintln!(
-                        "anathem: el paquete de vocabulario cambió mientras se indexaba; \
-                         se abandonó el lote para no mezclar dos paquetes. Quedan \
-                         fragmentos sin vector."
+                        "anathem: the vocabulary pack changed while indexing; \
+                         the batch was abandoned so two packs are not mixed. Some \
+                         chunks are left without a vector."
                     );
                 }
             }
@@ -198,12 +202,12 @@ fn call_tool(
                     .map(|c| format!("  id:{} {}", c.memory_id, c.title))
                     .collect::<Vec<_>>().join("\n");
                 format!(
-                    "\n\nMemorias parecidas que esta podría replace_file:\n{lista}\n\
-                     Si alguna quedó obsoleta, decilo y la marco con `mem supersede {id} <id_vieja>`."
+                    "\n\nSimilar memories this one could replace:\n{lista}\n\
+                     If any of them is now obsolete, say so and I will mark it with `mem supersede {id} <old_id>`."
                 )
             };
             Ok(text_result(format!(
-                "Guardada como id:{id} [{}] {title}{aviso_tema}{warning}", tag_list.join(", ")
+                "Saved as id:{id} [{}] {title}{aviso_tema}{warning}", tag_list.join(", ")
             )))
         }
         "recent_memories" => {
@@ -211,15 +215,15 @@ fn call_tool(
             let project = crate::project::resolve(
                 args["project"].as_str().map(str::to_string), &cwd);
             let window = match args["since"].as_str() {
-                Some(s) => match crate::recent::duration_in_seconds(s) {
+                Some(s) => match crate::recent::duration_in_seconds(s, crate::lang::Lang::En) {
                     Ok(v) => Some(v),
-                    Err(e) => return Ok(text_result(format!("No se pudo listar: {e}"))),
+                    Err(e) => return Ok(text_result(format!("Could not list: {e}"))),
                 },
                 None => Some(24 * 3600),
             };
             let limit = args["limit"].as_u64().map(|l| l as usize).unwrap_or(15);
             let items = crate::recent::list_recent(conn, Some(&project), window, limit, cfg.excerpt)?;
-            Ok(text_result(crate::recent::format_items(&items, false)))
+            Ok(text_result(crate::recent::format_items(&items, false, crate::lang::Lang::En)))
         }
         "get_memory" => {
             let id = args["id"].as_i64().unwrap_or(-1);
@@ -237,7 +241,7 @@ fn call_tool(
                         "[{project}]{} {title}\n\n{body}", topic_label_of(conn, id)
                     )))
                 }
-                Err(_) => Ok(text_result(format!("No existe la memoria id:{id}."))),
+                Err(_) => Ok(text_result(format!("There is no memory with id:{id}."))),
             }
         }
         "list_tags" => {
@@ -246,9 +250,9 @@ fn call_tool(
             let rows: Vec<String> = stmt
                 .query_map([], |r| Ok(format!("{:<18} {}", r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
                 .collect::<rusqlite::Result<_>>()?;
-            Ok(text_result(if rows.is_empty() { "Sin tags.".into() } else { rows.join("\n") }))
+            Ok(text_result(if rows.is_empty() { "No tags.".into() } else { rows.join("\n") }))
         }
-        other => Ok(text_result(format!("Tool desconocida: {other}"))),
+        other => Ok(text_result(format!("Unknown tool: {other}"))),
     }
 }
 
@@ -300,7 +304,7 @@ pub fn handle_con_agente(
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let project = crate::project::resolve(None, &cwd);
             let traspaso = crate::recent::handoff_instructions(
-                conn, &project, cfg.handoff_items, &cfg.handoff_window, agent.as_deref());
+                conn, &project, cfg.handoff_items, &cfg.handoff_window, agent.as_deref(), crate::lang::Lang::En);
             let mut res = json!({
                 "protocolVersion": PROTOCOL,
                 "capabilities": {"tools": {}},
@@ -318,10 +322,10 @@ pub fn handle_con_agente(
             let args = req["params"].get("arguments").unwrap_or(&empty);
             match call_tool(conn, ctx, cfg, name, args, agent.as_deref()) {
                 Ok(v) => ok(&id, v),
-                Err(e) => err(&id, -32603, &format!("error interno: {e}")),
+                Err(e) => err(&id, -32603, &format!("internal error: {e}")),
             }
         }
-        _ => err(&id, -32601, "método no encontrado"),
+        _ => err(&id, -32601, "method not found"),
     };
     Ok(Some(res))
 }
@@ -382,13 +386,13 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
         let line = match rx.recv_timeout(intervalo) {
             Ok(Ok(l)) => l,
             Ok(Err(e)) => {
-                eprintln!("anathem: no se pudo leer la entrada: {e}");
+                eprintln!("anathem: could not read the input: {e}");
                 break;
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 if live_pack.release_if_idle(limit) {
                     eprintln!(
-                        "anathem: paquete soltado tras {}s sin buscar; se reabre en la próxima búsqueda",
+                        "anathem: pack released after {}s without a search; it reopens on the next one",
                         cfg.release_pack_after
                     );
                 }
@@ -404,7 +408,7 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
         let req: Value = match serde_json::from_str(&line) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("anathem: JSON inválido: {e}");
+                eprintln!("anathem: invalid JSON: {e}");
                 continue;
             }
         };

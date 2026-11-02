@@ -182,3 +182,55 @@ fn a_very_long_query_does_not_grow_the_fts_expression_without_bound() {
     let ramas = expr.matches(" OR ").count() + 1;
     assert!(ramas <= 50, "la expresión creció a {ramas} ramas");
 }
+
+// --- la superficie que lee el modelo está en inglés ----------------------
+
+#[test]
+fn the_topic_label_and_the_tool_description_agree() {
+    // Si estas dos se separan, el modelo lee una etiqueta y se le pide
+    // reusar otra, y el reemplazo silenciosamente no ocurre.
+    let defs = serde_json::to_string(&anathem::mcp::tool_defs()).unwrap();
+    assert!(defs.contains("[topic:"), "la descripción tiene que nombrar la etiqueta real: {defs}");
+    assert!(!defs.contains("[tema:"), "no puede quedar la vieja");
+}
+
+#[test]
+fn every_tool_description_is_english() {
+    let defs = serde_json::to_string(&anathem::mcp::tool_defs()).unwrap();
+    for palabra in ["memoria", "búsqueda", "guardar", "clave", "usuario", "proyecto"] {
+        assert!(!defs.contains(palabra), "queda español en las tools: «{palabra}»");
+    }
+}
+
+#[test]
+fn every_surface_that_shows_the_topic_key_uses_the_same_label() {
+    // Las tres tools que imprimen la etiqueta tienen que coincidir. Si una
+    // dice `[tema:` y las otras `[topic:`, el modelo ve dos etiquetas para
+    // lo mismo mientras la descripción de save_memory le pide reusar
+    // EXACTAMENTE la que vio. El test anterior solo miraba `tool_defs`, y
+    // por eso `recent_memories` se escapó.
+    let d = tempfile::tempdir().unwrap();
+    let conn = anathem::db::open(&d.path().join("m.db")).unwrap();
+    let cfg = anathem::config::Config::default();
+    let ctx = anathem::search::SearchContext::bm25_only();
+
+    let guardar = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": "save_memory", "arguments": {
+            "text": "el proveedor de pagos es Adyen", "project": "p", "topic": "pagos"}}});
+    anathem::mcp::handle(&conn, &ctx, &cfg, &guardar).unwrap();
+
+    for (tool, args) in [
+        ("search_memory", serde_json::json!({"query": "proveedor pagos", "project": "p"})),
+        ("get_memory", serde_json::json!({"id": 1})),
+        ("recent_memories", serde_json::json!({"project": "p"})),
+    ] {
+        let req = serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": tool, "arguments": args}});
+        let res = anathem::mcp::handle(&conn, &ctx, &cfg, &req).unwrap().unwrap();
+        let txt = res["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(txt.contains("[topic: pagos]"), "{tool} tiene que usar la etiqueta en inglés: {txt}");
+        assert!(!txt.contains("[tema:"), "{tool} dejó la etiqueta vieja: {txt}");
+    }
+}

@@ -142,7 +142,7 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
     if had > 0 && !merge {
         bail!(
             "la base ya tiene {had} memorias. Importar encima duplicaría lo que ya está.\n   \
-             Usá --fusionar para agregar solo lo que falte, o apuntá --db a una base nueva."
+             Usá --merge para agregar solo lo que falte, o apuntá --db a una base nueva."
         );
     }
 

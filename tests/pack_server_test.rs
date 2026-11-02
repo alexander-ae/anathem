@@ -63,7 +63,7 @@ fn the_server_does_not_mix_vectors_when_the_pack_changes_underneath() {
     .unwrap();
     line_.clear();
     out_text.read_line(&mut line_).unwrap();
-    assert!(line_.contains("Guardada"), "el guardado por MCP falló: {line_}");
+    assert!(line_.contains("Saved"), "el guardado por MCP falló: {line_}");
 
     drop(entry);
     hijo.wait().unwrap();
@@ -118,7 +118,7 @@ fn the_server_stops_using_the_pack_once_it_is_removed() {
     .unwrap();
     line_.clear();
     out_text.read_line(&mut line_).unwrap();
-    assert!(line_.contains("Guardada"), "el guardado por MCP falló: {line_}");
+    assert!(line_.contains("Saved"), "el guardado por MCP falló: {line_}");
     drop(entry);
     hijo.wait().unwrap();
 
