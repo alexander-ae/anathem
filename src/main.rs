@@ -171,7 +171,7 @@ enum ModelCmd {
     /// Installs a pack from a local file and reindexes
     Install {
         /// Path to the .anathem-pack file
-        #[arg(value_name = "ARCHIVO")]
+        #[arg(value_name = "FILE")]
         file: PathBuf,
     },
     /// Shows the active pack and the vector coverage

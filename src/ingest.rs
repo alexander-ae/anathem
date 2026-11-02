@@ -352,17 +352,17 @@ impl Saved {
         let Some(key) = self.topic.as_deref() else {
             return reemplazo.map(|r| capitalize(&r));
         };
-        let tema = "Topic";
+        let topic_word = "Topic";
         match (reemplazo, self.key_is_new) {
-            (Some(r), false) => Some(format!("{tema} «{key}»: {r}")),
+            (Some(r), false) => Some(format!("{topic_word} «{key}»: {r}")),
             (Some(r), true) => Some(format!(
-                "{} {tema} «{key}»: {}",
+                "{} {topic_word} «{key}»: {}",
                 capitalize(&r),
                 "new key; the next memory under it will replace this one.",
             )),
             (None, _) => {
                 let mut msg = format!(
-                    "{tema} «{key}»: {}",
+                    "{topic_word} «{key}»: {}",
                     "there was no active memory under that key, so it was saved as a new one.",
                 );
                 if self.other_keys.is_empty() {

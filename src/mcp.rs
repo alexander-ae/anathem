@@ -174,7 +174,7 @@ fn call_tool(
             };
             let (id, tag_list) = (g.id, g.tags.clone());
             let title = ingest::title_from(text);
-            let aviso_tema = g.describe().map(|m| format!("\n{m}")).unwrap_or_default();
+            let topic_note = g.describe().map(|m| format!("\n{m}")).unwrap_or_default();
 
             // `LivePack` revalidated the pack when the message began, but
             // embedding a large backlog can take minutes and in that time
@@ -207,7 +207,7 @@ fn call_tool(
                 )
             };
             Ok(text_result(format!(
-                "Saved as id:{id} [{}] {title}{aviso_tema}{warning}", tag_list.join(", ")
+                "Saved as id:{id} [{}] {title}{topic_note}{warning}", tag_list.join(", ")
             )))
         }
         "recent_memories" => {

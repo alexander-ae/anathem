@@ -419,7 +419,7 @@ pub fn install(conn: &Connection, dir: &Path, file: &Path) -> Result<Installed> 
     let temp = target_dir.join(format!(".instalando-{}.{EXTENSION}", std::process::id()));
     let copy = (|| -> Result<()> {
         std::fs::copy(file, &temp).with_context(|| {
-            format!("no se pudo copiar {} a {}", file.display(), temp.display())
+            format!("could not copy {} to {}", file.display(), temp.display())
         })?;
         // Make sure the copy is the copy: if it came out short or the disk
         // filled up, the sha does not match and the installed pack never
@@ -452,7 +452,7 @@ pub fn install(conn: &Connection, dir: &Path, file: &Path) -> Result<Installed> 
         // matches the registered one.
         let _ = vecstore::clear_install_mark(conn);
         return Err(anyhow::Error::new(e)
-            .context(format!("no se pudo instalar el paquete en {}", target.display())));
+            .context(format!("could not install the pack at {}", target.display())));
     }
 
     // Read-only from here on (finding B-2): the pack stays memory-mapped
@@ -518,7 +518,7 @@ fn verify_signature(file: &Path, sha: &str) -> Result<()> {
     let expected = raw.split_whitespace().next().unwrap_or("");
     if expected != sha {
         bail!(
-            "el sha256 no coincide: el archivo da {sha} y {} dice {expected}",
+            "the sha256 does not match: the file gives {sha} and {} says {expected}",
             firma.display()
         );
     }
@@ -798,9 +798,9 @@ mod tests {
 
         replace_file(&source, &target).unwrap();
 
-        assert!(!source.exists(), "el origen tiene que haberse movido, no copiado");
+        assert!(!source.exists(), "the source has to have moved, not been copied");
         assert_eq!(std::fs::read(&target).unwrap(), b"contenido nuevo");
-        assert!(no_stray_files(d.path()), "no puede quedar un archivo sibling sobrante");
+        assert!(no_stray_files(d.path()), "no leftover sibling file may remain");
     }
 
     #[test]
@@ -837,7 +837,7 @@ mod tests {
             b"contenido viejo que todavia funciona",
             "the destination that worked before the replacement attempt has to still be there"
         );
-        assert!(no_stray_files(d.path()), "no puede quedar un archivo sibling sobrante");
+        assert!(no_stray_files(d.path()), "no leftover sibling file may remain");
     }
 
     // --- blocker 3: reconciling with the mmap still open -----------------
@@ -864,14 +864,14 @@ mod tests {
         let p = Pack::open_pack(&old_path).unwrap(); // mmap abierto sobre ruta_vieja
 
         let (p2, identity) = reconcile(&conn, dir, &old_path, p)
-            .expect("reconciliar tiene que poder renombrar el archivo que tiene mapeado");
+            .expect("reconciling has to be able to rename the file it has mapped");
 
         assert_eq!(identity.0, "nuevo-es");
         assert_eq!(p2.name(), "nuevo-es");
-        assert!(!old_path.exists(), "el archivo con el nombre viejo tiene que haberse ido");
+        assert!(!old_path.exists(), "the file under the old name has to be gone");
         assert!(
             pack_path(dir, "nuevo-es").exists(),
-            "el archivo tiene que vivir ahora en el nombre nuevo"
+            "the file has to live under the new name now"
         );
     }
 
@@ -885,7 +885,7 @@ mod tests {
         let sha = crate::pack::sha256(&pack_path(dir, "es")).unwrap();
         vecstore::register_pack(&conn, "es", &sha, 4).unwrap();
         let mut v = LivePack::new_id(dir);
-        assert!(v.current(&conn).is_some(), "el escenario exige el paquete abierto");
+        assert!(v.current(&conn).is_some(), "the scenario requires the pack to be open");
         (conn, v)
     }
 
