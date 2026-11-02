@@ -1,88 +1,88 @@
-# Paquetes de vocabulario
+# Vocabulary packs
 
-La búsqueda de anathem funciona sin ningún modelo: BM25 sobre FTS5, cero
-descargas. Un paquete de vocabulario agrega una capa vectorial que encuentra
-memorias escritas en un idioma cuando preguntás en otro.
+anathem's search works without any model: BM25 over FTS5, zero downloads. A
+vocabulary pack adds a vector layer that finds memories written in one
+language when you ask in another.
 
-**Los idiomas no son módulos.** El modelo es una sola tabla con un espacio
-vectorial compartido, destilado sobre todos los idiomas a la vez, y esa
-destilación conjunta es lo que alinea un término con su traducción. No se
-puede agregar un idioma a un paquete existente. Lo que se elige es **qué
-porción de la tabla se descarga**, y sumar un idioma es generar un paquete
-nuevo que lo incluya.
+**Languages are not modules.** The model is a single table with a shared
+vector space, distilled over all languages at once, and that joint distillation
+is what aligns a term with its translation. You cannot add a language to an
+existing pack. What you choose is **which portion of the table gets
+downloaded**, and adding a language means generating a new pack that includes
+it.
 
-## Por qué un paquete es tanto más chico
+## Why a pack is so much smaller
 
-El modelo base tiene 500.353 entradas de vocabulario y pesa 512 MB en fp32.
-Inglés y español juntos ejercitan **el 15 % de esas entradas**. Recortar el
-resto y cuantizar a int8 da un paquete de 22,5 MB que rinde igual que el
-modelo completo:
+The base model has 500,353 vocabulary entries and weighs 512 MB in fp32.
+English and Spanish together exercise **15 % of those entries**. Trimming the
+rest and quantizing to int8 gives a 22.5 MB pack that performs as well as the
+full model:
 
-| | disco | mMARCO en | mMARCO es | corpus real es | corpus real en |
+| | disk | mMARCO en | mMARCO es | real corpus es | real corpus en |
 |---|---|---|---|---|---|
-| modelo completo, int8 | 128 MB | 69 % | 48 % | 60 % | 62 % |
-| paquete `en-es` | **22,5 MB** | 68 % | 48 % | 62 % | 64 % |
+| full model, int8 | 128 MB | 69 % | 48 % | 60 % | 62 % |
+| `en-es` pack | **22.5 MB** | 68 % | 48 % | 62 % | 64 % |
 
-(recall@5; las diferencias están dentro del ruido de medición)
+(recall@5; the differences are within measurement noise)
 
-El recorte no pierde calidad porque el tokenizador es de tipo **Unigram con
-byte fallback**. Al quitar piezas, el algoritmo re-segmenta el texto entre las
-que quedan en lugar de producir desconocidos, y cualquier carácter sin pieza
-propia cae en los tokens de byte, que el generador siempre conserva. Encima la
-cuantización se recalibra sobre las filas que sobreviven, así que la rejilla
-int8 queda más fina justo donde importa.
+The trimming does not lose quality because the tokenizer is a **Unigram with
+byte fallback**. When pieces are removed, the algorithm re-segments the text
+among the ones that remain instead of producing unknowns, and any character
+without a piece of its own falls back to the byte tokens, which the generator
+always keeps. On top of that, the quantization is recalibrated over the rows
+that survive, so the int8 grid ends up finer exactly where it matters.
 
-Nada de esto aplicaría a un transformer: sus pesos son compartidos entre todos
-los tokens y no admiten recorte por palabra.
+None of this would apply to a transformer: its weights are shared across all
+tokens and do not admit per-word trimming.
 
-## Generar un paquete para otros idiomas
+## Generating a pack for other languages
 
-Hace falta una muestra de texto genérico en los idiomas que querés cubrir: un
-archivo de texto plano por idioma, una línea por pasaje. Sirve cualquier
-corpus público —Wikipedia, mMARCO, MIRACL— con decenas de miles de líneas. La
-muestra solo determina qué piezas del vocabulario se conservan, así que
-conviene que sea variada y **que no sea el corpus que después vas a indexar**.
+You need a sample of generic text in the languages you want to cover: one
+plain text file per language, one line per passage. Any public corpus will do
+— Wikipedia, mMARCO, MIRACL — with tens of thousands of lines. The sample only
+determines which vocabulary pieces are kept, so it is worth making it varied
+and **not the corpus you are going to index afterwards**.
 
     python3 tools/construir_paquete.py \
         --nombre en-es-pt \
         --muestra textos_en.txt textos_es.txt textos_pt.txt \
         --salida en-es-pt.anathem-pack
 
-Escribe el paquete y un `.sha256` al lado. El tamaño crece mucho menos que
-lineal con los idiomas, porque comparten piezas: el paso de `en-es` a
-escritura latina completa (que cubre además portugués, francés, italiano y
-alemán) lleva la tabla de 19,5 MB a 70,7 MB.
+It writes the pack and a `.sha256` next to it. The size grows much less than
+linearly with the number of languages, because they share pieces: going from
+`en-es` to the full Latin script (which also covers Portuguese, French,
+Italian and German) takes the table from 19.5 MB to 70.7 MB.
 
-Después de generarlo, medilo antes de publicarlo. Un paquete con la muestra
-mal elegida no falla: rinde peor y en silencio.
+After generating one, measure it before publishing it. A pack with a badly
+chosen sample does not fail: it performs worse, and silently.
 
-## Cambiar de paquete obliga a reindexar
+## Changing packs forces a reindex
 
-Dos paquetes distintos producen vectores que no son comparables entre sí.
-anathem guarda en la base con qué paquete se construyó el índice y **reindexa
-al detectar un cambio, nunca mezcla**. Reindexar cuesta unos 0,3 segundos cada
-10.000 fragmentos, así que cambiar de paquete es barato.
+Two different packs produce vectors that are not comparable with each other.
+anathem records in the database which pack the index was built with and
+**reindexes when it detects a change, it never mixes**. Reindexing costs about
+0.3 seconds per 10,000 chunks, so changing packs is cheap.
 
-## Formato del archivo
+## The file format
 
-Un solo archivo, todo en little endian:
+A single file, all little endian:
 
-| campo | tipo | notas |
+| field | type | notes |
 |---|---|---|
 | magic | 4 bytes | `ANPK` |
-| versión | u32 | 1 |
-| dimensiones | u32 | 256 en el modelo base |
-| tokens | u32 | filas de la tabla |
-| largo del nombre | u32 | |
-| nombre | bytes UTF-8 | identificador, p. ej. `en-es` |
-| largo del tokenizador | u64 | |
-| tokenizador | bytes UTF-8 | `tokenizer.json` recortado |
-| escalas | f32 × dimensiones | una por dimensión |
-| mínimos | f32 × dimensiones | una por dimensión |
-| tabla | u8 × tokens × dimensiones | fila mayor |
+| version | u32 | 1 |
+| dimensions | u32 | 256 in the base model |
+| tokens | u32 | rows of the table |
+| name length | u32 | |
+| name | UTF-8 bytes | identifier, e.g. `en-es` |
+| tokenizer length | u64 | |
+| tokenizer | UTF-8 bytes | trimmed `tokenizer.json` |
+| scales | f32 × dimensions | one per dimension |
+| minimums | f32 × dimensions | one per dimension |
+| table | u8 × tokens × dimensions | row major |
 
-Para recuperar un vector: `valor = byte * escala[d] + mínimo[d]`. El embedding
-de un texto es el promedio de las filas de sus tokens, normalizado.
+To recover a vector: `value = byte * scale[d] + minimum[d]`. The embedding of
+a text is the average of the rows of its tokens, normalized.
 
-El `.sha256` cubre el archivo entero. `mem model install` lo verifica y
-rechaza el paquete si no coincide.
+The `.sha256` covers the whole file. `mem model install` verifies it and
+rejects the pack if it does not match.

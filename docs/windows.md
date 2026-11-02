@@ -1,91 +1,92 @@
-# anathem en Windows
+# anathem on Windows
 
-**Estado: compila y pasa la batería en CI; falta probarlo a mano.** Cada push
-compila con MSVC en un runner `windows-latest` y corre 249 tests (uno queda
-ignorado: el de permisos POSIX, que en Windows no aplica), más un recorrido de
-`init`, `save`, `search` y `doctor`. Antes de eso nadie lo había compilado
-nunca en Windows.
+**Status: it compiles and passes the suite in CI; it still has to be tried by
+hand.** Every push compiles with MSVC on a `windows-latest` runner and runs
+249 tests (one stays ignored: the POSIX permissions one, which does not apply
+on Windows), plus a run through `init`, `save`, `search` and `doctor`. Before
+that, nobody had ever compiled it on Windows.
 
-Lo que el CI **no** puede cubrir está más abajo, en "Qué probar": el CI corre
-todo bajo un solo shell, así que no compara la ruta por defecto entre
-`cmd.exe` y Git Bash, que es el punto donde una precedencia mal puesta
-dejaría dos bases de datos distintas sin avisar.
+What CI **cannot** cover is further down, under "What to test": CI runs
+everything under a single shell, so it does not compare the default path
+between `cmd.exe` and Git Bash, which is the point where a misplaced
+precedence would leave two different databases without saying anything.
 
-Para referencia: Linux pasa 251 y macOS 250 (el que falta lee `/proc`, que
-solo existe en Linux).
+For reference: Linux passes 251 and macOS 250 (the missing one reads `/proc`,
+which only exists on Linux).
 
-## Qué hacía falta arreglar
+## What had to be fixed
 
-El código de producción nunca usó APIs de `std::os::unix`. Los cuatro bloqueos
-eran de semántica del sistema operativo:
+The production code never used `std::os::unix` APIs. The four blockers were
+about operating system semantics:
 
-| | problema | arreglo |
+| | problem | fix |
 |---|---|---|
-| 1 | `HOME` no existe en Windows, y la ruta por defecto `~/.anathem/mem.db` fallaba | se usa `USERPROFILE`, con precedencia sobre `HOME` solo en Windows |
-| 2 | `std::fs::rename` **falla si el destino existe** en Windows, mientras que en POSIX lo reemplaza | helper `reemplazar` que aparta el destino, renombra, y recién entonces borra el apartado |
-| 3 | Windows no deja renombrar un archivo con un mapeo de memoria abierto | `reconciliar` suelta el `Pack` antes de renombrar y lo reabre después |
-| 4 | un test usaba `PermissionsExt`, así que la batería no compilaba | `#[cfg(unix)]` más un test compañero `#[cfg(windows)] #[ignore]` para que el conteo no mienta |
+| 1 | `HOME` does not exist on Windows, and the default path `~/.anathem/mem.db` failed | `USERPROFILE` is used, taking precedence over `HOME` only on Windows |
+| 2 | `std::fs::rename` **fails if the target exists** on Windows, whereas on POSIX it replaces it | a `replace_file` helper that moves the target aside, renames, and only then deletes what it moved aside |
+| 3 | Windows does not allow renaming a file with an open memory mapping | `reconcile` drops the `Pack` before renaming and reopens it afterwards |
+| 4 | a test used `PermissionsExt`, so the suite did not compile | `#[cfg(unix)]` plus a companion `#[cfg(windows)] #[ignore]` test so the count does not lie |
 
-Sobre el punto 1 hay un detalle que no es obvio: en Git Bash y MSYS, `HOME` sí
-existe, pero en formato posix (`/c/Users/alguien`). Para un binario **nativo**
-de Windows esa no es una ruta de usuario válida — un `/` inicial sin letra de
-unidad se resuelve contra la raíz de la unidad actual. Si `HOME` tuviera
-precedencia, la misma persona corriendo el mismo binario desde `cmd.exe` y
-desde Git Bash terminaría con **dos bases de datos distintas** sin ningún
-aviso. Por eso en Windows manda `USERPROFILE`.
+About point 1 there is a detail that is not obvious: in Git Bash and MSYS,
+`HOME` does exist, but in posix format (`/c/Users/someone`). For a **native**
+Windows binary that is not a valid user path — a leading `/` with no drive
+letter resolves against the root of the current drive. If `HOME` took
+precedence, the same person running the same binary from `cmd.exe` and from
+Git Bash would end up with **two different databases** with no warning at all.
+That is why `USERPROFILE` wins on Windows.
 
-Los arreglos son **neutrales por plataforma** a propósito: usan `cfg!(windows)`
-—una macro que evalúa a un booleano y deja compilar las dos ramas— en vez de
-`#[cfg(windows)]`, que dejaría código sin compilar ni probar en Linux. El
-booleano se pasa como parámetro, así que los tests ejercitan **las dos**
-precedencias y los dos editores por defecto desde Linux. El único `#[cfg]` de
-plataforma está en el test del punto 4, donde es estructuralmente inevitable.
+The fixes are **platform neutral** on purpose: they use `cfg!(windows)` — a
+macro that evaluates to a boolean and lets both branches compile — instead of
+`#[cfg(windows)]`, which would leave code uncompiled and untested on Linux.
+The boolean is passed as a parameter, so the tests exercise **both**
+precedences and both default editors from Linux. The only platform `#[cfg]`
+is in the test for point 4, where it is structurally unavoidable.
 
-## Compilar
+## Compiling
 
-Hace falta un toolchain de C, igual que en Linux: el proyecto compila SQLite
-(`rusqlite` con `bundled`) y oniguruma (`tokenizers`) desde fuente.
+A C toolchain is needed, just as on Linux: the project compiles SQLite
+(`rusqlite` with `bundled`) and oniguruma (`tokenizers`) from source.
 
     rustup toolchain install stable-x86_64-pc-windows-msvc
     cargo build --release
     cargo test
 
-Con MSVC hacen falta las *Build Tools for Visual Studio* con la carga de
-trabajo de C++. Si `cargo build` falla en `libsqlite3-sys` o en `onig_sys`, es
-eso y no el código de anathem.
+With MSVC you need the *Build Tools for Visual Studio* with the C++ workload.
+If `cargo build` fails in `libsqlite3-sys` or in `onig_sys`, that is what it
+is, not anathem's code.
 
-## Qué probar, en este orden
+## What to test, in this order
 
-1. ~~**Que compile.**~~ Ya está: el CI compila con MSVC en cada push. Era lo
-   único que no se podía verificar de ninguna forma desde Linux.
-2. **La ruta por defecto.** Corré `mem init` desde `cmd.exe` y después desde
-   Git Bash, y comprobá que las dos imprimen **la misma** ruta. Si difieren, la
-   precedencia de variables está mal y vas a tener dos bases.
-3. **`mem model install` sobre un paquete ya instalado.** Es el caso que en
-   Windows fallaba con el `rename` original. Tiene que reinstalar sin error y
-   dejar el archivo del paquete intacto y completo.
-4. **El escenario crítico sin resolver, abajo.**
-5. **`mem edit` sin `$EDITOR` definida.** Debería abrir `notepad`.
+1. ~~**That it compiles.**~~ Done: CI compiles with MSVC on every push. It was
+   the only thing that could not be verified in any way from Linux.
+2. **The default path.** Run `mem init` from `cmd.exe` and then from Git Bash,
+   and check that both print **the same** path. If they differ, the variable
+   precedence is wrong and you are going to end up with two databases.
+3. **`mem model install` over an already installed pack.** This is the case
+   that failed on Windows with the original `rename`. It has to reinstall
+   without an error and leave the pack file intact and complete.
+4. **The unresolved critical scenario, below.**
+5. **`mem edit` with no `$EDITOR` defined.** It should open `notepad`.
 
-## Lo que NO está resuelto y hay que medir primero
+## What is NOT resolved and has to be measured first
 
-**Reinstalar el paquete mientras el servidor MCP está corriendo.** El servidor
-vive horas con el archivo del paquete mapeado en memoria. Si desde otra
-terminal se corre `mem model install` del mismo paquete, el proceso que instala
-suelta *su* `Pack`, pero no puede soltar el del servidor. En Windows, si el
-mapeo del otro proceso bloquea el renombrado, la instalación fallaría — y ese
-es un uso que el diseño declara soportar, no un caso de borde.
+**Reinstalling the pack while the MCP server is running.** The server lives
+for hours with the pack file mapped into memory. If `mem model install` of the
+same pack is run from another terminal, the installing process drops *its*
+`Pack`, but it cannot drop the server's. On Windows, if the other process's
+mapping blocks the rename, the installation would fail — and that is a use the
+design claims to support, not an edge case.
 
-Depende de con qué banderas de compartición abre `memmap2` el archivo, cosa que
-no se puede determinar sin ejecutarlo. **Es el primer experimento a correr**:
-arrancá `mem serve`, y desde otra terminal reinstalá el mismo paquete. Si falla,
-el arreglo probable es que el servidor suelte y reabra el mapeo al detectar el
-cambio, que es lo que ya hace `reconciliar` dentro de un mismo proceso.
+It depends on which sharing flags `memmap2` opens the file with, something
+that cannot be determined without running it. **It is the first experiment to
+run**: start `mem serve`, and from another terminal reinstall the same pack.
+If it fails, the likely fix is for the server to drop and reopen the mapping
+when it detects the change, which is what `reconcile` already does within a
+single process.
 
-## Deuda menor conocida
+## Known minor debt
 
-`reemplazar` deja un archivo lateral —`{nombre}.anathem-pack.reemplazando-{pid}`—
-si el proceso muere entre apartar el destino y terminar. Es basura inerte: se
-verificó que ninguna función de producción enumera `paquetes/` por patrón, así
-que no confunde a la resolución de rutas ni a la guarda de identidad del
-paquete. Se puede borrar a mano sin consecuencias.
+`replace_file` leaves a sidecar file — `{name}.anathem-pack.reemplazando-{pid}`
+— if the process dies between moving the target aside and finishing. It is
+inert garbage: it was verified that no production function enumerates
+`paquetes/` by pattern, so it confuses neither path resolution nor the pack's
+identity guard. It can be deleted by hand with no consequences.

@@ -1,80 +1,81 @@
-# anathem contra Engram
+# anathem versus Engram
 
-[Engram](https://github.com/Gentleman-Programming/engram) es lo más parecido a
-anathem que existe: un binario de Go, SQLite con FTS5, sin demonio, sin Node ni
-Python ni Docker, servidor MCP para cualquier agente. Mismas decisiones de
-fondo, tomadas por separado.
+[Engram](https://github.com/Gentleman-Programming/engram) is the closest thing
+to anathem that exists: a Go binary, SQLite with FTS5, no daemon, no Node, no
+Python, no Docker, an MCP server for any agent. The same underlying decisions,
+taken separately.
 
-Y en producto está más adelante: v3.4.0, releases para Linux, macOS y Windows
-en las dos arquitecturas, instalación por Homebrew, TUI, API HTTP, CLI, y 23
-herramientas MCP contra las 4 de anathem.
+And as a product it is further along: v3.4.0, releases for Linux, macOS and
+Windows on both architectures, installation via Homebrew, a TUI, an HTTP API,
+a CLI, and 23 MCP tools against anathem's 5.
 
-Así que la pregunta honesta es si anathem tiene razón de existir. Esto lo mide.
+So the honest question is whether anathem has any reason to exist. This
+measures it.
 
-## El banco
+## The benchmark
 
-Las mismas 449 memorias y las mismas 50 consultas en los dos sistemas. Las
-memorias se importaron a Engram con su propio `engram save`, una por una, y se
-consultó con `engram search`. Las consultas son conversacionales a propósito:
-describen la situación en vez de nombrarla, que es como pregunta una persona.
+The same 449 memories and the same 50 queries on both systems. The memories
+were imported into Engram with its own `engram save`, one by one, and queried
+with `engram search`. The queries are conversational on purpose: they describe
+the situation instead of naming it, which is how a person asks.
 
-| | devueltos | ms | tokens | r@1 | r@5 | r@20 | parafrásticas @20 |
+| | returned | ms | tokens | r@1 | r@5 | r@20 | paraphrastic @20 |
 |---|---|---|---|---|---|---|---|
-| **anathem** | 20 | **8** | **1.303** | 28 % | **52 %** | **74 %** | **31 %** |
-| Engram `--match all` (por defecto) | 0 | 427 | 28 | 4 % | 4 % | 4 % | 0 % |
-| Engram `--match any` | 20 | 434 | 2.475 | 0 % | 0 % | 0 % | 0 % |
-| Engram `all`, sin palabras vacías | 0 | 433 | 25 | 6 % | 6 % | 6 % | 0 % |
-| Engram `any`, sin palabras vacías | 20 | 443 | 2.458 | **30 %** | 40 % | 54 % | 25 % |
+| **anathem** | 20 | **8** | **1,303** | 28 % | **52 %** | **74 %** | **31 %** |
+| Engram `--match all` (the default) | 0 | 427 | 28 | 4 % | 4 % | 4 % | 0 % |
+| Engram `--match any` | 20 | 434 | 2,475 | 0 % | 0 % | 0 % | 0 % |
+| Engram `all`, without stopwords | 0 | 433 | 25 | 6 % | 6 % | 6 % | 0 % |
+| Engram `any`, without stopwords | 20 | 443 | 2,458 | **30 %** | 40 % | 54 % | 25 % |
 
-## Qué dice
+## What it says
 
-**Engram no está pensado para consultas conversacionales.** Con su modo por
-defecto —`--match all`, que exige todas las palabras— una pregunta de diez
-palabras no devuelve nada: 4 % de recall porque solo aciertan las dos
-consultas más cortas. Con `--match any` devuelve veinte resultados pero
-engancha las palabras vacías (`de`, `el`, `que`) y ordena por algo que en la
-práctica se parece a la recencia: 0 % de recall, los veinte son las memorias
-más nuevas.
+**Engram is not meant for conversational queries.** With its default mode —
+`--match all`, which requires every word — a ten-word question returns
+nothing: 4 % recall, because only the two shortest queries land. With
+`--match any` it returns twenty results, but it latches onto the stopwords
+(`de`, `el`, `que`) and orders by something that in practice looks like
+recency: 0 % recall, the twenty are the newest memories.
 
-**Su mejor configuración exige preprocesar la consulta.** Quitándole las
-palabras vacías a mano —algo que Engram no hace— sube a 30 % en r@1, que es
-**mejor que anathem** (28 %). Es un resultado real y hay que decirlo.
+**Its best configuration requires preprocessing the query.** Stripping the
+stopwords by hand — something Engram does not do — takes it up to 30 % at r@1,
+which is **better than anathem** (28 %). That is a real result and it has to
+be said.
 
-**Pero cae en profundidad.** A r@5 anathem saca 12 puntos de ventaja, a r@20
-saca 20. Y en las consultas parafrásticas, 31 % contra 25 %.
+**But it falls off with depth.** At r@5 anathem is 12 points ahead, at r@20 it
+is 20 ahead. And on the paraphrastic queries, 31 % against 25 %.
 
-**Y cuesta el doble de tokens.** 2.458 contra 1.303 por consulta, porque
-devuelve el cuerpo completo de cada resultado en vez de un extracto.
+**And it costs twice the tokens.** 2,458 against 1,303 per query, because it
+returns the full body of each result instead of an excerpt.
 
-**La latencia es la diferencia más grande, y es real.** Medí el arranque del
-binario de Engram por separado: 2 ms. Así que esos 435 ms son búsqueda, no
-arranque — la comparación no está sesgada por el método. anathem resuelve en
-8 ms con el servidor caliente y 108 ms en frío (incluyendo cargar el paquete
-de 22,5 MB). Engram es unas 54 veces más lento por búsqueda.
+**Latency is the biggest difference, and it is real.** I measured the startup
+of the Engram binary separately: 2 ms. So those 435 ms are search, not
+startup — the comparison is not biased by the method. anathem answers in 8 ms
+with a warm server and 108 ms cold (including loading the 22.5 MB pack).
+Engram is some 54 times slower per search.
 
-**Y no busca entre idiomas.** Es lo que anathem agrega con el paquete
-opcional, y lo que ninguno de los trece servidores de memoria comparados
-documenta.
+**And it does not search across languages.** That is what anathem adds with
+the optional pack, and what none of the thirteen memory servers compared
+documents.
 
-## Cuándo elegir cuál
+## When to pick which
 
-**Engram**, si querés algo que ya está terminado y no te importa formular con
-palabras clave en vez de preguntas. Se instala con Homebrew, tiene TUI, API
-HTTP, y muchas más herramientas MCP. Para un corpus en un solo idioma
-consultado con sustantivos concretos, su r@1 es competitivo.
+**Engram**, if you want something that is already finished and you do not mind
+phrasing things with keywords instead of questions. It installs with Homebrew,
+it has a TUI, an HTTP API, and many more MCP tools. For a single-language
+corpus queried with concrete nouns, its r@1 is competitive.
 
-**anathem**, si preguntás en prosa, si tu corpus mezcla idiomas, o si te
-importa el costo en tokens y la latencia. Las tres cosas están medidas arriba.
+**anathem**, if you ask in prose, if your corpus mixes languages, or if you
+care about token cost and latency. All three are measured above.
 
-## Las reservas
+## The caveats
 
-- Las cifras de anathem acá (74 % de r@20) son más bajas que las de
-  `medicion-corpus-real.md` (82 %), porque el corpus creció de 174 a 449
-  memorias. Más distractores, misma pregunta.
-- El quitado de palabras vacías lo hice yo con una lista propia. Engram
-  podría rendir distinto con otro preprocesamiento.
-- Importé las memorias con `engram save` título por título; si su ingesta
-  normal —por MCP, desde un agente— indexa distinto, los números podrían
-  cambiar.
-- n=50, y 16 parafrásticas. Las diferencias de pocos puntos son ruido; las de
-  veinte, no.
+- anathem's figures here (74 % at r@20) are lower than those in
+  `medicion-corpus-real.md` (82 %), because the corpus grew from 174 to 449
+  memories. More distractors, same question.
+- The stopword removal I did myself, with a list of my own. Engram might
+  perform differently with other preprocessing.
+- I imported the memories with `engram save` title by title; if its normal
+  ingestion — over MCP, from an agent — indexes differently, the numbers could
+  change.
+- n=50, with 16 paraphrastic. Differences of a few points are noise; of twenty
+  points, they are not.
