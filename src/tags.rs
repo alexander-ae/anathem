@@ -35,7 +35,7 @@ pub type Rules = Vec<(String, Regex)>;
 fn default_rules() -> Rules {
     DEFAULT_RULES
         .iter()
-        .map(|r| (r.tag.to_string(), Regex::new(r.pat).expect("regex de tag por defecto inválida")))
+        .map(|r| (r.tag.to_string(), Regex::new(r.pat).expect("invalid default tag regex")))
         .collect()
 }
 
@@ -47,18 +47,18 @@ fn default_rules() -> Rules {
 /// mistake: there is never a silent fallback to the default rules.
 pub fn load_rules_from_file(path: &Path) -> Result<Rules, String> {
     let raw = std::fs::read_to_string(path)
-        .map_err(|e| format!("tags: no se pudo leer {}: {e}", path.display()))?;
+        .map_err(|e| format!("tags: could not read {}: {e}", path.display()))?;
     let entries: Vec<OverrideRule> = serde_json::from_str(&raw)
-        .map_err(|e| format!("tags: {} no es JSON válido: {e}", path.display()))?;
+        .map_err(|e| format!("tags: {} is not valid JSON: {e}", path.display()))?;
     if entries.is_empty() {
-        return Err(format!("tags: {} no define ninguna regla", path.display()));
+        return Err(format!("tags: {} defines no rules", path.display()));
     }
     entries
         .into_iter()
         .map(|r| {
             let re = Regex::new(&r.pattern).map_err(|e| {
                 format!(
-                    "tags: {}: la regla '{}' tiene un patrón inválido: {e}",
+                    "tags: {}: rule '{}' has an invalid pattern: {e}",
                     path.display(),
                     r.tag
                 )

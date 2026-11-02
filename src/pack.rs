@@ -38,7 +38,7 @@ fn take_bytes<'a>(m: &'a [u8], o: &mut usize, n: usize, pack_path: &Path, campo:
         .checked_add(n)
         .filter(|&fin| fin <= m.len())
         .with_context(|| {
-            format!("el paquete {} termina antes de lo declarado: falta {campo}", pack_path.display())
+            format!("pack {} ends before it declared: {campo} is missing", pack_path.display())
         })?;
     let s = &m[*o..fin];
     *o = fin;
@@ -57,7 +57,7 @@ fn u64_en(m: &[u8], o: &mut usize, pack_path: &Path, campo: &str) -> Result<u64>
 
 fn f32s_en(m: &[u8], o: &mut usize, n: usize, pack_path: &Path, campo: &str) -> Result<Vec<f32>> {
     let largo = n.checked_mul(4).with_context(|| {
-        format!("el paquete {} declara un {campo} demasiado grande", pack_path.display())
+        format!("pack {} declares a {campo} that is too large", pack_path.display())
     })?;
     let f = take_bytes(m, o, largo, pack_path, campo)?;
     Ok(f.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect())
@@ -89,22 +89,22 @@ const MAX_NAME: usize = 64;
 /// Windows.
 pub fn validate_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
-        return Err("está vacío".into());
+        return Err("is empty".into());
     }
     if name.chars().count() > MAX_NAME {
-        return Err(format!("tiene más de {MAX_NAME} caracteres"));
+        return Err(format!("is longer than {MAX_NAME} characters"));
     }
     if name == "." || name == ".." {
-        return Err(format!("es «{name}», que nombra un directorio y no un archivo"));
+        return Err(format!("is «{name}», which names a directory and not a file"));
     }
     if name.starts_with('.') {
-        return Err("empieza con un punto".into());
+        return Err("starts with a dot".into());
     }
     if let Some(c) = name.chars().find(|&c| c == '/' || c == '\\' || c == ':') {
-        return Err(format!("contiene «{c}», que separa componentes de una ruta"));
+        return Err(format!("contains «{c}», which separates path components"));
     }
     if let Some(c) = name.chars().find(|c| c.is_control()) {
-        return Err(format!("contiene el carácter de control U+{:04X}", c as u32));
+        return Err(format!("contains the control character U+{:04X}", c as u32));
     }
     // Belt and braces against anything the explicit checks above do not
     // name: whatever the platform makes of these bytes, it has to come out
@@ -112,7 +112,7 @@ pub fn validate_name(name: &str) -> Result<(), String> {
     let mut comps = Path::new(name).components();
     match (comps.next(), comps.next()) {
         (Some(std::path::Component::Normal(c)), None) if c == name => Ok(()),
-        _ => Err("no es un nombre de archivo simple".into()),
+        _ => Err("is not a plain file name".into()),
     }
 }
 
@@ -123,40 +123,40 @@ impl Pack {
     /// verified once, on install (see `mem model install`).
     pub fn open_pack(pack_path: &Path) -> Result<Pack> {
         let file = std::fs::File::open(pack_path)
-            .with_context(|| format!("no se pudo abrir el paquete {}", pack_path.display()))?;
+            .with_context(|| format!("could not open the pack {}", pack_path.display()))?;
         let mapping = unsafe { Mmap::map(&file)? };
         if mapping.len() < 20 || &mapping[0..4] != MARCA {
-            bail!("{} no es un paquete de anathem: falta la marca ANPK", pack_path.display());
+            bail!("{} is not an anathem pack: the ANPK marker is missing", pack_path.display());
         }
         let mut o = 4usize;
-        let version = u32_en(&mapping, &mut o, pack_path, "versión")?;
+        let version = u32_en(&mapping, &mut o, pack_path, "version")?;
         if version != VERSION {
             bail!(
-                "el paquete {} declara la versión {version} y este binario entiende la {VERSION}",
+                "pack {} declares version {version} and this binary understands {VERSION}",
                 pack_path.display()
             );
         }
-        let dims = u32_en(&mapping, &mut o, pack_path, "dimensiones")? as usize;
-        let n_tokens = u32_en(&mapping, &mut o, pack_path, "cantidad de tokens")? as usize;
-        let name_len = u32_en(&mapping, &mut o, pack_path, "largo del nombre")? as usize;
+        let dims = u32_en(&mapping, &mut o, pack_path, "dimensions")? as usize;
+        let n_tokens = u32_en(&mapping, &mut o, pack_path, "token count")? as usize;
+        let name_len = u32_en(&mapping, &mut o, pack_path, "name length")? as usize;
         if dims == 0 || n_tokens == 0 {
-            bail!("el paquete {} declara 0 dimensiones o 0 tokens", pack_path.display());
+            bail!("pack {} declares 0 dimensions or 0 tokens", pack_path.display());
         }
-        let name_bytes = take_bytes(&mapping, &mut o, name_len, pack_path, "nombre")?;
+        let name_bytes = take_bytes(&mapping, &mut o, name_len, pack_path, "name")?;
         let name = std::str::from_utf8(name_bytes)
-            .with_context(|| format!("el nombre del paquete {} no es UTF-8 válido", pack_path.display()))?
+            .with_context(|| format!("the name of pack {} is not valid UTF-8", pack_path.display()))?
             .to_string();
         // Before anything else that costs: the name becomes a filesystem
         // path downstream, so a hostile one is refused here and never
         // reaches a `Pack`. See `validate_name`.
         if let Err(por_que) = validate_name(&name) {
             bail!(
-                "el nombre que declara el paquete {} {por_que}; \
-                 un paquete nombra su archivo, así que tiene que ser un nombre de archivo simple",
+                "the name that pack {} declares {por_que}; a pack names its own file, \
+                 so it has to be a plain file name",
                 pack_path.display()
             );
         }
-        let tok_len = u64_en(&mapping, &mut o, pack_path, "largo del tokenizador")? as usize;
+        let tok_len = u64_en(&mapping, &mut o, pack_path, "tokenizer length")? as usize;
         // Everything the rest of the header commits the file to, added up
         // and compared against what the file actually measures, **before**
         // handing the tokenizer's bytes to `tokenizers` and its C regex
@@ -171,25 +171,25 @@ impl Pack {
         let restante = mapping.len() - o; // take_bytes garantiza o <= len
         let mut necesario = 0usize;
         for (campo, n) in [
-            ("el tokenizador", tok_len),
-            ("las escalas", dims.saturating_mul(4)),
-            ("los mínimos", dims.saturating_mul(4)),
-            ("la tabla", n_tokens.saturating_mul(dims)),
+            ("the tokenizer", tok_len),
+            ("the scales", dims.saturating_mul(4)),
+            ("the minimums", dims.saturating_mul(4)),
+            ("the table", n_tokens.saturating_mul(dims)),
         ] {
             necesario = necesario
                 .checked_add(n)
                 .filter(|&t| t <= restante)
                 .with_context(|| {
                     format!(
-                        "el paquete {} está truncado: declara para {campo} un tamaño que el \
-                         archivo no cubre, y quedan {restante} bytes",
+                        "pack {} is truncated: it declares a size for {campo} that the file \
+                         does not cover, and {restante} bytes remain",
                         pack_path.display()
                     )
                 })?;
         }
-        let raw = take_bytes(&mapping, &mut o, tok_len, pack_path, "tokenizador")?;
+        let raw = take_bytes(&mapping, &mut o, tok_len, pack_path, "tokenizer")?;
         let tok = Tokenizer::from_bytes(raw).map_err(|e| {
-            anyhow::anyhow!("el tokenizador del paquete {} no se pudo leer: {e}", pack_path.display())
+            anyhow::anyhow!("the tokenizer of pack {} could not be read: {e}", pack_path.display())
         })?;
         // A pack whose table is smaller than the tokenizer's vocabulary
         // opens, installs and reports full coverage: embedding skips rows
@@ -212,22 +212,22 @@ impl Pack {
         let pieces = tok.get_vocab_size(false);
         if n_tokens < pieces {
             bail!(
-                "el paquete {} declara {n_tokens} filas pero su tokenizador tiene {pieces} \
-                 pieces: la tabla está incompleta y el paquete produciría vectores nulos",
+                "pack {} declares {n_tokens} rows but its tokenizer has {pieces} \
+                 pieces: the table is incomplete and the pack would produce null vectors",
                 pack_path.display()
             );
         }
-        let scales = f32s_en(&mapping, &mut o, dims, pack_path, "escalas")?;
-        let mins = f32s_en(&mapping, &mut o, dims, pack_path, "mínimos")?;
+        let scales = f32s_en(&mapping, &mut o, dims, pack_path, "scales")?;
+        let mins = f32s_en(&mapping, &mut o, dims, pack_path, "minimums")?;
         let table_size = n_tokens.checked_mul(dims).with_context(|| {
-            format!("el paquete {} declara una tabla demasiado grande", pack_path.display())
+            format!("pack {} declares a table that is too large", pack_path.display())
         })?;
         let table_start = o;
         let fin_tabla = o.checked_add(table_size).with_context(|| {
-            format!("el paquete {} declara una tabla demasiado grande", pack_path.display())
+            format!("pack {} declares a table that is too large", pack_path.display())
         })?;
         if mapping.len() < fin_tabla {
-            bail!("la tabla del paquete {} está truncada", pack_path.display());
+            bail!("the table of pack {} is truncated", pack_path.display());
         }
         Ok(Pack { mapping, tok, name, dims, n_tokens, scales, mins, table_start })
     }
@@ -247,7 +247,7 @@ impl Pack {
         let enc = self
             .tok
             .encode(text, false)
-            .map_err(|e| anyhow::anyhow!("no se pudo tokenizar: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("could not tokenize: {e}"))?;
         let mut v = vec![0f32; self.dims];
         let mut used = 0usize;
         for &id in enc.get_ids() {
@@ -284,7 +284,7 @@ impl Pack {
 /// sha256 of the whole file, in lowercase hexadecimal.
 pub fn sha256(pack_path: &Path) -> Result<String> {
     let mut f = std::fs::File::open(pack_path)
-        .with_context(|| format!("no se pudo abrir {}", pack_path.display()))?;
+        .with_context(|| format!("could not open {}", pack_path.display()))?;
     let mut h = Sha256::new();
     std::io::copy(&mut f, &mut h)?;
     Ok(format!("{:x}", h.finalize()))

@@ -136,13 +136,13 @@ pub fn parse(text: &str) -> Option<ParsedMemory> {
 /// the identity surviving an export round trip, because ids get reassigned.
 pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary> {
     if !dir.is_dir() {
-        bail!("{} no es una carpeta", dir.display());
+        bail!("{} is not a folder", dir.display());
     }
     let had: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0))?;
     if had > 0 && !merge {
         bail!(
-            "la base ya tiene {had} memorias. Importar encima duplicaría lo que ya está.\n   \
-             Usá --merge para agregar solo lo que falte, o apuntá --db a una base nueva."
+            "the database already has {had} memories. Importing on top would duplicate what \n   \
+             is there. Use --merge to add only what is missing, or point --db at a new one."
         );
     }
 
@@ -153,7 +153,7 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
     let mut parsed: Vec<ParsedMemory> = Vec::new();
     for a in &files {
         let txt = std::fs::read_to_string(a)
-            .with_context(|| format!("no se pudo leer {}", a.display()))?;
+            .with_context(|| format!("could not read {}", a.display()))?;
         if let Some(m) = parse(&txt) {
             parsed.push(m);
         }

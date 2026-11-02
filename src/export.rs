@@ -142,7 +142,7 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
         // levels above the output directory).
         if d.parent() != Some(dir) {
             anyhow::bail!(
-                "mem export: el proyecto de la memoria {id} produjo una ruta fuera del directorio de salida: {}",
+                "mem export: the project of memory {id} produced a path outside the output directory: {}",
                 d.display()
             );
         }
@@ -162,7 +162,7 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
         // the output directory.
         if path.parent() != Some(d.as_path()) {
             anyhow::bail!(
-                "mem export: la memoria {id} produjo un nombre de archivo fuera del directorio de salida: {}",
+                "mem export: memory {id} produced a file name outside the output directory: {}",
                 path.display()
             );
         }
@@ -172,7 +172,7 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
         // instead of silently repeating the bug this replaces.
         if written.contains(&path) {
             eprintln!(
-                "mem export: colisión de nombre de archivo pese al sufijo de id, se omite memoria {id}: {}",
+                "mem export: file name collision despite the id suffix, skipping memory {id}: {}",
                 path.display()
             );
             continue;

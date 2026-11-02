@@ -133,21 +133,21 @@ pub fn load(dir: &Path) -> Result<Config> {
         return Ok(Config::default());
     }
     let raw = std::fs::read_to_string(&pack_path)
-        .with_context(|| format!("no se pudo leer {}", pack_path.display()))?;
+        .with_context(|| format!("could not read {}", pack_path.display()))?;
     let c: Config = serde_json::from_str(&raw)
-        .with_context(|| format!("{} no es un config.json válido", pack_path.display()))?;
+        .with_context(|| format!("{} is not a valid config.json", pack_path.display()))?;
     if !(c.bm25_weight.is_finite() && c.bm25_weight >= 0.0) {
         bail!(
-            "{}: bm25_weight debe ser un número mayor o igual a cero, no {}",
+            "{}: bm25_weight has to be a number greater than or equal to zero, not {}",
             pack_path.display(),
             c.bm25_weight
         );
     }
     if c.candidates == 0 {
-        bail!("{}: candidates debe ser mayor que cero, no {}", pack_path.display(), c.candidates);
+        bail!("{}: candidates has to be greater than zero, not {}", pack_path.display(), c.candidates);
     }
     if c.excerpt == 0 {
-        bail!("{}: excerpt debe ser mayor que cero, no {}", pack_path.display(), c.excerpt);
+        bail!("{}: excerpt has to be greater than zero, not {}", pack_path.display(), c.excerpt);
     }
     Ok(c)
 }

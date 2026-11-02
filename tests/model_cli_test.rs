@@ -57,7 +57,7 @@ fn status_with_no_pack_says_so_and_does_not_fail() {
     let o = mem(d.path(), &["model", "status"]);
     assert!(o.status.success());
     let txt = String::from_utf8_lossy(&o.stdout).to_string();
-    assert!(txt.contains("sin paquete"), "salió: {txt}");
+    assert!(txt.contains("no pack"), "salió: {txt}");
 }
 
 #[test]
@@ -72,7 +72,7 @@ fn removing_the_pack_falls_back_to_bm25_without_breaking_search() {
     assert!(o.status.success());
 
     let s = mem(d.path(), &["model", "status"]);
-    assert!(String::from_utf8_lossy(&s.stdout).contains("sin paquete"));
+    assert!(String::from_utf8_lossy(&s.stdout).contains("no pack"));
 
     let b = mem(d.path(), &["search", "hola"]);
     assert!(b.status.success(), "la búsqueda tiene que seguir andando");
@@ -90,7 +90,7 @@ fn a_missing_pack_file_degrades_search_to_bm25() {
 
     let o = mem(d.path(), &["search", "hola"]);
     assert!(o.status.success(), "buscar no puede fallar por un paquete ausente");
-    assert!(String::from_utf8_lossy(&o.stderr).contains("aviso"));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("warning"));
 }
 
 /// A variant of the fixture with a different name and different dimensions,
@@ -213,7 +213,7 @@ fn a_name_mismatch_leaves_the_registry_consistent_with_disk() {
     assert!(o2.status.success(), "{}", String::from_utf8_lossy(&o2.stderr));
     let err2 = String::from_utf8_lossy(&o2.stderr).to_string();
     assert!(
-        !err2.contains("falta"),
+        !err2.contains("missing"),
         "la segunda búsqueda no puede decir que falta el archivo: {err2}"
     );
 }
@@ -257,7 +257,7 @@ fn reinstalling_from_the_installed_path_does_not_destroy_the_pack() {
     let b = mem(d.path(), &["search", "hola"]);
     assert!(b.status.success());
     let err = String::from_utf8_lossy(&b.stderr).to_string();
-    assert!(!err.contains("aviso"), "no puede quedar avisando para siempre: {err}");
+    assert!(!err.contains("warning"), "no puede quedar avisando para siempre: {err}");
 
     // And the install leaves no temporaries lying around in `packs/`.
     let extras: Vec<String> = std::fs::read_dir(d.path().join("paquetes"))

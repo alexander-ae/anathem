@@ -162,7 +162,7 @@ fn call_tool(
                 },
             };
             let g = match ingest::save_with_topic_by(
-                conn, text, &project, given_tags, topic, supersedes, agent, crate::lang::Lang::En) {
+                conn, text, &project, given_tags, topic, supersedes, agent) {
                 Ok(g) => g,
                 // A request that cannot be fulfilled is not an internal
                 // error: the model has to read what to fix, and nothing was
@@ -174,7 +174,7 @@ fn call_tool(
             };
             let (id, tag_list) = (g.id, g.tags.clone());
             let title = ingest::title_from(text);
-            let aviso_tema = g.describe(crate::lang::Lang::En).map(|m| format!("\n{m}")).unwrap_or_default();
+            let topic_note = g.describe().map(|m| format!("\n{m}")).unwrap_or_default();
 
             // `LivePack` revalidated the pack when the message began, but
             // embedding a large backlog can take minutes and in that time
@@ -207,7 +207,7 @@ fn call_tool(
                 )
             };
             Ok(text_result(format!(
-                "Saved as id:{id} [{}] {title}{aviso_tema}{warning}", tag_list.join(", ")
+                "Saved as id:{id} [{}] {title}{topic_note}{warning}", tag_list.join(", ")
             )))
         }
         "recent_memories" => {
@@ -215,7 +215,7 @@ fn call_tool(
             let project = crate::project::resolve(
                 args["project"].as_str().map(str::to_string), &cwd);
             let window = match args["since"].as_str() {
-                Some(s) => match crate::recent::duration_in_seconds(s, crate::lang::Lang::En) {
+                Some(s) => match crate::recent::duration_in_seconds(s) {
                     Ok(v) => Some(v),
                     Err(e) => return Ok(text_result(format!("Could not list: {e}"))),
                 },
@@ -223,7 +223,7 @@ fn call_tool(
             };
             let limit = args["limit"].as_u64().map(|l| l as usize).unwrap_or(15);
             let items = crate::recent::list_recent(conn, Some(&project), window, limit, cfg.excerpt)?;
-            Ok(text_result(crate::recent::format_items(&items, false, crate::lang::Lang::En)))
+            Ok(text_result(crate::recent::format_items(&items, false)))
         }
         "get_memory" => {
             let id = args["id"].as_i64().unwrap_or(-1);
@@ -304,7 +304,7 @@ pub fn handle_con_agente(
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let project = crate::project::resolve(None, &cwd);
             let traspaso = crate::recent::handoff_instructions(
-                conn, &project, cfg.handoff_items, &cfg.handoff_window, agent.as_deref(), crate::lang::Lang::En);
+                conn, &project, cfg.handoff_items, &cfg.handoff_window, agent.as_deref());
             let mut res = json!({
                 "protocolVersion": PROTOCOL,
                 "capabilities": {"tools": {}},

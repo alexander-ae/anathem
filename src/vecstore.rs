@@ -180,8 +180,8 @@ pub fn registered_pack(conn: &Connection) -> Result<Option<PackIdentity>> {
             // `remove_file`. See `pack::validate_name`.
             if let Err(por_que) = crate::pack::validate_name(&n) {
                 anyhow::bail!(
-                    "el nombre de paquete registrado en la base ({n:?}) {por_que}; \
-                     reinstalá el paquete con `mem model install`"
+                    "the pack name registered in the database ({n:?}) {por_que}; \
+                     reinstall the pack with `mem model install`"
                 );
             }
             Ok(Some((n, s, d.parse()?)))

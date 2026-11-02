@@ -4,12 +4,12 @@
 //!
 //! Compilar nunca puede fallar por esto: sin git en el PATH, fuera de un
 //! repositorio (un tarball, `cargo publish`) o en un repositorio sin commits,
-//! el valor es `desconocido` y la compilación sigue.
+//! el valor es `unknown` y la compilación sigue.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const DESCONOCIDO: &str = "desconocido";
+const UNKNOWN: &str = "unknown";
 
 /// Corre `git <args>` en `dir` y devuelve su salida sin el salto de línea
 /// final, o `None` si git no está, falla, o no imprime nada.
@@ -81,5 +81,5 @@ fn main() {
     } else {
         None
     };
-    println!("cargo:rustc-env=ANATHEM_COMMIT={}", commit.as_deref().unwrap_or(DESCONOCIDO));
+    println!("cargo:rustc-env=ANATHEM_COMMIT={}", commit.as_deref().unwrap_or(UNKNOWN));
 }

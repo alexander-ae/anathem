@@ -86,13 +86,13 @@ fn a_healthy_database_exits_zero_and_reports_the_counts() {
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "una base sana no es un problema (salió {:?}): {}", o.codigo, o.todo());
     assert!(
-        o.stdout.contains("2 activas, 1 superseded, 0 draft, 0 forgotten"),
+        o.stdout.contains("2 active, 1 superseded, 0 draft, 0 forgotten"),
         "conteos por estado: {}",
         o.stdout
     );
-    assert!(o.stdout.contains("fragmentos: 3"), "fragmentos: {}", o.stdout);
+    assert!(o.stdout.contains("chunks: 3"), "fragmentos: {}", o.stdout);
     assert!(o.stdout.contains("tags: 1"), "tags: {}", o.stdout);
-    assert!(o.stdout.contains("referencias: 0"), "referencias: {}", o.stdout);
+    assert!(o.stdout.contains("references: 0"), "referencias: {}", o.stdout);
     assert!(o.stdout.contains(env!("CARGO_PKG_VERSION")), "versión: {}", o.stdout);
     assert!(o.stdout.contains(db.to_str().unwrap()), "la ruta de la base: {}", o.stdout);
     assert!(!o.stdout.contains('✗'), "una base sana no marca nada como mal: {}", o.stdout);
@@ -104,8 +104,8 @@ fn no_pack_is_information_and_not_a_problem() {
     let db = healthy_database(d.path());
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
-    assert!(o.stdout.contains("sin paquete"), "{}", o.stdout);
-    assert!(o.stdout.contains("léxica"), "tiene que decir que es el modo normal: {}", o.stdout);
+    assert!(o.stdout.contains("no vocabulary pack"), "{}", o.stdout);
+    assert!(o.stdout.contains("lexical"), "tiene que decir que es el modo normal: {}", o.stdout);
 }
 
 #[test]
@@ -115,7 +115,7 @@ fn a_freshly_created_database_does_not_break_the_diagnostic() {
     mem(&db, &["init"]);
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
-    assert!(o.stdout.contains("0 activas, 0 superseded, 0 draft, 0 forgotten"), "{}", o.stdout);
+    assert!(o.stdout.contains("0 active, 0 superseded, 0 draft, 0 forgotten"), "{}", o.stdout);
 }
 
 #[test]
@@ -150,7 +150,7 @@ fn a_broken_config_is_reported_and_the_diagnostic_survives() {
     assert!(o.stdout.contains("config.json"), "{}", o.stdout);
     assert!(!o.stderr.contains("panicked"), "no puede entrar en pánico: {}", o.stderr);
     // And it carried on: the rest of the diagnostic is there.
-    assert!(o.stdout.contains("2 activas"), "tiene que seguir con el resto: {}", o.stdout);
+    assert!(o.stdout.contains("2 active"), "tiene que seguir con el resto: {}", o.stdout);
 }
 
 #[test]
@@ -185,7 +185,7 @@ fn a_broken_tags_json_is_reported_and_the_diagnostic_survives() {
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
     assert!(o.stdout.contains("tags.json"), "{}", o.stdout);
     assert!(!o.stderr.contains("panicked"), "{}", o.stderr);
-    assert!(o.stdout.contains("2 activas"), "{}", o.stdout);
+    assert!(o.stdout.contains("2 active"), "{}", o.stdout);
 }
 
 #[test]
@@ -198,7 +198,7 @@ fn a_registered_pack_whose_file_is_missing_is_detected() {
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
     assert!(o.stdout.contains("mini-es"), "{}", o.stdout);
-    assert!(o.stdout.contains("falta"), "{}", o.stdout);
+    assert!(o.stdout.contains("missing"), "{}", o.stdout);
 }
 
 #[test]
@@ -209,7 +209,7 @@ fn an_installed_and_complete_pack_comes_out_clean() {
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
     assert!(o.stdout.contains("mini-es"), "{}", o.stdout);
-    assert!(o.stdout.contains("4 dimensiones"), "{}", o.stdout);
+    assert!(o.stdout.contains("4 dimensions"), "{}", o.stdout);
     assert!(o.stdout.contains("3/3"), "cobertura completa: {}", o.stdout);
 }
 
@@ -277,7 +277,7 @@ fn two_active_memories_under_one_topic_key_are_detected() {
 
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
-    assert!(o.stdout.contains("clave de tema"), "{}", o.stdout);
+    assert!(o.stdout.contains("topic key"), "{}", o.stdout);
 }
 
 #[test]
@@ -294,8 +294,8 @@ fn chunks_without_a_memory_and_vectors_without_a_chunk_are_detected() {
 
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
-    assert!(o.stdout.contains("fragmentos sin memoria: 1"), "{}", o.stdout);
-    assert!(o.stdout.contains("vectores sin fragmento: 1"), "{}", o.stdout);
+    assert!(o.stdout.contains("chunks with no memory: 1"), "{}", o.stdout);
+    assert!(o.stdout.contains("vectors with no chunk: 1"), "{}", o.stdout);
 }
 
 #[test]
@@ -321,7 +321,7 @@ fn a_database_that_does_not_exist_yet_neither_breaks_nor_is_created() {
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
     assert!(!o.stderr.contains("panicked"), "{}", o.stderr);
-    assert!(o.stdout.contains("no existe"), "{}", o.stdout);
+    assert!(o.stdout.contains("does not exist"), "{}", o.stdout);
     assert!(!carpeta.exists(), "un diagnóstico no crea nada, ni siquiera la carpeta");
 }
 
@@ -333,9 +333,9 @@ fn a_missing_database_does_not_claim_everything_is_fine() {
     let d = tempfile::tempdir().unwrap();
     let o = mem(&d.path().join("no-esta").join("mem.db"), &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
-    assert!(!o.stdout.contains("Todo en orden"), "{}", o.stdout);
-    assert!(o.stdout.contains("Sin problemas ("), "tiene que contar el aviso: {}", o.stdout);
-    let line_ = o.stdout.lines().find(|l| l.contains("no existe")).unwrap();
+    assert!(!o.stdout.contains("All good"), "{}", o.stdout);
+    assert!(o.stdout.contains("No problems ("), "tiene que contar el aviso: {}", o.stdout);
+    let line_ = o.stdout.lines().find(|l| l.contains("does not exist")).unwrap();
     assert!(line_.trim_start().starts_with('!'), "es un aviso, no información: {line_}");
 }
 
@@ -348,8 +348,8 @@ fn the_summary_tells_all_clear_from_no_problems_but_warnings() {
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
     // (If the binary was built without git there is one more warning: the count is not pinned.)
-    assert!(o.stdout.contains("Sin problemas ("), "{}", o.stdout);
-    assert!(!o.stdout.contains("Todo en orden"), "{}", o.stdout);
+    assert!(o.stdout.contains("No problems ("), "{}", o.stdout);
+    assert!(!o.stdout.contains("All good"), "{}", o.stdout);
 }
 
 #[test]
@@ -378,7 +378,7 @@ fn a_database_predating_topic_keys_does_not_break_the_diagnostic() {
     drop(c);
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
-    assert!(o.stdout.contains("2 activas"), "{}", o.stdout);
+    assert!(o.stdout.contains("2 active"), "{}", o.stdout);
 }
 
 /// Every file in the tree with a digest of its contents, so before and after
@@ -472,7 +472,7 @@ fn it_sees_writes_from_a_live_connection_that_has_not_checkpointed() {
     .unwrap();
     let o = mem(&db, &["doctor"]);
     drop(viva);
-    assert!(o.stdout.contains("3 activas"), "{}", o.todo());
+    assert!(o.stdout.contains("3 active"), "{}", o.todo());
 }
 
 #[test]
@@ -483,7 +483,7 @@ fn a_path_with_spaces_and_symbols_works() {
     let db = healthy_database(&carpeta);
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
-    assert!(o.stdout.contains("2 activas"), "{}", o.stdout);
+    assert!(o.stdout.contains("2 active"), "{}", o.stdout);
 }
 
 #[test]
@@ -505,12 +505,12 @@ fn a_database_predating_the_vector_layer_is_information_not_three_problems() {
         let o = mem(&db, &["doctor"]);
         assert!(o.ok(), "sin {tables:?}: {}", o.todo());
         assert!(!o.stdout.contains('✗'), "sin {tables:?}: {}", o.stdout);
-        assert!(o.stdout.contains("anterior a la capa vectorial"), "sin {tables:?}: {}", o.stdout);
-        assert!(o.stdout.contains("2 activas"), "sin {tables:?}: {}", o.stdout);
+        assert!(o.stdout.contains("predates the vector layer"), "sin {tables:?}: {}", o.stdout);
+        assert!(o.stdout.contains("2 active"), "sin {tables:?}: {}", o.stdout);
         // And it really does migrate itself: the next write leaves it healthy.
         assert!(mem(&db, &["save", "otra", "--project", "p"]).ok());
         let o = mem(&db, &["doctor"]);
-        assert!(!o.stdout.contains("anterior a la capa vectorial"), "{}", o.stdout);
+        assert!(!o.stdout.contains("predates the vector layer"), "{}", o.stdout);
     }
 }
 
@@ -563,6 +563,6 @@ fn the_fts5_index_is_compared_by_ids_and_not_only_by_count() {
 
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
-    assert!(o.stdout.contains("FTS5 desincronizado"), "{}", o.stdout);
-    assert!(o.stdout.contains("1 sin indexar, 1 indexados que ya no existen"), "{}", o.stdout);
+    assert!(o.stdout.contains("FTS5 index out of sync"), "{}", o.stdout);
+    assert!(o.stdout.contains("1 unindexed, 1 indexed that no longer exist"), "{}", o.stdout);
 }

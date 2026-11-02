@@ -48,7 +48,7 @@ fn the_minimal_cycle_works_with_nothing_configured() {
     let db = dir.path().join("m.db");
     mem(&db, &["init"]);
     let (out, _, ok) = mem(&db, &["save", "Se decidió usar SQLite por un bug de concurrencia"]);
-    assert!(ok && out.contains("guardada"), "no guardó: {out}");
+    assert!(ok && out.contains("saved"), "no guardó: {out}");
     assert!(out.contains('['), "no clasificó con las reglas por defecto: {out}");
     let (out, _, _) = mem(&db, &["search", "SQLite concurrencia"]);
     assert!(out.contains("SQLite"), "no encontró lo que acababa de guardar: {out}");

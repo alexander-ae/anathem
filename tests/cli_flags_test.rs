@@ -57,3 +57,18 @@ fn the_old_flags_are_hidden_from_help() {
     assert!(!help.contains("--desde"), "la vieja no puede aparecer: {help}");
     assert!(!help.contains("--limite"), "la vieja no puede aparecer: {help}");
 }
+
+#[test]
+fn the_help_is_english_and_well_formed() {
+    let d = tempfile::tempdir().unwrap();
+    let (help, ok) = mem(&d.path().join("m.db"), &["--help"]);
+    assert!(ok, "{help}");
+    // La primera línea de cada doc comment es el resumen del subcomando: si
+    // alguno queda mal cortado al traducir, desaparece de la ayuda.
+    for sub in ["save", "search", "recent", "doctor", "export", "import", "model", "serve"] {
+        assert!(help.contains(sub), "falta el subcomando {sub}: {help}");
+    }
+    for palabra in ["memoria", "búsqueda", "proyecto", "Guarda", "archivo", "paquete"] {
+        assert!(!help.contains(palabra), "queda español en la ayuda: «{palabra}»\n{help}");
+    }
+}

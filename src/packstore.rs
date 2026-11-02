@@ -117,8 +117,8 @@ pub fn resolve(conn: &Connection, dir: &Path) -> Resolved {
     match resolve_inner(conn, dir) {
         Ok(a) => a,
         Err(e) => Resolved::degraded(format!(
-            "aviso: no se pudo resolve el paquete de vocabulario ({e}); \
-             se busca solo con bm25."
+            "warning: could not resolve the vocabulary pack ({e}); \
+             searching with bm25 only."
         )),
     }
 }
@@ -149,7 +149,7 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     //
     // Whoever installed nothing does not pay for this query: with no pack
     // registered we already returned above.
-    let sospechoso = match vecstore::pending_install(conn)? {
+    let suspect = match vecstore::pending_install(conn)? {
         None => false,
         Some(instalando) if instalando == name => true,
         Some(_) => {
@@ -163,8 +163,8 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     let registered_path = pack_path(dir, &name);
     if !registered_path.exists() {
         return Ok(Resolved::degraded(format!(
-            "aviso: el paquete {name} está registrado pero falta {}; \
-             se busca solo con bm25. Reinstalalo con `mem model install`.",
+            "warning: pack {name} is registered but {} is missing; \
+             searching with bm25 only. Reinstall it with `mem model install`.",
             registered_path.display()
         )));
     }
@@ -172,13 +172,13 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
         Ok(p) => p,
         Err(e) => {
             return Ok(Resolved::degraded(format!(
-                "aviso: el paquete {name} en {} no se pudo abrir ({e}); \
-                 se busca solo con bm25. Reinstalalo con `mem model install`.",
+                "warning: pack {name} at {} could not be opened ({e}); \
+                 searching with bm25 only. Reinstall it with `mem model install`.",
                 registered_path.display()
             )))
         }
     };
-    if !sospechoso && p.name() == name && p.dims() == dims {
+    if !suspect && p.name() == name && p.dims() == dims {
         return Ok(Resolved::with_pack(p, (name, sha, dims), None));
     }
     // Reconciling recomputes the sha, adopts again — which deletes the old
@@ -186,15 +186,15 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     // install interrupted before the rename that is extra work, but it is
     // one-time work on the safe side: the alternative is being unable to
     // tell apart the case where the file did change.
-    let warning = if sospechoso {
+    let warning = if suspect {
         format!(
-            "aviso: una instalación de {name} quedó a medias y el archivo en disco puede \
-             no ser el que indexó esta base; reindexando para no mezclar vectores."
+            "warning: an install of {name} was left half done and the file on disk may \
+             not be the one this database indexed with; reindexing so vectors are not mixed."
         )
     } else {
         format!(
-            "aviso: el paquete en disco ({}, {} dimensiones) no es el que indexó esta base \
-             ({name}, {dims} dimensiones); reindexando para no mezclar vectores.",
+            "warning: the pack on disk ({}, {} dimensions) is not the one this database indexed \
+             with ({name}, {dims} dimensions); reindexing so vectors are not mixed.",
             p.name(),
             p.dims()
         )
@@ -202,8 +202,8 @@ fn resolve_inner(conn: &Connection, dir: &Path) -> Result<Resolved> {
     match reconcile(conn, dir, &registered_path, p) {
         Ok((p, id)) => Ok(Resolved::with_pack(p, id, Some(warning))),
         Err(e) => Ok(Resolved::degraded(format!(
-            "{warning}\naviso: no se pudo reindexar ({e}); se busca solo con bm25 \
-             hasta que se pueda. Reinstalá el paquete con `mem model install`."
+            "{warning}\nwarning: could not reindex ({e}); searching with bm25 only \
+             until it can. Reinstall the pack with `mem model install`."
         ))),
     }
 }
@@ -238,7 +238,7 @@ fn reconcile(
         drop(p);
         std::fs::rename(current_path, &target).with_context(|| {
             format!(
-                "no se pudo renombrar {} a {} al reindexar",
+                "could not rename {} to {} while reindexing",
                 current_path.display(),
                 target.display()
             )
@@ -249,7 +249,7 @@ fn reconcile(
                 let _ = std::fs::rename(&target, current_path);
                 return Err(e).with_context(|| {
                     format!(
-                        "el rename a {} salió bien pero el paquete no se pudo reabrir",
+                        "the rename to {} succeeded but the pack could not be reopened",
                         target.display()
                     )
                 });
@@ -287,7 +287,7 @@ fn reconcile(
     // pack and starts clean.
     if vecstore::sync(conn, &p, &identity)?.abandoned() {
         bail!(
-            "otro proceso cambió el paquete de vocabulario mientras se reindexaba con {}",
+            "another process changed the vocabulary pack while reindexing with {}",
             name
         );
     }
@@ -350,22 +350,22 @@ fn replace_file(source: &Path, target: &Path) -> std::io::Result<()> {
     if !target.is_file() {
         return std::fs::rename(source, target);
     }
-    let lateral = target.with_file_name(format!(
+    let sibling = target.with_file_name(format!(
         "{}.reemplazando-{}",
         target.file_name().and_then(|n| n.to_str()).unwrap_or("paquete"),
         std::process::id()
     ));
-    std::fs::rename(target, &lateral)?;
+    std::fs::rename(target, &sibling)?;
     match std::fs::rename(source, target) {
         Ok(()) => {
             // Best effort: if this fails a leftover sibling file is left
             // lying around, not an inconsistent state — `target` already
             // holds the right content.
-            let _ = std::fs::remove_file(&lateral);
+            let _ = std::fs::remove_file(&sibling);
             Ok(())
         }
         Err(e) => {
-            let _ = std::fs::rename(&lateral, target);
+            let _ = std::fs::rename(&sibling, target);
             Err(e)
         }
     }
@@ -401,38 +401,38 @@ pub fn install(conn: &Connection, dir: &Path, file: &Path) -> Result<Installed> 
     let sha = pack::sha256(file)?;
     verify_signature(file, &sha)?;
 
-    let (name, dims, sirve) = {
+    let (name, dims, useful) = {
         let p = Pack::open_pack(file)?;
         (p.name().to_string(), p.dims(), !only_null_vectors(conn, &p)?)
     };
-    if !sirve {
+    if !useful {
         bail!(
-            "el paquete {name} no reconoce ni una palabra de esta memoria: todos los \
-             vectores saldrían nulos y la búsqueda vectorial no aportaría nada. No se \
-             instaló nada; revisá que sea el paquete del idioma correcto."
+            "pack {name} does not recognise a single word of this memory: every vector would \
+             come out null and vector search would add nothing. Nothing was installed; \
+             check that it is the pack for the right language."
         );
     }
 
     let target_dir = packs_dir(dir);
     std::fs::create_dir_all(&target_dir)?;
     let target = pack_path(dir, &name);
-    let temporal = target_dir.join(format!(".instalando-{}.{EXTENSION}", std::process::id()));
-    let copia = (|| -> Result<()> {
-        std::fs::copy(file, &temporal).with_context(|| {
-            format!("no se pudo copiar {} a {}", file.display(), temporal.display())
+    let temp = target_dir.join(format!(".instalando-{}.{EXTENSION}", std::process::id()));
+    let copy = (|| -> Result<()> {
+        std::fs::copy(file, &temp).with_context(|| {
+            format!("could not copy {} to {}", file.display(), temp.display())
         })?;
         // Make sure the copy is the copy: if it came out short or the disk
         // filled up, the sha does not match and the installed pack never
         // comes to exist.
-        let sha_copia = pack::sha256(&temporal)?;
+        let sha_copia = pack::sha256(&temp)?;
         if sha_copia != sha {
-            bail!("la copia de {} quedó incompleta; no se instaló nada", file.display());
+            bail!("the copy of {} came out incomplete; nothing was installed", file.display());
         }
-        Pack::open_pack(&temporal)?;
+        Pack::open_pack(&temp)?;
         Ok(())
     })();
-    if let Err(e) = copia {
-        let _ = std::fs::remove_file(&temporal);
+    if let Err(e) = copy {
+        let _ = std::fs::remove_file(&temp);
         return Err(e);
     }
     // The mark goes before the rename, not after: written afterwards, the
@@ -440,8 +440,8 @@ pub fn install(conn: &Connection, dir: &Path, file: &Path) -> Result<Installed> 
     // it to spare — left set without the file having changed — costs a
     // reindex; having it missing costs a silently mixed index.
     vecstore::mark_install(conn, &name)?;
-    if let Err(e) = replace_file(&temporal, &target) {
-        let _ = std::fs::remove_file(&temporal);
+    if let Err(e) = replace_file(&temp, &target) {
+        let _ = std::fs::remove_file(&temp);
         // `replace_file` restores `target` to what it held before when the
         // second step fails, so the registered pack's file was not touched
         // (unless the restore *also* failed, an unlikely double failure;
@@ -452,7 +452,7 @@ pub fn install(conn: &Connection, dir: &Path, file: &Path) -> Result<Installed> 
         // matches the registered one.
         let _ = vecstore::clear_install_mark(conn);
         return Err(anyhow::Error::new(e)
-            .context(format!("no se pudo instalar el paquete en {}", target.display())));
+            .context(format!("could not install the pack at {}", target.display())));
     }
 
     // Read-only from here on (finding B-2): the pack stays memory-mapped
@@ -518,7 +518,7 @@ fn verify_signature(file: &Path, sha: &str) -> Result<()> {
     let expected = raw.split_whitespace().next().unwrap_or("");
     if expected != sha {
         bail!(
-            "el sha256 no coincide: el archivo da {sha} y {} dice {expected}",
+            "the sha256 does not match: the file gives {sha} and {} says {expected}",
             firma.display()
         );
     }
@@ -581,8 +581,8 @@ pub fn warn_if_file_missing(conn: &Connection, dir: &Path) {
     let r = pack_path(dir, &name);
     if !r.exists() {
         eprintln!(
-            "aviso: el paquete {name} está registrado pero falta {}; \
-             se busca solo con bm25. Reinstalalo con `mem model install`.",
+            "warning: pack {name} is registered but {} is missing; \
+             searching with bm25 only. Reinstall it with `mem model install`.",
             r.display()
         );
     }
@@ -779,7 +779,7 @@ mod tests {
     // The third test exercises the part an atomic rename never needed:
     // recovering when the second step really fails.
 
-    /// Ningún archivo lateral (`*.reemplazando-*`) sobrevive a un
+    /// Ningún archivo sibling (`*.reemplazando-*`) sobrevive a un
     /// `reemplazar`, salga bien o mal.
     fn no_stray_files(dir: &Path) -> bool {
         std::fs::read_dir(dir)
@@ -798,9 +798,9 @@ mod tests {
 
         replace_file(&source, &target).unwrap();
 
-        assert!(!source.exists(), "el origen tiene que haberse movido, no copiado");
+        assert!(!source.exists(), "the source has to have moved, not been copied");
         assert_eq!(std::fs::read(&target).unwrap(), b"contenido nuevo");
-        assert!(no_stray_files(d.path()), "no puede quedar un archivo lateral sobrante");
+        assert!(no_stray_files(d.path()), "no leftover sibling file may remain");
     }
 
     #[test]
@@ -835,9 +835,9 @@ mod tests {
         assert_eq!(
             std::fs::read(&target).unwrap(),
             b"contenido viejo que todavia funciona",
-            "el destino que funcionaba antes de intentar el reemplazo tiene que seguir ahí"
+            "the destination that worked before the replacement attempt has to still be there"
         );
-        assert!(no_stray_files(d.path()), "no puede quedar un archivo lateral sobrante");
+        assert!(no_stray_files(d.path()), "no leftover sibling file may remain");
     }
 
     // --- blocker 3: reconciling with the mmap still open -----------------
@@ -864,14 +864,14 @@ mod tests {
         let p = Pack::open_pack(&old_path).unwrap(); // mmap abierto sobre ruta_vieja
 
         let (p2, identity) = reconcile(&conn, dir, &old_path, p)
-            .expect("reconciliar tiene que poder renombrar el archivo que tiene mapeado");
+            .expect("reconciling has to be able to rename the file it has mapped");
 
         assert_eq!(identity.0, "nuevo-es");
         assert_eq!(p2.name(), "nuevo-es");
-        assert!(!old_path.exists(), "el archivo con el nombre viejo tiene que haberse ido");
+        assert!(!old_path.exists(), "the file under the old name has to be gone");
         assert!(
             pack_path(dir, "nuevo-es").exists(),
-            "el archivo tiene que vivir ahora en el nombre nuevo"
+            "the file has to live under the new name now"
         );
     }
 
@@ -885,7 +885,7 @@ mod tests {
         let sha = crate::pack::sha256(&pack_path(dir, "es")).unwrap();
         vecstore::register_pack(&conn, "es", &sha, 4).unwrap();
         let mut v = LivePack::new_id(dir);
-        assert!(v.current(&conn).is_some(), "el escenario exige el paquete abierto");
+        assert!(v.current(&conn).is_some(), "the scenario requires the pack to be open");
         (conn, v)
     }
 
@@ -901,14 +901,14 @@ mod tests {
         // One that has elapsed does.
         std::thread::sleep(std::time::Duration::from_millis(20));
         assert!(v.release_if_idle(std::time::Duration::from_millis(10)));
-        assert!(!v.has_open_pack(), "tenía que quedar sin paquete");
+        assert!(!v.has_open_pack(), "it had to be left with no pack");
 
         // Releasing it again does nothing: there is nothing to release.
         assert!(!v.release_if_idle(std::time::Duration::from_millis(10)));
 
         // And the next search reopens it on its own.
         let mut v = v;
-        assert!(v.current(&conn).is_some(), "tenía que reabrirse al volver a usarlo");
+        assert!(v.current(&conn).is_some(), "it had to reopen when used again");
         assert!(v.has_open_pack());
     }
 
@@ -931,7 +931,7 @@ mod tests {
         assert!(v.current(&conn).is_some());
         assert!(
             !v.release_if_idle(std::time::Duration::from_millis(20)),
-            "si se acaba de usar, no está inactivo"
+            "if it was just used, it is not idle"
         );
     }
 }

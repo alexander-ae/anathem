@@ -166,6 +166,6 @@ fn it_warns_on_startup_when_the_registered_pack_is_gone() {
     let _ = s.kill();
     let out_text = s.wait_with_output().unwrap();
     let err = String::from_utf8_lossy(&out_text.stderr);
-    assert!(err.contains("fantasma") && err.contains("falta"),
+    assert!(err.contains("fantasma") && err.contains("missing"),
         "el arranque tiene que avisar que el paquete registrado no está:\n{err}");
 }

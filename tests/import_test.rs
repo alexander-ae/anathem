@@ -44,7 +44,7 @@ fn a_whole_database_survives_the_round_trip() {
     let target = d.path().join("destino.db");
     let (ok, out, err) = mem(&target, &["import", "--desde", exp.to_str().unwrap()]);
     assert!(ok, "import falló: {err}");
-    assert!(out.contains("importadas 4"), "salida: {out}");
+    assert!(out.contains("imported 4"), "salida: {out}");
 
     assert_eq!(counts(&source), counts(&target), "la base importada tiene que ser equivalente");
 
@@ -73,7 +73,7 @@ fn importing_onto_a_nonempty_database_is_rejected_without_merge() {
     // With --fusionar it does, and it does not duplicate what was there.
     let (ok, out, err) = mem(&source, &["import", "--desde", exp.to_str().unwrap(), "--fusionar"]);
     assert!(ok, "{err}");
-    assert!(out.contains("importadas 0"), "no tenía que insertar nada: {out}");
+    assert!(out.contains("imported 0"), "no tenía que insertar nada: {out}");
     assert_eq!(counts(&source).0, 1, "seguía habiendo una sola memoria");
 }
 
@@ -91,7 +91,7 @@ fn a_file_without_frontmatter_does_not_break_the_import() {
     let target = d.path().join("d.db");
     let (ok, out, err) = mem(&target, &["import", "--desde", exp.to_str().unwrap()]);
     assert!(ok, "{err}");
-    assert!(out.contains("importadas 1"), "salida: {out}");
+    assert!(out.contains("imported 1"), "salida: {out}");
 }
 
 #[test]

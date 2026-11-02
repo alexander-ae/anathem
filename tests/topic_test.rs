@@ -94,7 +94,7 @@ fn without_a_topic_key_saving_twice_leaves_both_active() {
     assert_eq!(status_(d.path(), 1), "active");
     assert_eq!(status_(d.path(), 2), "active");
     // and with no key there is nothing left to list
-    assert!(mem_ok(d.path(), &["topics"]).contains("Sin claves de tema"));
+    assert!(mem_ok(d.path(), &["topics"]).contains("No topic keys"));
 }
 
 #[test]
@@ -105,8 +105,8 @@ fn saving_under_a_new_key_simply_saves() {
 
     assert_eq!(status_(d.path(), 1), "active", "una clave distinta no toca a las demás");
     assert_eq!(status_(d.path(), 2), "active");
-    assert!(out.contains("guardada memoria 2"), "{out}");
-    assert!(out.contains("pagos") && out.contains("nueva"), "tiene que decir que la clave era nueva: {out}");
+    assert!(out.contains("saved memory 2"), "{out}");
+    assert!(out.contains("pagos") && out.contains("new one"), "tiene que decir que la clave era nueva: {out}");
 }
 
 #[test]
@@ -115,8 +115,8 @@ fn on_replacing_the_output_names_the_superseded_memory_by_id() {
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
     let out = mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
 
-    assert!(out.contains("guardada memoria 2"), "{out}");
-    assert!(out.contains("reemplaza a la memoria 1"), "tiene que nombrar el id reemplazado: {out}");
+    assert!(out.contains("saved memory 2"), "{out}");
+    assert!(out.contains("replaces memory 1"), "tiene que nombrar el id reemplazado: {out}");
     assert!(out.contains("Stripe"), "tiene que mostrar el título reemplazado: {out}");
 }
 
@@ -149,7 +149,7 @@ fn topics_says_there_is_no_current_one_when_the_only_one_was_forgotten() {
     mem_ok(d.path(), &["forget", "1"]);
 
     let out = mem_ok(d.path(), &["topics"]);
-    assert!(out.contains("pagos") && out.contains("ninguna"), "{out}");
+    assert!(out.contains("pagos") && out.contains("none"), "{out}");
 }
 
 #[test]
@@ -159,7 +159,7 @@ fn once_the_current_one_is_forgotten_the_key_saves_again_without_superseding() {
     mem_ok(d.path(), &["forget", "1"]);
     let out = mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
 
-    assert!(!out.contains("reemplaza a"), "no había una activa que reemplazar: {out}");
+    assert!(!out.contains("replaces memory"), "no había una activa que reemplazar: {out}");
     assert_eq!(status_(d.path(), 1), "forgotten", "no se revive lo olvidado");
     assert_eq!(status_(d.path(), 2), "active");
 }
@@ -169,7 +169,7 @@ fn an_empty_key_is_rejected_and_nothing_is_saved() {
     let d = tempfile::tempdir().unwrap();
     let (ok, _, err) = mem(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "  "]);
     assert!(!ok, "una clave vacía tiene que fallar");
-    assert!(err.contains("clave de tema"), "{err}");
+    assert!(err.contains("topic key"), "{err}");
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let n: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
     assert_eq!(n, 0);
@@ -214,7 +214,7 @@ fn a_new_key_lists_the_ones_already_in_the_project() {
 fn when_there_are_no_other_keys_the_message_says_so() {
     let d = tempfile::tempdir().unwrap();
     let out = mem_ok(d.path(), &["save", "Primera", "--project", "p", "--topic", "unica"]);
-    assert!(out.contains("No hay otras claves"), "{out}");
+    assert!(out.contains("no other topic keys"), "{out}");
 }
 
 #[test]
@@ -223,8 +223,8 @@ fn on_superseding_no_other_keys_are_listed() {
     mem_ok(d.path(), &["save", "Uno", "--project", "p", "--topic", "a"]);
     mem_ok(d.path(), &["save", "Dos", "--project", "p", "--topic", "b"]);
     let out = mem_ok(d.path(), &["save", "Dos bis", "--project", "p", "--topic", "b"]);
-    assert!(out.contains("reemplaza a la memoria 2"), "{out}");
-    assert!(!out.contains("Claves que ya existen"), "{out}");
+    assert!(out.contains("replaces memory 2"), "{out}");
+    assert!(!out.contains("Keys that already exist"), "{out}");
 }
 
 // -- the vector layer -------------------------------------------------------
@@ -685,7 +685,7 @@ fn an_older_database_accepts_saving_with_a_key_and_listing_topics() {
 
     mem_ok(d.path(), &["save", "La base es MySQL", "--project", "p", "--topic", "base"]);
     let out = mem_ok(d.path(), &["save", "La base es Oracle", "--project", "p", "--topic", "base"]);
-    assert!(out.contains("reemplaza a la memoria 2"), "{out}");
+    assert!(out.contains("replaces memory 2"), "{out}");
     assert_eq!(status_(d.path(), 1), "active", "la anterior sin clave no se toca");
     assert_eq!(status_(d.path(), 2), "superseded");
     assert!(mem_ok(d.path(), &["topics"]).contains("base"));

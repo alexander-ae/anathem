@@ -16,7 +16,7 @@ pub fn forget(conn: &Connection, id: i64) -> Result<()> {
     let n = conn.execute("update memories set status='forgotten', updated=?2 where id=?1",
         params![id, chrono::Local::now().format("%Y-%m-%d").to_string()])?;
     if n == 0 {
-        anyhow::bail!("no existe la memoria id:{id}");
+        anyhow::bail!("there is no memory with id:{id}");
     }
     Ok(())
 }
@@ -28,7 +28,7 @@ pub fn pin(conn: &Connection, id: i64, on: bool) -> Result<()> {
     let n = conn.execute("update memories set pinned=?2 where id=?1",
         params![id, if on { 1 } else { 0 }])?;
     if n == 0 {
-        anyhow::bail!("no existe la memoria id:{id}");
+        anyhow::bail!("there is no memory with id:{id}");
     }
     Ok(())
 }

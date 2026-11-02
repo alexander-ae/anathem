@@ -23,7 +23,7 @@ create table if not exists memories (
   access_count  integer not null default 0,
   supersedes_id integer references memories(id),
   ext_id        text unique,
-  topic         text   -- clave de topic_label; ver `ingest::save_with_topic`
+  topic         text   -- topic key; see `ingest::save_with_topic`
 );
 
 create table if not exists memory_tags (

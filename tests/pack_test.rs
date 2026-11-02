@@ -78,7 +78,7 @@ fn it_rejects_a_version_it_does_not_understand() {
     support::write_pack_mini(&r, "mini-es");
     support::corrupt_byte(&r, 4, 99); // el primer byte de la versión
     let e = Pack::open_pack(&r).unwrap_err().to_string();
-    assert!(e.contains("versión"), "el error debe nombrar la versión: {e}");
+    assert!(e.contains("version"), "el error debe nombrar la versión: {e}");
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn it_rejects_a_truncated_file() {
     let b = std::fs::read(&r).unwrap();
     std::fs::write(&r, &b[..b.len() - 5]).unwrap();
     let e = Pack::open_pack(&r).unwrap_err().to_string();
-    assert!(e.contains("truncad"), "el error debe nombrar la causa: {e}");
+    assert!(e.contains("truncated"), "el error debe nombrar la causa: {e}");
     assert!(e.contains("mini.anathem-pack"), "el error debe nombrar el archivo: {e}");
 }
 
@@ -109,7 +109,7 @@ fn it_rejects_a_corrupt_tokenizer_length_without_panicking() {
         support::corrupt_byte(&r, base + i, 0xFF);
     }
     let e = Pack::open_pack(&r).unwrap_err().to_string();
-    assert!(e.contains("tokenizador"), "el error debe nombrar la causa: {e}");
+    assert!(e.contains("tokenizer"), "el error debe nombrar la causa: {e}");
     assert!(e.contains("mini.anathem-pack"), "el error debe nombrar el archivo: {e}");
 }
 
@@ -137,7 +137,7 @@ fn it_rejects_a_table_smaller_than_the_vocabulary() {
     let r = d.path().join("corto.anathem-pack");
     support::write_pack_rows(&r, "corto-es", 4, &[vec![0, 0, 0, 0], vec![10, 0, 0, 0]]);
     let e = Pack::open_pack(&r).unwrap_err().to_string();
-    assert!(e.contains("tokenizador"), "el error debe explicar la incoherencia: {e}");
+    assert!(e.contains("tokenizer"), "el error debe explicar la incoherencia: {e}");
     assert!(e.contains("corto.anathem-pack"), "el error debe nombrar el archivo: {e}");
 }
 
@@ -203,7 +203,7 @@ fn it_rejects_a_name_that_would_not_be_a_plain_file_name() {
             .expect_err(&format!("tendría que rechazar {name:?}: {por_que}"))
             .to_string();
         assert!(
-            e.contains("nombre"),
+            e.contains("name"),
             "el error debe decir que el problema es el nombre ({por_que}): {e}"
         );
         assert!(
