@@ -60,16 +60,60 @@ const ALLOWED: &[(&str, &str)] = &[
     // Renombrarlo dejaría a toda instalación existente sin encontrar su
     // paquete, así que es una migración de archivos y no una traducción. El
     // fallback de `replace_file` lo acompaña por la misma razón.
-    ("\"paquetes\"", "directorio en disco de las instalaciones existentes"),
-    ("unwrap_or(\"paquete\")", "fallback del nombre de archivo lateral"),
-    ("\"paquete\"", "fallback del nombre de archivo lateral"),
+    ("paquetes", "directorio en disco de las instalaciones existentes"),
+    ("paquete", "fallback del nombre de archivo lateral"),
 ];
 
-/// Devuelve la parte de la línea que está dentro de comillas dobles, o nada.
-fn quoted(line: &str) -> Option<&str> {
-    let a = line.find('"')?;
-    let b = line.rfind('"')?;
-    if b > a { Some(&line[a..=b]) } else { None }
+/// Las partes de `text` que están dentro de una cadena, con su número de
+/// línea.
+///
+/// Recorre el archivo entero llevando cuenta de si está adentro de una
+/// cadena, en vez de mirar cada línea por su cuenta. La primera versión de
+/// esto hacía `find('"')` y `rfind('"')` sobre cada línea y devolvía nada
+/// cuando no había dos: o sea que saltaba TODAS las líneas de una cadena
+/// multilínea, que es justo donde vivía el español que quedaba. El guardia
+/// pasaba en verde con cinco mensajes enteros sin traducir.
+///
+/// `'"'` se neutraliza antes de recorrer: es un literal de carácter y no
+/// abre nada, pero el recorrido lo contaría como si abriera.
+fn strings_in(text: &str) -> Vec<(usize, String)> {
+    let mut out = Vec::new();
+    let mut inside = false;
+    let mut part = String::new();
+    let mut start = 0usize;
+    for (n, raw) in text.lines().enumerate() {
+        let line = raw.replace("'\"'", "'Q'");
+        if !inside && line.trim_start().starts_with("//") {
+            continue;
+        }
+        let mut esc = false;
+        for c in line.chars() {
+            if esc {
+                esc = false;
+                if inside { part.push(c); }
+            } else if c == '\\' {
+                esc = true;
+            } else if c == '"' {
+                if inside && !part.trim().is_empty() {
+                    // Cierra: se emite este literal y no se mezcla con el
+                    // siguiente de la misma línea.
+                    out.push((start, std::mem::take(&mut part)));
+                } else {
+                    part.clear();
+                    start = n + 1;
+                }
+                inside = !inside;
+            } else if inside {
+                part.push(c);
+            }
+        }
+        // Una cadena multilínea sigue abierta: se guarda lo de esta línea
+        // para que el mensaje señale dónde está, y se sigue acumulando.
+        if inside && !part.trim().is_empty() {
+            out.push((n + 1, std::mem::take(&mut part)));
+        }
+    }
+    out
 }
 
 #[test]
@@ -84,19 +128,26 @@ fn no_spanish_left_in_any_user_facing_string() {
         if EXEMPT.iter().any(|e| as_str.ends_with(e)) {
             continue;
         }
-        for (n, line) in std::fs::read_to_string(&p).unwrap().lines().enumerate() {
-            let trimmed = line.trim_start();
-            if trimmed.starts_with("//") {
+        for (n, s) in strings_in(&std::fs::read_to_string(&p).unwrap()) {
+            // Coincidencia exacta y no `contains`: una entrada como «clave»
+            // comparada con `contains` eximiría cualquier cadena futura que
+            // tuviera esa palabra, y con ella las dieciocho delatoras. Las
+            // tres que sí son fragmentos van aparte y dicen por qué.
+            const FRAGMENTS: &[&str] = &[
+                // Aparece embebido en el nombre del archivo lateral.
+                ".reemplazando-",
+                // Los delimitadores viajan dentro del texto de traspaso.
+                "<<<memorias-anathem>>>",
+                "<<<fin-memorias-anathem>>>",
+            ];
+            let t = s.trim();
+            if ALLOWED.iter().any(|(a, _)| t == *a) || FRAGMENTS.iter().any(|f| s.contains(f)) {
                 continue;
             }
-            let Some(s) = quoted(line) else { continue };
             let lower = s.to_lowercase();
-            if ALLOWED.iter().any(|(a, _)| s.contains(a)) {
-                continue;
-            }
             for t in TELLTALE {
                 if lower.contains(t) {
-                    offenders.push(format!("{}:{} «{t}» en {}", as_str, n + 1, s.trim()));
+                    offenders.push(format!("{}:{} «{t}» en {}", as_str, n, s.trim()));
                 }
             }
         }

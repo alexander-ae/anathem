@@ -1,6 +1,6 @@
 {
   "name": "anathem",
-  "description": "Memoria local para agentes de código: un binario, un archivo SQLite, sin daemon. Requiere el ejecutable `mem` en el PATH — ver la guía de instalación del repositorio.",
+  "description": "Local memory for coding agents: one binary, one SQLite file, no daemon. Needs the `mem` executable on the PATH — see the repository's installation guide.",
   "version": "0.1.0",
   "author": {
     "name": "alexander-ae"
@@ -9,11 +9,10 @@
   "repository": "https://gitlab.com/__alexander__/anathem",
   "license": "MIT",
   "keywords": [
-    "memoria",
     "memory",
     "mcp",
     "sqlite",
     "local",
-    "multiidioma"
+    "multilingual"
   ]
 }

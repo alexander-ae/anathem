@@ -2,13 +2,13 @@
   "name": "anathem",
   "owner": { "name": "alexander-ae" },
   "metadata": {
-    "description": "El repositorio de anathem es a la vez su propio marketplace."
+    "description": "The anathem repository is its own marketplace."
   },
   "plugins": [
     {
       "name": "anathem",
       "source": "./plugin",
-      "description": "Memoria local para agentes de código, sobre SQLite y sin daemon."
+      "description": "Local memory for coding agents, on SQLite and without a daemon."
     }
   ]
 }

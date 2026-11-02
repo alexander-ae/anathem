@@ -96,9 +96,9 @@ pub fn link(conn: &Connection, newer: i64, older: i64) -> Result<()> {
     match status_of_newer.as_deref() {
         None => anyhow::bail!("the new memory id:{newer} does not exist"),
         Some("active") => {}
-        Some(otro) => anyhow::bail!(
-            "la memoria nueva id:{newer} no está activa (status={otro}); no puede replace_file \
-             a otra memoria -- si ya fue superseded, esto formaría un ciclo"
+        Some(other) => anyhow::bail!(
+            "the new memory id:{newer} is not active (status={other}); it cannot supersede \
+             another memory -- if it was already superseded, this would form a cycle"
         ),
     }
     // If the caller already opened a transaction (saving with a topic key

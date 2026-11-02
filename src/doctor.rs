@@ -459,7 +459,7 @@ fn orphans(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
 fn supersession(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
     let broken = texts(
         conn,
-        "select 'memoria ' || m.id || ' reemplaza a la ' || m.supersedes_id
+        "select 'memory ' || m.id || ' replaces ' || m.supersedes_id
            from memories m
           where m.supersedes_id is not null
             and not exists (select 1 from memories p where p.id = m.supersedes_id)
@@ -495,7 +495,7 @@ fn topic_keys(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
     }
     let duplicated = texts(
         conn,
-        "select '(' || project || ', ' || topic || '): memorias ' || group_concat(id, ', ')
+        "select '(' || project || ', ' || topic || '): memories ' || group_concat(id, ', ')
            from memories
           where status = 'active' and topic is not null
           group by project, topic
@@ -643,8 +643,8 @@ fn config_section(dir: &Path) -> Section {
             }
         }
         Err(e) => s.mal(format!(
-            "config.json inválido: {e:#}. `mem search`, `mem eval` y `mem serve` no \
-             arrancan mientras tanto; corregilo o borralo"
+            "invalid config.json: {e:#}. `mem search`, `mem eval` and `mem serve` do not \
+             start meanwhile; fix it or delete it"
         )),
     }
 

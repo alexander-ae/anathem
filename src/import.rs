@@ -141,8 +141,8 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
     let had: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0))?;
     if had > 0 && !merge {
         bail!(
-            "la base ya tiene {had} memorias. Importar encima duplicaría lo que ya está.\n   \
-             Usá --merge para agregar solo lo que falte, o apuntá --db a una base nueva."
+            "the database already has {had} memories. Importing on top would duplicate what \n   \
+             is there. Use --merge to add only what is missing, or point --db at a new one."
         );
     }
 

@@ -79,8 +79,8 @@ pub fn solo_lectura(path: &Path) -> Result<()> {
     }
     if let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o400)) {
         eprintln!(
-            "aviso: no se pudo dejar {} de solo lectura ({e}); \
-             escribir encima de un paquete abierto puede tumbar el servidor",
+            "warning: could not make {} read-only ({e}); writing over an open pack \
+             can bring the server down",
             path.display()
         );
     }

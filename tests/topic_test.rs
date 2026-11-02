@@ -224,7 +224,7 @@ fn on_superseding_no_other_keys_are_listed() {
     mem_ok(d.path(), &["save", "Dos", "--project", "p", "--topic", "b"]);
     let out = mem_ok(d.path(), &["save", "Dos bis", "--project", "p", "--topic", "b"]);
     assert!(out.contains("replaces memory 2"), "{out}");
-    assert!(!out.contains("Claves que ya existen"), "{out}");
+    assert!(!out.contains("Keys that already exist"), "{out}");
 }
 
 // -- the vector layer -------------------------------------------------------
