@@ -57,7 +57,7 @@ fn status_with_no_pack_says_so_and_does_not_fail() {
     let o = mem(d.path(), &["model", "status"]);
     assert!(o.status.success());
     let txt = String::from_utf8_lossy(&o.stdout).to_string();
-    assert!(txt.contains("sin paquete"), "salió: {txt}");
+    assert!(txt.contains("no pack"), "salió: {txt}");
 }
 
 #[test]
@@ -72,7 +72,7 @@ fn removing_the_pack_falls_back_to_bm25_without_breaking_search() {
     assert!(o.status.success());
 
     let s = mem(d.path(), &["model", "status"]);
-    assert!(String::from_utf8_lossy(&s.stdout).contains("sin paquete"));
+    assert!(String::from_utf8_lossy(&s.stdout).contains("no pack"));
 
     let b = mem(d.path(), &["search", "hola"]);
     assert!(b.status.success(), "la búsqueda tiene que seguir andando");

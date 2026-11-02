@@ -94,7 +94,7 @@ fn without_a_topic_key_saving_twice_leaves_both_active() {
     assert_eq!(status_(d.path(), 1), "active");
     assert_eq!(status_(d.path(), 2), "active");
     // and with no key there is nothing left to list
-    assert!(mem_ok(d.path(), &["topics"]).contains("Sin claves de tema"));
+    assert!(mem_ok(d.path(), &["topics"]).contains("No topic keys"));
 }
 
 #[test]
@@ -105,7 +105,7 @@ fn saving_under_a_new_key_simply_saves() {
 
     assert_eq!(status_(d.path(), 1), "active", "una clave distinta no toca a las demás");
     assert_eq!(status_(d.path(), 2), "active");
-    assert!(out.contains("guardada memoria 2"), "{out}");
+    assert!(out.contains("saved memory 2"), "{out}");
     assert!(out.contains("pagos") && out.contains("new one"), "tiene que decir que la clave era nueva: {out}");
 }
 
@@ -115,7 +115,7 @@ fn on_replacing_the_output_names_the_superseded_memory_by_id() {
     mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
     let out = mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
 
-    assert!(out.contains("guardada memoria 2"), "{out}");
+    assert!(out.contains("saved memory 2"), "{out}");
     assert!(out.contains("replaces memory 1"), "tiene que nombrar el id reemplazado: {out}");
     assert!(out.contains("Stripe"), "tiene que mostrar el título reemplazado: {out}");
 }
@@ -149,7 +149,7 @@ fn topics_says_there_is_no_current_one_when_the_only_one_was_forgotten() {
     mem_ok(d.path(), &["forget", "1"]);
 
     let out = mem_ok(d.path(), &["topics"]);
-    assert!(out.contains("pagos") && out.contains("ninguna"), "{out}");
+    assert!(out.contains("pagos") && out.contains("none"), "{out}");
 }
 
 #[test]

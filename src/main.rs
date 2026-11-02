@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 #[derive(Parser)]
 #[command(
     name = "mem",
-    about = "anathem — memoria local para agentes",
+    about = "anathem — local memory for agents",
     version = anathem::doctor::FULL_VERSION
 )]
 struct Cli {
-    /// Ruta de la base de datos
+    /// Path to the database
     #[arg(long, global = true, default_value = "~/.anathem/mem.db")]
     db: String,
     #[command(subcommand)]
@@ -19,17 +19,17 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Crea la base de datos si no existe y muestra su ruta
+    /// Creates the database if it does not exist and prints its path
     Init,
-    /// Importa el export congelado de supermemory
+    /// Imports the frozen supermemory export
     Migrate {
-        /// Ruta del JSONL exportado
+        /// Path to the exported JSONL
         #[arg(long, default_value = "data/supermemory-export.jsonl")]
         from: PathBuf,
     },
-    /// Busca en la memoria
+    /// Searches the memory
     Search {
-        /// Texto de la consulta
+        /// The query text
         query: String,
         #[arg(long)]
         project: Option<String>,
@@ -37,125 +37,129 @@ enum Cmd {
         tag: Vec<String>,
         #[arg(long, default_value_t = 10)]
         limit: usize,
-        /// Muestra el score bm25 crudo junto a cada resultado
+        /// Shows the raw bm25 score next to each result
         #[arg(long)]
         explain: bool,
-        /// Tope de tokens que puede ocupar la respuesta. Por defecto 1200,
-        /// que es lo que se inyecta en el contexto de un agente. Subirlo
-        /// sirve para inspeccionar más candidatos de los que entrarían.
+        /// Token ceiling for the answer. 1200 by default, which is what
+        /// gets injected into an agent's context. Raising it is useful to
+        /// inspect more candidates than would otherwise fit.
         #[arg(long)]
         budget: Option<usize>,
     },
-    /// Guarda una memoria nueva
+    /// Saves a new memory
     Save {
-        /// Cuerpo de la memoria
+        /// The memory's body
         text: String,
-        /// Proyecto al que pertenece. Sin esto se deriva del repositorio
-        /// donde estés parado: el nombre del remoto `origin`, o el de la
-        /// carpeta del repo si no hay remoto.
+        /// Which project it belongs to. Without this it is derived from
+        /// the repository you are standing in: the name of the `origin`
+        /// remote, or of the repo's folder if there is no remote.
         #[arg(long)]
         project: Option<String>,
         #[arg(long)]
         tag: Vec<String>,
-        /// Clave de tema. Si ya hay una memoria activa con esta clave en el
-        /// proyecto, la nueva la reemplaza (queda superseded, no se borra ni
-        /// se edita). Usala cuando lo que guardás es una versión actualizada
-        /// de algo ya guardado. Mirá las existentes con `mem topics`.
+        /// Topic key. If the project already has an active memory under
+        /// this key, the new one replaces it (left superseded, not deleted
+        /// and not edited). Use it when what you are saving is an updated
+        /// version of something already saved. See the existing ones with
+        /// `mem topics`.
         #[arg(long)]
         topic: Option<String>,
     },
-    /// Edita el cuerpo de una memoria existente en $EDITOR
+    /// Edits an existing memory's body in $EDITOR
     Edit {
-        /// id de la memoria a editar
+        /// id of the memory to edit
         id: i64,
     },
-    /// Exporta la memoria a archivos markdown con frontmatter
+    /// Exports the memory to markdown files with frontmatter
     Export {
         #[arg(long, default_value = "export")]
         out: PathBuf,
     },
-    /// Reconstruye chunks y el índice FTS5 desde memories.body
+    /// Rebuilds chunks and the FTS5 index from memories.body
     Reindex,
-    /// Corre el harness de evaluación
+    /// Runs the evaluation harness
     Eval {
-        /// Por defecto, `evalset.json` junto a la base de datos. Relativo al
-        /// directorio actual sería frágil: correr el mismo comando desde otra
-        /// carpeta cambiaría en silencio contra qué se mide.
+        /// `evalset.json` next to the database, by default. Relative to
+        /// the current directory would be fragile: running the same command
+        /// from another folder would silently change what it measures
+        /// against.
         #[arg(long)]
         evalset: Option<PathBuf>,
         #[arg(long, default_value = "anathem bm25")]
         label: String,
-        /// Escribe el JSON de resultados en este archivo
+        /// Writes the results JSON to this file
         #[arg(long)]
         out: Option<PathBuf>,
     },
-    /// Arranca el servidor MCP sobre stdio
+    /// Starts the MCP server over stdio
     Serve,
-    /// Marca una memoria como reemplazada por otra: la vieja deja de salir en búsquedas
+    /// Marks a memory as replaced by another: the old one stops showing up in searches
     Supersede {
-        /// id de la memoria nueva que reemplaza a la vieja
+        /// id of the new memory that replaces the old one
         newer: i64,
-        /// id de la memoria vieja que queda superseded
+        /// id of the old memory that is left superseded
         older: i64,
     },
-    /// Fija una memoria para que sobreviva el recorte de candidatos en la búsqueda
+    /// Pins a memory so it survives the candidate trimming in search
     Pin {
         id: i64,
     },
-    /// Quita el pin de una memoria
+    /// Removes a memory's pin
     Unpin {
         id: i64,
     },
-    /// Saca una memoria de la búsqueda sin borrarla
+    /// Takes a memory out of search without deleting it
     Forget {
         id: i64,
     },
-    /// Lista las claves de tema: proyecto, cuántas memorias tuvo cada una y cuál es la vigente
+    /// Lists the topic keys: project, how many memories each had, and which is current
     Topics,
-    /// Qué se guardó últimamente, de más nuevo a más viejo, y quién lo guardó
+    /// What was saved lately, newest first, and who saved it
     ///
-    /// La búsqueda ordena por relevancia; esto ordena por fecha. Sirve para
-    /// retomar un trabajo, o para ver qué dejó otro agente antes de seguirlo.
+    /// Search ranks by relevance; this ranks by date. Useful for picking
+    /// work back up, or for seeing what another agent left before following
+    /// on from it.
     Recent {
-        /// Proyecto; por defecto el del repositorio donde estás parado
+        /// Project; by default the one of the repository you are standing in
         #[arg(long)]
         project: Option<String>,
-        /// Todos los proyectos, no solo uno
+        /// All projects, not just one
         #[arg(long = "all", alias = "todos", conflicts_with = "project")]
         all_projects: bool,
-        /// Ventana hacia atrás: 6h, 90m, 2d. Por defecto 24h; `--since todo` no acota
+        /// How far back: 6h, 90m, 2d. 24h by default; `--since all` does not bound it
         #[arg(long = "since", alias = "desde", value_name = "SINCE", default_value = "24h")]
         since: String,
-        /// Cuántas memorias como máximo
+        /// At most this many memories
         #[arg(long = "limit", alias = "limite", value_name = "LIMIT", default_value_t = 15)]
         limit: usize,
     },
-    /// Muestra la cadena de supersession de una memoria, de la más nueva a la más vieja
+    /// Shows a memory's supersession chain, newest to oldest
     History {
         id: i64,
     },
-    /// Importa lo que escribió `mem export`: restaurar, mudar de máquina o
-    /// sincronizar dos computadoras a mano
+    /// Imports what `mem export` wrote: restoring a backup, moving to
+    /// another machine, or syncing two computers by hand
     Import {
-        /// Carpeta que escribió `mem export --out`
+        /// The folder `mem export --out` wrote
         #[arg(long = "from", alias = "desde", value_name = "FROM")]
         from: PathBuf,
-        /// Importar sobre una base que ya tiene memorias, agregando solo lo
-        /// que falte
+        /// Import onto a database that already has memories, adding only
+        /// what is missing
         #[arg(long = "merge", alias = "fusionar")]
         merge: bool,
     },
-    /// Comprueba si hay una versión más nueva publicada
+    /// Checks whether a newer version has been published
     ///
-    /// Consulta la red solo cuando lo pedís: anathem no habla con ningún
-    /// servidor por su cuenta. No baja ni reemplaza nada; te dice qué correr.
+    /// It touches the network only when you ask: anathem talks to no
+    /// server on its own. It neither downloads nor replaces anything; it
+    /// tells you what to run.
     Update,
-    /// Diagnostica la instalación sin modificar nada
+    /// Diagnoses the installation without changing anything
     ///
-    /// Sale con 0 si no hay problemas (los avisos y la información no
-    /// cuentan), con 1 si los hay y con 2 si no pudo correr.
+    /// Exits with 0 if there are no problems (warnings and information do
+    /// not count), with 1 if there are, and with 2 if it could not run.
     Doctor,
-    /// Administra el paquete de vocabulario de la capa vectorial
+    /// Manages the vector layer's vocabulary pack
     Model {
         #[command(subcommand)]
         action: ModelCmd,
@@ -164,15 +168,15 @@ enum Cmd {
 
 #[derive(Subcommand)]
 enum ModelCmd {
-    /// Instala un paquete desde un archivo local y reindexa
+    /// Installs a pack from a local file and reindexes
     Install {
-        /// Ruta del archivo .anathem-pack
+        /// Path to the .anathem-pack file
         #[arg(value_name = "ARCHIVO")]
         file: PathBuf,
     },
-    /// Muestra el paquete activo y la cobertura de vectores
+    /// Shows the active pack and the vector coverage
     Status,
-    /// Quita el paquete y sus vectores; la búsqueda vuelve a ser solo bm25
+    /// Removes the pack and its vectors; search goes back to bm25 only
     Remove,
 }
 
@@ -182,7 +186,7 @@ fn resolve(p: &str, home: Option<&Path>) -> Result<PathBuf> {
     match p.strip_prefix("~/") {
         Some(rest) => {
             let home = home
-                .ok_or_else(|| anyhow::anyhow!("no está definida ni HOME ni USERPROFILE"))?;
+                .ok_or_else(|| anyhow::anyhow!("neither HOME nor USERPROFILE is defined"))?;
             Ok(home.join(rest))
         }
         None => Ok(PathBuf::from(p)),
@@ -262,7 +266,7 @@ fn sync_after_write(conn: &rusqlite::Connection, dir: &Path) {
     };
     match anathem::vecstore::sync(conn, p, identity) {
         Ok(SyncOutcome::Complete(0)) => {}
-        Ok(SyncOutcome::Complete(n)) => println!("vectores nuevos: {n}"),
+        Ok(SyncOutcome::Complete(n)) => println!("new vectors: {n}"),
         // Another process installed or removed the pack while this one was
         // embedding. What was written before the change its `adopt_pack`
         // already deleted, and what was left was never written: some chunks
@@ -270,13 +274,13 @@ fn sync_after_write(conn: &rusqlite::Connection, dir: &Path) {
         // Mixing them would not be. The command still exits 0: the memory
         // is saved.
         Ok(SyncOutcome::Abandoned(_)) => eprintln!(
-            "aviso: la memoria se guardó, pero otro proceso cambió el paquete de \
-             vocabulario mientras se calculaban los vectores; se abandonó el lote para \
-             no mezclar dos paquetes. Corré `mem reindex` cuando puedas."
+            "warning: the memory was saved, but another process changed the vocabulary \
+             pack while the vectors were being computed; the batch was abandoned so two \
+             packs are not mixed. Run `mem reindex` when you can."
         ),
         Err(e) => eprintln!(
-            "aviso: la memoria se guardó pero no se pudieron actualizar los vectores ({e}); \
-             corré `mem reindex` cuando puedas."
+            "warning: the memory was saved but the vectors could not be updated ({e}); \
+             run `mem reindex` when you can."
         ),
     }
 }
@@ -303,19 +307,19 @@ fn run(cli: Cli) -> Result<()> {
     match cli.cmd {
         Cmd::Init => {
             anathem::db::open(&path)?;
-            println!("base lista en {}", path.display());
+            println!("database ready at {}", path.display());
         }
         Cmd::Migrate { from } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
             let rep = anathem::migrate::run(&conn, &from)?;
             println!(
-                "migradas={} archivadas={} fallidas={}",
+                "migrated={} archived={} failed={}",
                 rep.migrated, rep.archived, rep.failed
             );
             if !rep.curated_failed.is_empty() {
                 println!(
-                    "curadas en status failed (no migradas, reimportar a mano):"
+                    "curated ones with status failed (not migrated, reimport by hand):"
                 );
                 for (ext_id, title) in &rep.curated_failed {
                     println!("  {ext_id}  {title}");
@@ -343,18 +347,18 @@ fn run(cli: Cli) -> Result<()> {
                 let total: i64 = conn.query_row(
                     "select count(*) from memories where status = 'active'", [], |r| r.get(0))?;
                 if total == 0 {
-                    println!("Sin resultados: la memoria está vacía. Guardá algo con `mem save \"...\"`.");
+                    println!("No results: the memory is empty. Save something with `mem save \"...\"`.");
                 } else {
-                    let plural = if total == 1 { "memoria activa" } else { "memorias activas" };
-                    println!("Sin resultados entre {total} {plural}.");
+                    let plural = if total == 1 { "active memory" } else { "active memories" };
+                    println!("No results among {total} {plural}.");
                     if p.is_some() {
                         // With the vector layer active, search is no longer
                         // purely lexical: the old advice ("use the exact
                         // nouns") would stop being true and would confuse
                         // more than it helps.
-                        println!("La búsqueda combina bm25 con similitud vectorial. Probá con otros términos o revisá `mem model status` si esperabas más cobertura.");
+                        println!("Search fuses bm25 with vector similarity. Try other terms, or check `mem model status` if you expected more coverage.");
                     } else {
-                        println!("La búsqueda es léxica: probá con sustantivos que estén escritos en la memoria, no con la forma en que lo preguntarías en voz alta.");
+                        println!("Search is lexical: try nouns that are likely written in the memory, not the way you would ask it out loud.");
                     }
                 }
                 return Ok(());
@@ -365,13 +369,13 @@ fn run(cli: Cli) -> Result<()> {
                     // vector, or through both: we show every signal there is,
                     // so it is clear which retriever brought it in, not only
                     // the one that won.
-                    let señales = match (e.bm25, e.cosine) {
-                        (Some(b), Some(c)) => format!("bm25={b:.3} coseno={c:.3}"),
+                    let signals = match (e.bm25, e.cosine) {
+                        (Some(b), Some(c)) => format!("bm25={b:.3} cosine={c:.3}"),
                         (Some(b), None) => format!("bm25={b:.3}"),
-                        (None, Some(c)) => format!("coseno={c:.3}, solo vectorial"),
-                        (None, None) => "sin señal".to_string(),
+                        (None, Some(c)) => format!("cosine={c:.3}, vector only"),
+                        (None, None) => "no signal".to_string(),
                     };
-                    println!("{:2}. [{}] {}  ({señales})", i + 1, e.hit.project, e.hit.title);
+                    println!("{:2}. [{}] {}  ({signals})", i + 1, e.hit.project, e.hit.title);
                 } else {
                     println!("{:2}. [{}] {}", i + 1, e.hit.project, e.hit.title);
                 }
@@ -384,13 +388,13 @@ fn run(cli: Cli) -> Result<()> {
             // When the project is derived instead of given, say so: an
             // implicit value nobody sees is the one nobody can later explain
             // the wrongness of.
-            let explicito = project.is_some();
+            let explicit = project.is_some();
             let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
             let project = anathem::project::resolve(project, &cwd);
             let g = anathem::ingest::save_with_topic(&conn, &text, &project, tag, topic.as_deref(), None)?;
             let labels = if g.tags.is_empty() { String::new() } else { format!(" [{}]", g.tags.join(", ")) };
-            let como = if explicito { "" } else { " (detectado)" };
-            println!("guardada memoria {} en {project}{como}{labels}", g.id);
+            let how = if explicit { "" } else { " (detected)" };
+            println!("saved memory {} in {project}{how}{labels}", g.id);
             if let Some(msg) = g.describe() {
                 println!("{msg}");
             }
@@ -427,7 +431,7 @@ fn run(cli: Cli) -> Result<()> {
                 .unwrap_or_else(|_| default_editor(cfg!(windows)).to_string());
             let status = std::process::Command::new(&editor).arg(&tmp).status()?;
             if !status.success() {
-                anyhow::bail!("{editor} salió con error, no se guardó nada");
+                anyhow::bail!("{editor} exited with an error, nothing was saved");
             }
             let new_id = std::fs::read_to_string(&tmp)?;
             if new_id != body {
@@ -436,22 +440,22 @@ fn run(cli: Cli) -> Result<()> {
                 // new ones: the edited memory stayed invisible to vector
                 // search until the next `mem reindex`.
                 anathem::edit::replace_body(&conn, id, &new_id)?;
-                println!("memoria {id} actualizada");
+                println!("memory {id} updated");
                 sync_after_write(&conn, &dir);
             } else {
-                println!("sin cambios");
+                println!("no changes");
             }
         }
         Cmd::Export { out } => {
             let conn = anathem::db::open(&path)?;
             let n = anathem::export::to_markdown(&conn, &out)?;
-            println!("exportadas {n} memorias a {}", out.display());
+            println!("exported {n} memories to {}", out.display());
         }
         Cmd::Reindex => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
             let n = anathem::edit::reindex(&conn)?;
-            println!("reindexadas {n} memorias");
+            println!("reindexed {n} memories");
             sync_after_write(&conn, &dir);
         }
         Cmd::Eval { evalset, label, out } => {
@@ -484,35 +488,35 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Supersede { newer, older } => {
             let conn = anathem::db::open(&path)?;
             anathem::supersede::link(&conn, newer, older)?;
-            println!("memoria {older} marcada como superseded por {newer}");
+            println!("memory {older} marked as superseded by {newer}");
         }
         Cmd::Pin { id } => {
             let conn = anathem::db::open(&path)?;
             anathem::maint::pin(&conn, id, true)?;
-            println!("memoria {id} fijada (pinned)");
+            println!("memory {id} pinned");
         }
         Cmd::Unpin { id } => {
             let conn = anathem::db::open(&path)?;
             anathem::maint::pin(&conn, id, false)?;
-            println!("memoria {id} ya no está fijada");
+            println!("memory {id} is no longer pinned");
         }
         Cmd::Forget { id } => {
             let conn = anathem::db::open(&path)?;
             anathem::maint::forget(&conn, id)?;
-            println!("memoria {id} olvidada (sigue en la base, fuera de la búsqueda)");
+            println!("memory {id} forgotten (still in the database, out of search)");
         }
         Cmd::Topics => {
             let conn = anathem::db::open(&path)?;
             let topics = anathem::maint::topics(&conn)?;
             if topics.is_empty() {
-                println!("Sin claves de tema. Se crean guardando con `mem save \"...\" --topic <clave>`.");
+                println!("No topic keys. They are created by saving with `mem save \"...\" --topic <key>`.");
             } else {
-                let ancho_p = topics.iter().map(|t| t.project.chars().count()).max().unwrap_or(0).max("proyecto".len());
-                let ancho_t = topics.iter().map(|t| t.topic.chars().count()).max().unwrap_or(0).max("tema".len());
-                println!("{:<ancho_p$}  {:<ancho_t$}  {:>8}  vigente", "proyecto", "tema", "memorias");
+                let width_p = topics.iter().map(|t| t.project.chars().count()).max().unwrap_or(0).max("project".len());
+                let width_t = topics.iter().map(|t| t.topic.chars().count()).max().unwrap_or(0).max("topic".len());
+                println!("{:<width_p$}  {:<width_t$}  {:>8}  current", "project", "topic", "memories");
                 for t in topics {
-                    let current_one = t.current_one.map_or("ninguna".to_string(), |v| v.to_string());
-                    println!("{:<ancho_p$}  {:<ancho_t$}  {:>8}  {current_one}", t.project, t.topic, t.total);
+                    let current_one = t.current_one.map_or("none".to_string(), |v| v.to_string());
+                    println!("{:<width_p$}  {:<width_t$}  {:>8}  {current_one}", t.project, t.topic, t.total);
                 }
             }
         }
@@ -520,11 +524,11 @@ fn run(cli: Cli) -> Result<()> {
             let conn = anathem::db::open(&path)?;
             let r = anathem::import::import_dir(&conn, &from, merge)?;
             println!(
-                "importadas {} memorias, {} omitidas por estar ya, {} cadenas de supersession rearmadas",
+                "imported {} memories, {} skipped as already present, {} supersession chains rebuilt",
                 r.inserted, r.skipped, r.chains
             );
             if r.inserted > 0 {
-                println!("Si tenés paquete de vocabulario, corré `mem reindex` para los vectores.");
+                println!("If you have a vocabulary pack, run `mem reindex` for the vectors.");
             }
         }
         Cmd::Update => {
@@ -574,7 +578,7 @@ fn run(cli: Cli) -> Result<()> {
                 ModelCmd::Install { file } => {
                     let i = anathem::packstore::install(&conn, &dir, &file)?;
                     println!(
-                        "paquete {} instalado ({} dimensiones), {} fragmentos indexados",
+                        "pack {} installed ({} dimensions), {} chunks indexed",
                         i.name, i.dims, i.chunks
                     );
                     if i.displaced {
@@ -584,23 +588,24 @@ fn run(cli: Cli) -> Result<()> {
                         // only thing separating "installed and working" from
                         // "installed, and someone else is in charge".
                         eprintln!(
-                            "aviso: otro proceso cambió el paquete de vocabulario mientras se \
-                             indexaba; esta instalación quedó desplazada y el índice a medias. \
-                             Mirá `mem model status` y reinstalá el que quieras que quede."
+                            "warning: another process changed the vocabulary pack while this \
+                             one was indexing; this install was displaced and the index left \
+                             half done. Look at `mem model status` and reinstall whichever you \
+                             want to keep."
                         );
                     }
                 }
                 ModelCmd::Status => match anathem::vecstore::registered_pack(&conn)? {
-                    None => println!("sin paquete: la búsqueda usa solo bm25"),
+                    None => println!("no pack: search uses bm25 only"),
                     Some((name, sha, dims)) => {
                         let (covered, tot) = anathem::vecstore::coverage(&conn, dims)?;
                         let pack_path = anathem::packstore::pack_path(&dir, &name);
-                        println!("paquete {name} ({dims} dimensiones, sha {})", &sha[..16.min(sha.len())]);
-                        println!("cobertura: {covered}/{tot} fragmentos");
+                        println!("pack {name} ({dims} dimensions, sha {})", &sha[..16.min(sha.len())]);
+                        println!("coverage: {covered}/{tot} chunks");
                         if !pack_path.exists() {
-                            println!("FALTA el archivo {}: la búsqueda está degradada a bm25", pack_path.display());
+                            println!("the file {} is MISSING: search is degraded to bm25", pack_path.display());
                         } else if covered < tot {
-                            println!("hay {} fragmentos sin vector usable; corré `mem reindex`", tot - covered);
+                            println!("{} chunks have no usable vector; run `mem reindex`", tot - covered);
                         }
                         // `status` reads `meta` directly, without going
                         // through `resolve`, so it is the only command that
@@ -610,17 +615,17 @@ fn run(cli: Cli) -> Result<()> {
                         // interrupted install, not the file on disk.
                         if anathem::vecstore::pending_install(&conn)?.is_some() {
                             println!(
-                                "hay una instalación de {name} a medias: el archivo en disco \
-                                 puede no ser este. La próxima búsqueda reindexa."
+                                "there is a half-done install of {name}: the file on disk may \
+                                 not be this one. The next search reindexes."
                             );
                         }
                     }
                 },
                 ModelCmd::Remove => match anathem::packstore::remove_pack(&conn, &dir)? {
                     Some(name) => {
-                        println!("paquete {name} quitado; la búsqueda vuelve a ser solo bm25")
+                        println!("pack {name} removed; search goes back to bm25 only")
                     }
-                    None => println!("no había ningún paquete instalado"),
+                    None => println!("there was no pack installed"),
                 },
             }
         }
