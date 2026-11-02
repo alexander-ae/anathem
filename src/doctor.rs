@@ -38,7 +38,7 @@ use std::path::Path;
 /// The crate's version, the one in `Cargo.toml`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// The commit it was built from, or `desconocido` when there was no git
+/// The commit it was built from, or `unknown` when there was no git
 /// (see `build.rs`).
 pub const COMMIT: &str = env!("ANATHEM_COMMIT");
 
@@ -148,13 +148,13 @@ impl Informe {
         }
         let (p, a) = (self.problems(), self.warnings());
         s.push_str(&match (p, a) {
-            (0, 0) => "Todo en orden.\n".to_string(),
-            (0, a) => format!("Sin problemas ({a} {}).\n", plural(a, "aviso", "avisos")),
-            (p, 0) => format!("{p} {}.\n", plural(p, "problema", "problemas")),
+            (0, 0) => "All good.\n".to_string(),
+            (0, a) => format!("No problems ({a} {}).\n", plural(a, "warning", "warnings")),
+            (p, 0) => format!("{p} {}.\n", plural(p, "problem", "problems")),
             (p, a) => format!(
                 "{p} {} y {a} {}.\n",
-                plural(p, "problema", "problemas"),
-                plural(a, "aviso", "avisos")
+                plural(p, "problem", "problems"),
+                plural(a, "warning", "warnings")
             ),
         });
         s
@@ -188,15 +188,15 @@ pub fn diagnose(db: &Path) -> Informe {
 }
 
 fn binary_section() -> Section {
-    let mut s = Section::new("Binario");
+    let mut s = Section::new("Binary");
     s.bien(format!("mem {VERSION}"));
-    if COMMIT == "desconocido" {
+    if COMMIT == "unknown" {
         s.warning(
-            "commit desconocido: se compiló sin git a mano, así que no se puede saber \
-             si este binario está al día con el código",
+            "unknown commit: this was built without git at hand, so there is no way to \
+             tell whether this binary is up to date with the code",
         );
     } else {
-        s.bien(format!("compilado desde el commit {COMMIT}"));
+        s.bien(format!("built from commit {COMMIT}"));
     }
     s
 }
@@ -236,7 +236,7 @@ fn name_list(ids: &[String]) -> String {
     if ids.len() <= EJEMPLOS {
         ids.join(", ")
     } else {
-        format!("{} y {} más", ids[..EJEMPLOS].join(", "), ids.len() - EJEMPLOS)
+        format!("{} and {} more", ids[..EJEMPLOS].join(", "), ids.len() - EJEMPLOS)
     }
 }
 
@@ -249,7 +249,7 @@ fn texts(conn: &Connection, sql: &str) -> rusqlite::Result<Vec<String>> {
 /// says so.
 fn guard(s: &mut Section, what: &str, f: impl FnOnce(&mut Section) -> anyhow::Result<()>) {
     if let Err(e) = f(s) {
-        s.mal(format!("no se pudo comprobar {what}: {e:#}"));
+        s.mal(format!("could not check {what}: {e:#}"));
     }
 }
 
@@ -296,7 +296,7 @@ fn open_read_only(db: &Path) -> rusqlite::Result<Connection> {
 }
 
 fn database_section(db: &Path) -> (Section, Option<Connection>) {
-    let mut s = Section::new("Base de datos");
+    let mut s = Section::new("Database");
     if !db.exists() {
         // A warning and not information: with a mistyped `--db`, a
         // different `$HOME` or an unmounted volume, the summary cannot claim
@@ -304,8 +304,9 @@ fn database_section(db: &Path) -> (Section, Option<Connection>) {
         // exit code stays 0 because "I have not installed anything yet" is
         // legitimate.
         s.warning(format!(
-            "{} no existe todavía: no hay base que revisar. Se crea con `mem init` o al \
-             guardar la primera memoria; si esperabas encontrarla acá, revisá `--db`",
+            "{} does not exist yet: there is no database to check. It is created by \
+             `mem init` or by saving the first memory; if you expected to find it here, \
+             check `--db`",
             db.display()
         ));
         return (s, None);
@@ -315,7 +316,7 @@ fn database_section(db: &Path) -> (Section, Option<Connection>) {
     let conn = match open_read_only(db) {
         Ok(c) => c,
         Err(e) => {
-            s.mal(format!("no se pudo abrir {}: {e}", db.display()));
+            s.mal(format!("could not open {}: {e}", db.display()));
             return (s, None);
         }
     };
@@ -325,20 +326,20 @@ fn database_section(db: &Path) -> (Section, Option<Connection>) {
     match entero(&conn, "select count(*) from sqlite_master where name = 'memories'") {
         Err(e) => {
             s.mal(format!(
-                "{} no se pudo parse como base SQLite: {e}. ¿Es el archivo correcto? \
-                 Si está corrupto, restaurá una copia.",
+                "{} could not be read as a SQLite database: {e}. Is this the right file? \
+                 If it is corrupt, restore a copy.",
                 db.display()
             ));
             return (s, None);
         }
         Ok(0) => {
             s.mal(format!(
-                "{} existe pero no tiene el esquema de anathem; corré `mem init`",
+                "{} exists but does not have anathem's schema; run `mem init`",
                 db.display()
             ));
             return (s, None);
         }
-        Ok(_) => s.bien(format!("{} abre bien", db.display())),
+        Ok(_) => s.bien(format!("{} opens fine", db.display())),
     }
     check_database(&conn, &mut s);
     (s, Some(conn))
@@ -347,18 +348,18 @@ fn database_section(db: &Path) -> (Section, Option<Connection>) {
 fn check_database(conn: &Connection, s: &mut Section) {
     match missing_vector_tables(conn) {
         Ok(v) if !v.is_empty() => s.info(format!(
-            "la base es anterior a la capa vectorial (faltan las tablas {}); se actualiza \
-             sola la próxima vez que un comando la abra para escribir",
+            "this database predates the vector layer (the tables {} are missing); it \
+             updates itself the next time a command opens it to write",
             v.join(" y ")
         )),
         Ok(_) => {}
-        Err(e) => s.mal(format!("no se pudo comprobar las tablas: {e}")),
+        Err(e) => s.mal(format!("could not check the tables: {e}")),
     }
-    guard(s, "los conteos", |s| counts(conn, s));
-    guard(s, "el índice FTS5", |s| fts_index(conn, s));
-    guard(s, "los huérfanos", |s| orphans(conn, s));
-    guard(s, "las cadenas de supersession", |s| supersession(conn, s));
-    guard(s, "las claves de tema", |s| topic_keys(conn, s));
+    guard(s, "the counts", |s| counts(conn, s));
+    guard(s, "the FTS5 index", |s| fts_index(conn, s));
+    guard(s, "the orphans", |s| orphans(conn, s));
+    guard(s, "the supersession chains", |s| supersession(conn, s));
+    guard(s, "the topic keys", |s| topic_keys(conn, s));
 }
 
 fn counts(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
@@ -375,15 +376,15 @@ fn counts(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
             // The table's check constraint prevents it; if an older
             // database carried another, it would add to no column and the
             // total would not add up with no explanation.
-            otro => s.warning(format!("{n} memorias con un estado desconocido: {otro}")),
+            other => s.warning(format!("{n} memories with an unknown status: {other}")),
         }
     }
     s.bien(format!(
-        "memorias: {} activas, {} superseded, {} draft, {} forgotten",
+        "memories: {} active, {} superseded, {} draft, {} forgotten",
         by_status[0], by_status[1], by_status[2], by_status[3]
     ));
     s.bien(format!(
-        "fragmentos: {}, tags: {}, referencias: {}",
+        "chunks: {}, tags: {}, references: {}",
         entero(conn, "select count(*) from chunks")?,
         entero(conn, "select count(*) from memory_tags")?,
         entero(conn, "select count(*) from memory_refs")?,
@@ -413,26 +414,26 @@ fn fts_index(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
           where not exists (select 1 from chunks c where c.id = d.id)",
     )?;
     if unindexed == 0 && extras == 0 {
-        s.bien(format!("índice FTS5 sincronizado ({indexed} de {chunks} fragmentos)"));
+        s.bien(format!("FTS5 index in sync ({indexed} of {chunks} chunks)"));
     } else {
         s.mal(format!(
-            "índice FTS5 desincronizado: {chunks} fragmentos y {indexed} indexados \
-             ({unindexed} sin indexar, {extras} indexados que ya no existen). \
-             Corré `mem reindex`"
+            "FTS5 index out of sync: {chunks} chunks and {indexed} indexed \
+             ({unindexed} unindexed, {extras} indexed that no longer exist). \
+             Run `mem reindex`"
         ));
     }
     Ok(())
 }
 
 fn orphans(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
-    let sin_memoria = entero(
+    let chunks_no_memory = entero(
         conn,
         "select count(*) from chunks c
           where not exists (select 1 from memories m where m.id = c.memory_id)",
     )?;
     // Without the table (a database predating the vector layer) there are
     // no vectors that could be orphaned.
-    let sin_fragmento = if has_table(conn, "chunk_vectors")? {
+    let vectors_no_chunk = if has_table(conn, "chunk_vectors")? {
         entero(
             conn,
             "select count(*) from chunk_vectors v
@@ -441,15 +442,15 @@ fn orphans(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
     } else {
         0
     };
-    if sin_memoria == 0 && sin_fragmento == 0 {
-        s.bien("sin huérfanos");
+    if chunks_no_memory == 0 && vectors_no_chunk == 0 {
+        s.bien("no orphans");
     } else {
         // The cascade prevents it, so if it happened there is a bug: worth
         // knowing.
         s.mal(format!(
-            "huérfanos (no debería haber ninguno, el cascade lo impide: hay un bug que \
-             reportar) — fragmentos sin memoria: {sin_memoria}, vectores sin fragmento: \
-             {sin_fragmento}"
+            "orphans (there should be none, the cascade prevents it: this is a bug worth \
+             reporting) — chunks with no memory: {chunks_no_memory}, vectors with no chunk: \
+             {vectors_no_chunk}"
         ));
     }
     Ok(())
@@ -465,11 +466,11 @@ fn supersession(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
           order by m.id",
     )?;
     if broken.is_empty() {
-        s.bien("cadenas de supersession íntegras");
+        s.bien("supersession chains intact");
     } else {
         s.mal(format!(
-            "cadena de supersession rota: {}, que no existe. No hay un comando que lo \
-             repare; `mem history <id>` muestra hasta dónde llega la cadena",
+            "broken supersession chain: {}, which does not exist. There is no command \
+             that repairs it; `mem history <id>` shows how far the chain reaches",
             name_list(&broken)
         ));
     }
@@ -487,8 +488,8 @@ fn topic_keys(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
     )? > 0;
     if !has_column {
         s.info(
-            "la base es anterior a las claves de tema; se actualiza sola la próxima vez \
-             que un comando la abra para escribir",
+            "this database predates topic keys; it updates itself the next time a \
+             command opens it to write",
         );
         return Ok(());
     }
@@ -502,11 +503,11 @@ fn topic_keys(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
           order by project, topic",
     )?;
     if duplicated.is_empty() {
-        s.bien("una sola memoria activa por (proyecto, clave de tema)");
+        s.bien("exactly one active memory per (project, topic key)");
     } else {
         s.mal(format!(
-            "más de una memoria activa para la misma clave de tema, que el índice único \
-             debería impedir: {}. Dejá una con `mem supersede <nueva> <vieja>` o \
+            "more than one active memory under the same topic key, which the unique \
+             index should prevent: {}. Leave one with `mem supersede <new> <old>` or \
              `mem forget <id>`",
             name_list(&duplicated)
         ));
@@ -515,35 +516,35 @@ fn topic_keys(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
 }
 
 fn vector_section(conn: &Connection, dir: &Path) -> Section {
-    let mut s = Section::new("Capa vectorial");
+    let mut s = Section::new("Vector layer");
     // The tables' absence was already reported in the database section;
     // here it is only a matter of not tripping over it.
     if missing_vector_tables(conn).map_or(false, |v| !v.is_empty()) {
-        s.info("sin paquete de vocabulario: la base todavía no tiene capa vectorial");
+        s.info("no vocabulary pack: this database has no vector layer yet");
         stray_files(&mut s, dir);
         return s;
     }
     match vecstore::registered_pack(conn) {
-        Err(e) => s.mal(format!("no se pudo leer el paquete registrado: {e:#}")),
+        Err(e) => s.mal(format!("could not read the registered pack: {e:#}")),
         Ok(None) => s.info(
-            "sin paquete de vocabulario: la búsqueda es léxica (bm25), que es el modo \
-             normal. Se instala uno con `mem model install <archivo>`",
+            "no vocabulary pack: search is lexical (bm25), which is the normal mode. \
+             One is installed with `mem model install <file>`",
         ),
         Ok(Some((name, _sha, dims))) => {
-            s.bien(format!("paquete {name}, {dims} dimensiones"));
+            s.bien(format!("pack {name}, {dims} dimensions"));
             pack_file_section(&mut s, dir, &name, dims);
-            guard(&mut s, "la cobertura", |s| coverage(conn, s, dims));
+            guard(&mut s, "the coverage", |s| coverage(conn, s, dims));
         }
     }
     // The half-finished install mark belongs to the database, not the file:
     // it is always checked.
     match vecstore::pending_install(conn) {
         Ok(Some(n)) => s.warning(format!(
-            "hay una instalación de {n} a medias: el archivo en disco puede no ser el que \
-             indexó la base. La próxima búsqueda reindexa sola"
+            "there is a half-done install of {n}: the file on disk may not be the one \
+             this database indexed with. The next search reindexes on its own"
         )),
         Ok(None) => {}
-        Err(e) => s.mal(format!("no se pudo leer la marca de instalación: {e:#}")),
+        Err(e) => s.mal(format!("could not read the install mark: {e:#}")),
     }
     stray_files(&mut s, dir);
     s
@@ -553,26 +554,26 @@ fn pack_file_section(s: &mut Section, dir: &Path, name: &str, dims: usize) {
     let pack_path = packstore::pack_path(dir, name);
     if !pack_path.is_file() {
         s.mal(format!(
-            "falta el archivo {}: la búsqueda está degradada a bm25. Reinstalalo con \
-             `mem model install <archivo>`",
+            "the file {} is missing: search is degraded to bm25. Reinstall it with \
+             `mem model install <file>`",
             pack_path.display()
         ));
         return;
     }
     match Pack::open_pack(&pack_path) {
         Err(e) => s.mal(format!(
-            "el archivo {} no se pudo open_pack ({e:#}): la búsqueda está degradada a bm25. \
-             Reinstalalo con `mem model install <archivo>`",
+            "the file {} could not be opened ({e:#}): search is degraded to bm25. \
+             Reinstall it with `mem model install <file>`",
             pack_path.display()
         )),
         Ok(p) if p.name() != name || p.dims() != dims => s.warning(format!(
-            "el archivo {} es el paquete {} ({} dimensiones) y la base indexó con {name} \
-             ({dims} dimensiones): la próxima búsqueda reindexa",
+            "the file {} is the pack {} ({} dimensions) and this database indexed with \
+             {name} ({dims} dimensions): the next search reindexes",
             pack_path.display(),
             p.name(),
             p.dims()
         )),
-        Ok(_) => s.bien(format!("archivo presente y legible: {}", pack_path.display())),
+        Ok(_) => s.bien(format!("file present and readable: {}", pack_path.display())),
     }
 }
 
@@ -580,17 +581,17 @@ fn coverage(conn: &Connection, s: &mut Section, dims: usize) -> anyhow::Result<(
     let (covered, tot) = vecstore::coverage(conn, dims)?;
     let vectors = entero(conn, "select count(*) from chunk_vectors")? as usize;
     let unusable = vectors.saturating_sub(covered);
-    let nota = if unusable > 0 {
-        format!(" ({unusable} vectores no miden {dims} dimensiones y no se usan)")
+    let note = if unusable > 0 {
+        format!(" ({unusable} vectors are not {dims} dimensions and go unused)")
     } else {
         String::new()
     };
     if covered == tot {
-        s.bien(format!("cobertura: {covered}/{tot} fragmentos con vector usable{nota}"));
+        s.bien(format!("coverage: {covered}/{tot} chunks with a usable vector{note}"));
     } else {
         s.mal(format!(
-            "coverage: {covered}/{tot} fragmentos con vector usable; faltan {}{nota}. \
-             Corré `mem reindex`",
+            "coverage: {covered}/{tot} chunks with a usable vector; {} are missing{note}. \
+             Run `mem reindex`",
             tot - covered
         ));
     }
@@ -602,8 +603,8 @@ fn coverage(conn: &Connection, s: &mut Section, dims: usize) -> anyhow::Result<(
 /// (`*.reemplazando-*`) and `packstore::install`'s temporary
 /// (`.instalando-*`).
 fn stray_files(s: &mut Section, dir: &Path) {
-    let carpeta = packstore::packs_dir(dir);
-    let Ok(entries) = std::fs::read_dir(&carpeta) else {
+    let folder = packstore::packs_dir(dir);
+    let Ok(entries) = std::fs::read_dir(&folder) else {
         return;
     };
     let mut extras: Vec<String> = entries
@@ -613,19 +614,19 @@ fn stray_files(s: &mut Section, dir: &Path) {
         .collect();
     extras.sort();
     if extras.is_empty() {
-        s.bien("sin archivos laterales sobrantes en el directorio de paquetes");
+        s.bien("no leftover sibling files in the packs directory");
     } else {
         s.warning(format!(
-            "archivos laterales sobrantes en {}: {}. Son restos de una instalación \
-             interrumpida; si no hay ninguna en curso, se pueden borrar",
-            carpeta.display(),
+            "leftover sibling files in {}: {}. They are remains of an interrupted \
+             install; if none is running, they can be deleted",
+            folder.display(),
             name_list(&extras)
         ));
     }
 }
 
 fn config_section(dir: &Path) -> Section {
-    let mut s = Section::new("Configuración");
+    let mut s = Section::new("Configuration");
 
     let pack_path = dir.join("config.json");
     // `cargar` fails on an invalid file: here it is caught and reported.
@@ -636,9 +637,9 @@ fn config_section(dir: &Path) -> Section {
                 c.bm25_weight, c.candidates, c.excerpt
             );
             if pack_path.exists() {
-                s.bien(format!("{} válido: {values}", pack_path.display()));
+                s.bien(format!("{} valid: {values}", pack_path.display()));
             } else {
-                s.bien(format!("sin config.json: valores por defecto ({values})"));
+                s.bien(format!("no config.json: defaults ({values})"));
             }
         }
         Err(e) => s.mal(format!(
@@ -651,15 +652,15 @@ fn config_section(dir: &Path) -> Section {
     match tags::load_rules(Some(dir)) {
         Ok(rules) => {
             if pack_path.exists() {
-                s.bien(format!("{} válido: {} reglas", pack_path.display(), rules.len()));
+                s.bien(format!("{} valid: {} rules", pack_path.display(), rules.len()));
             } else {
                 s.bien(format!(
-                    "sin tags.json: taxonomía por defecto ({} reglas)",
+                    "no tags.json: default taxonomy ({} rules)",
                     rules.len()
                 ));
             }
         }
-        Err(e) => s.mal(format!("tags.json inválido: {e}. Corregilo o borralo")),
+        Err(e) => s.mal(format!("invalid tags.json: {e}. Fix it or delete it")),
     }
     s
 }

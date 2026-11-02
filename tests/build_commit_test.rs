@@ -60,7 +60,7 @@ fn the_binary_commit_tracks_head_after_pack_refs_and_on_the_first_commit() {
     git(&pack_, &["init", "-q"]);
 
     // With no commit at all there is nothing to report, and it cannot fail.
-    assert_eq!(binary_commit(&pack_, &target), "desconocido");
+    assert_eq!(binary_commit(&pack_, &target), "unknown");
 
     // The first commit: none of the files that existed changed.
     git(&pack_, &["add", "-A"]);
