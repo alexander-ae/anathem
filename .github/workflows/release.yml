@@ -7,7 +7,7 @@
 # para repositorios públicos... y este es privado, así que corre contra la
 # cuota de minutos; una release son unos pocos minutos de macOS al mes.
 #
-# No publica nada: deja los archivos como artefactos y `scripts/publicar-mac.sh`
+# No publica nada: deja los archivos como artefactos y `scripts/publish-mac.sh`
 # los baja y los sube a la release de GitLab. Se hace así a propósito, para que
 # no haya un token de GitLab guardado del lado de GitHub.
 

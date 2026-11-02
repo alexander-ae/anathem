@@ -73,7 +73,7 @@ struct Fila {
 }
 
 /// Exports each memory to a markdown file with frontmatter. The format is
-/// documented in `docs/formato-de-export.md` and is **complete**: what comes
+/// documented in `docs/export-format.md` and is **complete**: what comes
 /// out is enough to rebuild the database in another tool without losing
 /// anything except the vectors, which are recomputed.
 ///

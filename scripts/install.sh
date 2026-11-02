@@ -24,7 +24,7 @@ ETIQUETA="latest"
 
 uso() {
   cat <<'FIN'
-Usage: scripts/instalar.sh [options]
+Usage: scripts/install.sh [options]
 
   --build               compile from source instead of downloading the binary
   --tag <vX.Y.Z>        install that release instead of the latest one

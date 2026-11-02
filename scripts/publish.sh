@@ -8,7 +8,7 @@
 #
 # It is deliberately NOT a full replacement. It builds for THIS machine only,
 # so a release made here carries one platform's binary. What is missing is
-# printed at the end, with how to add it: `scripts/publicar-mac.sh` brings the
+# printed at the end, with how to add it: `scripts/publish-mac.sh` brings the
 # macOS ones, and Windows needs a Windows machine or the pipeline.
 #
 # A release with one binary is not a broken release: the installer falls back
@@ -30,7 +30,7 @@ done
 
 if [ -z "$ETIQUETA" ] || [ "${ETIQUETA#-}" != "$ETIQUETA" ]; then
   cat >&2 <<'FIN'
-Usage: sh scripts/publicar.sh <tag> [options]     (for example v0.2.1)
+Usage: sh scripts/publish.sh <tag> [options]     (for example v0.2.1)
 
   --skip-tests   do not run the suite first (you had better have a reason)
   --no-pack      do not carry the vocabulary pack over from the previous release
@@ -129,7 +129,7 @@ paso "4. The vocabulary pack"
 # The installer downloads the pack from the SAME release as the binary, so a
 # release without it leaves every install degraded to lexical search. The pack
 # does not change between versions — it is built by
-# `tools/construir_paquete.py` and weighs 22 MB — so it is carried over from
+# `tools/build_pack.py` and weighs 22 MB — so it is carried over from
 # the previous release instead of being rebuilt.
 if [ "$SIN_PAQUETE" -eq 1 ]; then
   aviso "not carried over, by request: installs will fall back to bm25"
@@ -224,7 +224,7 @@ for p in linux-x86_64 macos-arm64 macos-x86_64; do
   FALTAN="$FALTAN $p"
 done
 aviso "this release has no binary for:$FALTAN, and none for Windows"
-echo "      macOS:   sh scripts/publicar-mac.sh $ETIQUETA"
+echo "      macOS:   sh scripts/publish-mac.sh $ETIQUETA"
 echo "      Windows: it needs a Windows machine, or the pipeline"
 echo "      On a platform with no binary the installer compiles from source,"
 echo "      which works but asks for Rust and a C compiler."
@@ -233,4 +233,4 @@ paso "Done."
 echo "  https://gitlab.com/$REPO/-/releases/$ETIQUETA"
 echo
 echo "  Check it the way someone installing it would:"
-echo "      sh scripts/instalar.sh --tag $ETIQUETA --prefix /tmp/anathem-check"
+echo "      sh scripts/install.sh --tag $ETIQUETA --prefix /tmp/anathem-check"

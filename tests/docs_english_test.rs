@@ -126,3 +126,66 @@ fn every_documented_mem_command_exists() {
     }
     assert!(offenders.is_empty(), "comandos documentados que no existen:\n{}", offenders.join("\n"));
 }
+
+/// Todo archivo del repositorio que un documento nombra existe de verdad.
+///
+/// La razón concreta: `scripts/install.sh` se llamaba `instalar.sh`, y su
+/// URL —`raw/main/scripts/instalar.sh`— es el comando de instalación que el
+/// README, `AGENTS.md` y `docs/installation.md` le dan a la gente. Como
+/// apunta a `main`, renombrar el archivo rompe esa URL en el instante del
+/// merge, sin que falle nada ni se note hasta que alguien intenta instalar.
+///
+/// Mira rutas del repositorio, no URLs completas: comprobar una URL sería
+/// pedirle red a la suite, y lo que puede romperse acá es el renombre, no
+/// GitLab.
+#[test]
+fn every_repo_path_a_doc_mentions_exists() {
+    // Rutas tipo `scripts/x.sh`, `docs/y.md`, `src/z.rs`, `tools/w.py`,
+    // estén sueltas, entre backticks o al final de una URL.
+    let re_ruta = regex_lite_paths();
+    let mut offenders = Vec::new();
+    for f in living_docs() {
+        let text = std::fs::read_to_string(&f).unwrap();
+        for (n, line) in text.lines().enumerate() {
+            for ruta in &re_ruta(line) {
+                if !Path::new(ruta).exists() {
+                    offenders.push(format!("{}:{} nombra {ruta}, que no existe", f.display(), n + 1));
+                }
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "documentos que nombran archivos inexistentes:\n{}",
+        offenders.join("\n")
+    );
+}
+
+/// Extrae rutas del repositorio de una línea, sin depender de `regex`: este
+/// test vive en la suite de integración y no vale agregar una dependencia
+/// para reconocer cuatro directorios.
+fn regex_lite_paths() -> impl Fn(&str) -> Vec<String> {
+    |line: &str| {
+        let mut out = Vec::new();
+        for dir in ["scripts/", "docs/", "src/", "tools/", "tests/"] {
+            let mut desde = 0;
+            while let Some(i) = line[desde..].find(dir) {
+                let ini = desde + i;
+                let resto = &line[ini..];
+                let fin = resto
+                    .find(|c: char| c.is_whitespace() || "`)\"',;".contains(c))
+                    .unwrap_or(resto.len());
+                let ruta = resto[..fin].trim_end_matches('.').to_string();
+                // Solo rutas con extensión: una mención a `docs/` sin
+                // archivo no nombra nada que pueda faltar.
+                if ruta.contains('.') && !ruta.ends_with('/') && !ruta.contains("historia/")
+                    && !ruta.contains("superpowers/")
+                {
+                    out.push(ruta);
+                }
+                desde = ini + fin.max(1);
+            }
+        }
+        out
+    }
+}
