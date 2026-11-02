@@ -188,8 +188,8 @@ fn call_tool(
                     // a successful save as failed.
                     eprintln!(
                         "anathem: the vocabulary pack changed while indexing; \
-                         se abandonó el lote para no mezclar dos paquetes. Quedan \
-                         fragmentos sin vector."
+                         the batch was abandoned so two packs are not mixed. Some \
+                         chunks are left without a vector."
                     );
                 }
             }

@@ -128,14 +128,14 @@ pub fn format_items(items: &[RecentItem], show_project: bool, lang: Lang) -> Str
     }
     let mut s = String::new();
     for it in items {
-        let who = it.agent.as_deref().unwrap_or("—"); // el guion no tiene idioma
+        let who = it.agent.as_deref().unwrap_or("—"); // the dash has no language
         let date = it.when.get(..16).unwrap_or(&it.when);
         s.push_str(&format!("{date}  [{who}]"));
         if show_project {
             s.push_str(&format!("  ({})", it.project));
         }
         if let Some(t) = &it.topic {
-            s.push_str(&format!("  [tema: {t}]"));
+            s.push_str(&format!("  [{}: {t}]", lang.pick("topic", "tema")));
         }
         s.push_str(&format!("\n  id:{}  {}\n", it.id, it.title));
         if !it.excerpt.is_empty() && it.excerpt != it.title {
