@@ -348,7 +348,7 @@ fn save_memory_with_a_topic_supersedes_and_says_which() {
     let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "topic": "pagos"}));
 
-    assert!(out.contains("reemplaza a la memoria 1"), "{out}");
+    assert!(out.contains("replaces memory 1"), "{out}");
     let st: String = conn.query_row("select status from memories where id = 1", [], |r| r.get(0)).unwrap();
     assert_eq!(st, "superseded");
 }
@@ -417,7 +417,7 @@ fn supersedes_corrects_a_memory_saved_without_a_key() {
     let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "supersedes": 1}));
 
-    assert!(out.contains("Reemplaza a la memoria 1"), "{out}");
+    assert!(out.contains("Replaces memory 1"), "{out}");
     assert_eq!(status(&conn, 1), "superseded");
     assert_eq!(status(&conn, 2), "active");
     let sup: i64 = conn.query_row("select supersedes_id from memories where id = 2", [], |r| r.get(0)).unwrap();
@@ -479,7 +479,7 @@ fn supersedes_and_topic_pointing_at_one_memory_supersede_it_once() {
     let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "topic": "pagos", "supersedes": 1}));
 
-    assert!(out.contains("Tema «pagos»: reemplaza a la memoria 1"), "{out}");
+    assert!(out.contains("Topic «pagos»: replaces memory 1"), "{out}");
     assert_eq!(status(&conn, 1), "superseded");
     assert_eq!(status(&conn, 2), "active");
 }
@@ -508,7 +508,7 @@ fn supersedes_with_a_new_key_leaves_the_key_ready_for_next_time() {
     call(&conn, "save_memory", serde_json::json!({"text": PAGOS_VIEJO, "project": "p"}));
     let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "topic": "pagos", "supersedes": 1}));
-    assert!(out.contains("Reemplaza a la memoria 1") && out.contains("clave nueva"), "{out}");
+    assert!(out.contains("Replaces memory 1") && out.contains("new key"), "{out}");
 
     // The next one under the key supersedes the one that corrected the previous.
     call(&conn, "save_memory", serde_json::json!({

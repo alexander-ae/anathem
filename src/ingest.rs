@@ -1,4 +1,4 @@
-use crate::{chunk, model::NewMemory};
+use crate::{chunk, lang::Lang, model::NewMemory};
 use anyhow::{bail, Result};
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 
@@ -343,38 +343,63 @@ impl Saved {
     /// the project: a typo produces the same "there was nothing" as a
     /// legitimately new key, and without the list nobody can tell them apart.
     /// It costs text only in that case.
-    pub fn describe(&self) -> Option<String> {
-        let reemplazo = self.replaced.as_ref().map(|r| {
-            format!(
+    pub fn describe(&self, lang: Lang) -> Option<String> {
+        let reemplazo = self.replaced.as_ref().map(|r| match lang {
+            Lang::En => format!(
+                "replaces memory {} («{}»), which is left superseded. `mem history {}` \
+                 shows the chain.",
+                r.id, r.title, self.id
+            ),
+            Lang::Es => format!(
                 "reemplaza a la memoria {} («{}»), que queda superseded. `mem history {}` \
                  muestra la cadena.",
                 r.id, r.title, self.id
-            )
+            ),
         });
         let Some(key) = self.topic.as_deref() else {
             return reemplazo.map(|r| capitalize(&r));
         };
+        let tema = lang.pick("Topic", "Tema");
         match (reemplazo, self.key_is_new) {
-            (Some(r), false) => Some(format!("Tema «{key}»: {r}")),
+            (Some(r), false) => Some(format!("{tema} «{key}»: {r}")),
             (Some(r), true) => Some(format!(
-                "{} Tema «{key}»: clave nueva; la próxima memoria con esa clave reemplazará a esta.",
-                capitalize(&r)
+                "{} {tema} «{key}»: {}",
+                capitalize(&r),
+                lang.pick(
+                    "new key; the next memory under it will replace this one.",
+                    "clave nueva; la próxima memoria con esa clave reemplazará a esta.",
+                ),
             )),
             (None, _) => {
                 let mut msg = format!(
-                    "Tema «{key}»: no había una memoria activa con esa clave, se guardó como nueva."
+                    "{tema} «{key}»: {}",
+                    lang.pick(
+                        "there was no active memory under that key, so it was saved as a new one.",
+                        "no había una memoria activa con esa clave, se guardó como nueva.",
+                    ),
                 );
                 if self.other_keys.is_empty() {
-                    msg.push_str(&format!(" No hay otras claves de tema en {}.", self.project));
+                    msg.push_str(&match lang {
+                        Lang::En => format!(" There are no other topic keys in {}.", self.project),
+                        Lang::Es => format!(" No hay otras claves de tema en {}.", self.project),
+                    });
                 } else {
                     let has_more = self.other_keys.len() > MAX_KEYS_LISTED;
                     let lista: Vec<&str> = self.other_keys.iter()
                         .take(MAX_KEYS_LISTED).map(String::as_str).collect();
-                    msg.push_str(&format!(
-                        " Claves que ya existen en {}: {}{}. Si querías actualizar una de ellas, \
-                         la clave no coincidió: guardá de nuevo con la exacta.",
-                        self.project, lista.join(", "), if has_more { ", …" } else { "" }
-                    ));
+                    let puntos = if has_more { ", …" } else { "" };
+                    msg.push_str(&match lang {
+                        Lang::En => format!(
+                            " Keys that already exist in {}: {}{}. If you meant to update one \
+                             of them, the key did not match: save again with the exact one.",
+                            self.project, lista.join(", "), puntos
+                        ),
+                        Lang::Es => format!(
+                            " Claves que ya existen en {}: {}{}. Si querías actualizar una de \
+                             ellas, la clave no coincidió: guardá de nuevo con la exacta.",
+                            self.project, lista.join(", "), puntos
+                        ),
+                    });
                 }
                 Some(msg)
             }

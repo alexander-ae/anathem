@@ -391,7 +391,7 @@ fn run(cli: Cli) -> Result<()> {
             let labels = if g.tags.is_empty() { String::new() } else { format!(" [{}]", g.tags.join(", ")) };
             let como = if explicito { "" } else { " (detectado)" };
             println!("guardada memoria {} en {project}{como}{labels}", g.id);
-            if let Some(msg) = g.describe() {
+            if let Some(msg) = g.describe(anathem::lang::Lang::Es) {
                 println!("{msg}");
             }
             sync_after_write(&conn, &dir);
@@ -547,7 +547,7 @@ fn run(cli: Cli) -> Result<()> {
             let cfg = anathem::config::load(dir)?;
             let items = anathem::recent::list_recent(
                 &conn, project_.as_deref(), window, limit, cfg.excerpt)?;
-            println!("{}", anathem::recent::format_items(&items, project_.is_none()));
+            println!("{}", anathem::recent::format_items(&items, project_.is_none(), anathem::lang::Lang::Es));
         }
         Cmd::History { id } => {
             let conn = anathem::db::open(&path)?;

@@ -170,7 +170,7 @@ fn call_tool(
             };
             let (id, tag_list) = (g.id, g.tags.clone());
             let title = ingest::title_from(text);
-            let aviso_tema = g.describe().map(|m| format!("\n{m}")).unwrap_or_default();
+            let aviso_tema = g.describe(crate::lang::Lang::En).map(|m| format!("\n{m}")).unwrap_or_default();
 
             // `LivePack` revalidated the pack when the message began, but
             // embedding a large backlog can take minutes and in that time
@@ -219,7 +219,7 @@ fn call_tool(
             };
             let limit = args["limit"].as_u64().map(|l| l as usize).unwrap_or(15);
             let items = crate::recent::list_recent(conn, Some(&project), window, limit, cfg.excerpt)?;
-            Ok(text_result(crate::recent::format_items(&items, false)))
+            Ok(text_result(crate::recent::format_items(&items, false, crate::lang::Lang::En)))
         }
         "get_memory" => {
             let id = args["id"].as_i64().unwrap_or(-1);

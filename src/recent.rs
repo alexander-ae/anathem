@@ -120,13 +120,15 @@ pub fn list_recent(
 }
 
 /// The same thing as text, for the CLI and for an agent to read in one go.
-pub fn format_items(items: &[RecentItem], show_project: bool) -> String {
+pub fn format_items(items: &[RecentItem], show_project: bool, lang: Lang) -> String {
     if items.is_empty() {
-        return "sin memorias en esa ventana.".to_string();
+        return lang
+            .pick("no memories in that window.", "sin memorias en esa ventana.")
+            .to_string();
     }
     let mut s = String::new();
     for it in items {
-        let who = it.agent.as_deref().unwrap_or("—");
+        let who = it.agent.as_deref().unwrap_or("—"); // el guion no tiene idioma
         let date = it.when.get(..16).unwrap_or(&it.when);
         s.push_str(&format!("{date}  [{who}]"));
         if show_project {
