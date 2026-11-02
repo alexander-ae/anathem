@@ -199,7 +199,7 @@ pub fn save_with_topic(
     topic: Option<&str>,
     supersedes: Option<i64>,
 ) -> Result<Saved> {
-    save_with_topic_by(conn, text, project, given_tags, topic, supersedes, None)
+    save_with_topic_by(conn, text, project, given_tags, topic, supersedes, None, Lang::Es)
 }
 
 /// Same as `save_with_topic`, recording which agent saved it.
@@ -218,6 +218,7 @@ pub fn save_with_topic_by(
     topic: Option<&str>,
     supersedes: Option<i64>,
     agent: Option<&str>,
+    lang: Lang,
 ) -> Result<Saved> {
     let topic = topic.map(normalize_topic).transpose()?;
     let tags = if given_tags.is_empty() {
@@ -269,11 +270,19 @@ pub fn save_with_topic_by(
                 })
                 .optional()?;
             match row {
-                None => return Err(BadRequest(format!("no existe la memoria id:{sid}")).into()),
+                None => return Err(BadRequest(match lang {
+                    Lang::En => format!("there is no memory with id:{sid}"),
+                    Lang::Es => format!("no existe la memoria id:{sid}"),
+                }).into()),
                 Some((st, _)) if st != "active" => {
-                    return Err(BadRequest(format!(
-                        "la memoria id:{sid} no está activa (status={st}); no hay nada que reemplazar"
-                    ))
+                    return Err(BadRequest(match lang {
+                        Lang::En => format!(
+                            "memory id:{sid} is not active (status={st}); there is nothing to replace"
+                        ),
+                        Lang::Es => format!(
+                            "la memoria id:{sid} no está activa (status={st}); no hay nada que reemplazar"
+                        ),
+                    })
                     .into())
                 }
                 Some((_, title)) => Some((sid, title)),
@@ -283,12 +292,19 @@ pub fn save_with_topic_by(
     };
     if let (Some((v, _)), Some((e, _))) = (&current_one, &explicit_one) {
         if v != e {
-            return Err(BadRequest(format!(
-                "la clave «{}» ya tiene la memoria activa id:{v} y supersedes apunta a id:{e}: \
-                 una memoria nueva reemplaza a una sola. Dejá solo `topic` para actualizar la \
-                 current_one, o solo `supersedes` para corregir esa otra.",
-                topic.as_deref().unwrap_or_default()
-            ))
+            let key = topic.as_deref().unwrap_or_default();
+            return Err(BadRequest(match lang {
+                Lang::En => format!(
+                    "key «{key}» already has the active memory id:{v} and supersedes points at \
+                     id:{e}: a new memory replaces exactly one. Leave only `topic` to update the \
+                     current one, or only `supersedes` to correct that other one."
+                ),
+                Lang::Es => format!(
+                    "la clave «{key}» ya tiene la memoria activa id:{v} y supersedes apunta a \
+                     id:{e}: una memoria nueva reemplaza a una sola. Dejá solo `topic` para \
+                     actualizar la current_one, o solo `supersedes` para corregir esa otra."
+                ),
+            })
             .into());
         }
     }

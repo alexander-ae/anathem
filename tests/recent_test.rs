@@ -245,7 +245,7 @@ fn an_invalid_window_in_the_tool_is_explained_and_does_not_break() {
         .unwrap();
     assert!(res["error"].is_null(), "no tiene que ser un error de protocolo: {res}");
     let txt = res["result"]["content"][0]["text"].as_str().unwrap();
-    assert!(txt.contains("No se pudo listar"), "respuesta: {txt}");
+    assert!(txt.contains("Could not list"), "respuesta: {txt}");
 }
 
 // ------------------------------------------------------------------ migración

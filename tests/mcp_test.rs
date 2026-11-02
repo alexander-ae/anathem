@@ -182,3 +182,22 @@ fn a_very_long_query_does_not_grow_the_fts_expression_without_bound() {
     let ramas = expr.matches(" OR ").count() + 1;
     assert!(ramas <= 50, "la expresión creció a {ramas} ramas");
 }
+
+// --- la superficie que lee el modelo está en inglés ----------------------
+
+#[test]
+fn the_topic_label_and_the_tool_description_agree() {
+    // Si estas dos se separan, el modelo lee una etiqueta y se le pide
+    // reusar otra, y el reemplazo silenciosamente no ocurre.
+    let defs = serde_json::to_string(&anathem::mcp::tool_defs()).unwrap();
+    assert!(defs.contains("[topic:"), "la descripción tiene que nombrar la etiqueta real: {defs}");
+    assert!(!defs.contains("[tema:"), "no puede quedar la vieja");
+}
+
+#[test]
+fn every_tool_description_is_english() {
+    let defs = serde_json::to_string(&anathem::mcp::tool_defs()).unwrap();
+    for palabra in ["memoria", "búsqueda", "guardar", "usuario", "clave de tema", "proyecto"] {
+        assert!(!defs.contains(palabra), "queda español en las tools: «{palabra}»");
+    }
+}

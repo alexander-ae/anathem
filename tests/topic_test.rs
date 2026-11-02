@@ -381,7 +381,7 @@ fn the_save_memory_description_explains_when_to_use_topic() {
 
     assert!(save["inputSchema"]["properties"]["topic"].is_object(), "falta el parámetro topic");
     let desc = save["description"].as_str().unwrap().to_lowercase();
-    for key in ["topic", "corrección", "reemplaza", "versión actualizada"] {
+    for key in ["topic", "correction", "replace", "updated version"] {
         assert!(desc.contains(key), "la descripción no menciona {key:?}: {desc}");
     }
 }
@@ -394,9 +394,9 @@ fn search_and_get_memory_show_the_key_so_it_can_be_reused() {
         "text": PAGOS_VIEJO, "project": "p", "topic": "pagos"}));
 
     let busqueda = call(&conn, "search_memory", serde_json::json!({"query": "proveedor pagos"}));
-    assert!(busqueda.contains("[tema: pagos]"), "{busqueda}");
+    assert!(busqueda.contains("[topic: pagos]"), "{busqueda}");
     let body = call(&conn, "get_memory", serde_json::json!({"id": 1}));
-    assert!(body.contains("[tema: pagos]"), "{body}");
+    assert!(body.contains("[topic: pagos]"), "{body}");
 }
 
 // -- supersedes: correcting one particular memory already saved ------------------
@@ -442,7 +442,7 @@ fn a_supersedes_that_is_not_an_id_saves_nothing() {
     let conn = db::open(&d.path().join("t.db")).unwrap();
     let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "supersedes": "la anterior"}));
-    assert!(out.starts_with("No se guardó"), "{out}");
+    assert!(out.starts_with("Not saved"), "{out}");
     assert_eq!(total(&conn), 0);
 }
 
@@ -452,7 +452,7 @@ fn supersedes_of_a_missing_memory_is_rejected_in_words_and_saves_nothing() {
     let conn = db::open(&d.path().join("t.db")).unwrap();
     let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "supersedes": 999999}));
-    assert!(out.starts_with("No se guardó") && out.contains("999999"), "{out}");
+    assert!(out.starts_with("Not saved") && out.contains("999999"), "{out}");
     assert_eq!(total(&conn), 0, "el rechazo no puede dejar la memoria nueva guardada");
 }
 
@@ -465,7 +465,7 @@ fn supersedes_of_a_memory_that_is_not_active_is_rejected() {
     let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "supersedes": 1}));
 
-    assert!(out.starts_with("No se guardó") && out.contains("forgotten"), "{out}");
+    assert!(out.starts_with("Not saved") && out.contains("forgotten"), "{out}");
     assert_eq!(total(&conn), 1);
     assert_eq!(status(&conn, 1), "forgotten", "no se revive lo olvidado");
 }
@@ -494,7 +494,7 @@ fn supersedes_and_topic_pointing_at_different_memories_are_rejected() {
     let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "topic": "pagos", "supersedes": 2}));
 
-    assert!(out.starts_with("No se guardó"), "{out}");
+    assert!(out.starts_with("Not saved"), "{out}");
     assert!(out.contains("id:1") && out.contains("id:2"), "nombra las dos: {out}");
     assert_eq!(total(&conn), 2);
     assert_eq!(status(&conn, 1), "active");
@@ -531,8 +531,8 @@ fn the_description_tells_when_to_use_supersedes_and_when_topic() {
     assert_eq!(save["inputSchema"]["properties"]["supersedes"]["type"], "integer");
     let desc = save["description"].as_str().unwrap();
     assert!(desc.contains("`supersedes`") && desc.contains("`topic`"), "{desc}");
-    assert!(desc.contains("SEGUIR EVOLUCIONANDO"), "cuándo va topic: {desc}");
-    assert!(desc.contains("MEMORIA CONCRETA"), "cuándo va supersedes: {desc}");
+    assert!(desc.contains("KEEP EVOLVING"), "cuándo va topic: {desc}");
+    assert!(desc.contains("ONE SPECIFIC EXISTING MEMORY"), "cuándo va supersedes: {desc}");
 }
 
 // -- export ------------------------------------------------------------------
