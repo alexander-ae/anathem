@@ -72,3 +72,15 @@ fn the_help_is_english_and_well_formed() {
         assert!(!help.contains(palabra), "queda español en la ayuda: «{palabra}»\n{help}");
     }
 }
+
+#[test]
+fn the_unbounded_window_keyword_is_the_one_the_help_advertises() {
+    // `--help` decía `--since all` y el código solo aceptaba `todo`: la
+    // ayuda enseñaba un valor que el binario rechaza. Lo introduje al
+    // traducir el doc comment sin traducir el centinela que compara.
+    let d = tempfile::tempdir().unwrap();
+    let db = base(d.path());
+    assert!(mem(&db, &["recent", "--since", "all"]).1, "`all` es lo que anuncia la ayuda");
+    // Y la forma vieja se sigue aceptando, como con las banderas.
+    assert!(mem(&db, &["recent", "--since", "todo"]).1, "`todo` seguía andando y no se rompe");
+}

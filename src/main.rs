@@ -536,7 +536,11 @@ fn run(cli: Cli) -> Result<()> {
         }
         Cmd::Recent { project, all_projects, since, limit } => {
             let conn = anathem::db::open(&path)?;
-            let window = if since.trim().eq_ignore_ascii_case("todo") {
+            // `all` es lo que anuncia la ayuda; `todo` era el centinela
+            // original y se sigue aceptando, igual que los alias de las
+            // banderas, para no romper a quien lo tenga escrito.
+            let unbounded = ["all", "todo"];
+            let window = if unbounded.iter().any(|k| since.trim().eq_ignore_ascii_case(k)) {
                 None
             } else {
                 Some(anathem::recent::duration_in_seconds(&since)?)

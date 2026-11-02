@@ -1,73 +1,75 @@
-# Formato del export
+# The export format
 
-`mem export --out carpeta/` escribe un archivo Markdown por memoria, con
-frontmatter YAML, agrupados en subcarpetas por proyecto:
+`mem export --out folder/` writes one Markdown file per memory, with YAML
+frontmatter, grouped into subfolders by project:
 
-    carpeta/
+    folder/
       api-monolito/
-        2026-08-11-el-rate-limit-del-api-publico-es-170-por-minuto-42.md
+        2026-08-11-the-public-api-rate-limit-is-170-per-minute-42.md
       personal/
-        2026-09-23-prefiere-los-mensajes-de-commit-en-imperativo-91.md
+        2026-09-23-prefers-commit-messages-in-the-imperative-91.md
 
-El nombre de archivo es `{created}-{slug del título}-{id}.md`. El sufijo de id
-está porque el slug se corta a ocho palabras y dos memorias del mismo proyecto,
-misma fecha y título largo parecido producían el mismo nombre — pasó en un
-corpus real.
+The file name is `{created}-{slug of the title}-{id}.md`. The id suffix is
+there because the slug is cut at eight words, and two memories from the same
+project, with the same date and a similar long title, produced the same name —
+it happened on a real corpus.
 
-## El export es completo
+## The export is complete
 
-Lo que sale alcanza para reconstruir la base en otra herramienta. **Lo único
-que no viaja son los vectores**, y se recalculan con `mem model install` más
-`mem reindex`: son un derivado del texto, no un dato original.
+What comes out is enough to rebuild the database in another tool. **The only
+thing that does not travel is the vectors**, and those are recomputed with
+`mem model install` plus `mem reindex`: they are derived from the text, not
+original data.
 
-**Se exportan también las memorias `forgotten`.** `forget` oculta, no borra;
-dejarlas afuera convertiría cada migración en una pérdida de datos silenciosa.
-Vienen con `status: forgotten` para que quien lea el export pueda filtrarlas.
+**The `forgotten` memories are exported too.** `forget` hides, it does not
+delete; leaving them out would turn every migration into a silent loss of
+data. They come with `status: forgotten` so whoever reads the export can
+filter them.
 
-## Campos
+## Fields
 
-Siempre presentes:
+Always present:
 
-| campo | tipo | qué es |
+| field | type | what it is |
 |---|---|---|
-| `id` | entero | clave primaria en la base de origen; a lo que apunta `supersedes` |
-| `name` | texto | slug del título, para herramientas que indexan por nombre |
-| `description` | texto | el título, en una línea |
-| `metadata.type` | texto | siempre `project`, por compatibilidad con lectores de frontmatter |
-| `project` | texto | el proyecto al que pertenece; también es la subcarpeta |
-| `tags` | lista de texto | tags asignados, ordenados alfabéticamente |
-| `created` | fecha | cuándo se guardó |
-| `updated` | fecha | última edición |
-| `status` | texto | `active`, `superseded`, `draft` o `forgotten` |
-| `source` | texto | `explicit` (la pidió el usuario), `suggested` o `migrated` |
-| `pinned` | booleano | si sobrevive el recorte de candidatos en la búsqueda |
+| `id` | integer | primary key in the source database; what `supersedes` points at |
+| `name` | text | slug of the title, for tools that index by name |
+| `description` | text | the title, on one line |
+| `metadata.type` | text | always `project`, for compatibility with frontmatter readers |
+| `project` | text | the project it belongs to; also the subfolder |
+| `tags` | list of text | assigned tags, in alphabetical order |
+| `created` | date | when it was saved |
+| `updated` | date | last edit |
+| `status` | text | `active`, `superseded`, `draft` or `forgotten` |
+| `source` | text | `explicit` (the user asked for it), `suggested` or `migrated` |
+| `pinned` | boolean | whether it survives the candidate trimming in search |
 
-Presentes solo cuando tienen valor — se omite la clave en vez de emitir `null`,
-porque un frontmatter sin la clave se lee igual en cualquier parser y no invita
-a confundir "no tiene" con "tiene nulo":
+Present only when they have a value — the key is omitted instead of emitting
+`null`, because frontmatter without the key reads the same in any parser and
+does not invite confusing "has none" with "has null":
 
-| campo | tipo | qué es |
+| field | type | what it is |
 |---|---|---|
-| `ext_id` | texto | identificador en el sistema del que se migró |
-| `supersedes` | entero | el `id` de la memoria que esta reemplaza |
-| `topic` | texto | clave de tema con la que se guardó; la vigente de cada clave es la única `active` entre las que la comparten en un proyecto |
-| `event_start` | fecha | inicio del período al que se refiere |
-| `event_end` | fecha | fin de ese período |
-| `refs` | lista de `{kind, value}` | tickets, PRs y commits extraídos del cuerpo; `kind` es `ticket`, `pr` o `sha` |
+| `ext_id` | text | identifier in the system it was migrated from |
+| `supersedes` | integer | the `id` of the memory this one replaces |
+| `topic` | text | the topic key it was saved with; the current one for each key is the only `active` memory among those sharing it in a project |
+| `event_start` | date | start of the period it refers to |
+| `event_end` | date | end of that period |
+| `refs` | list of `{kind, value}` | tickets, PRs and commits extracted from the body; `kind` is `ticket`, `pr` or `sha` |
 
-El cuerpo de la memoria va después del frontmatter, tal cual, sin transformar.
+The body of the memory goes after the frontmatter, as is, untransformed.
 
-## Sobre el YAML
+## About the YAML
 
-Todos los valores de texto se emiten entre comillas dobles y con escapes. No es
-cosmético: sin eso, un título con `": "` adentro hacía que el parser lo leyera
-como una clave anidada y el archivo dejaba de ser YAML válido — pasó en 52 de
-170 archivos de un corpus real.
+Every text value is emitted in double quotes and with escapes. This is not
+cosmetic: without it, a title containing `": "` made the parser read it as a
+nested key and the file stopped being valid YAML — it happened in 52 out of
+170 files of a real corpus.
 
-## La otra salida
+## The other way out
 
-El export es cómodo para leer y para importar en herramientas que entienden
-Markdown. Pero **la salida completa de verdad es `~/.anathem/mem.db`**: SQLite
-plano, formato abierto y documentado, legible con cualquier herramienta sin
-pasar por anathem. Si el objetivo es no quedar encerrado, ese archivo es la
-garantía; el export es la comodidad.
+The export is convenient to read and to import into tools that understand
+Markdown. But **the real complete way out is `~/.anathem/mem.db`**: plain
+SQLite, an open and documented format, readable with any tool without going
+through anathem. If the goal is not to get locked in, that file is the
+guarantee; the export is the convenience.
