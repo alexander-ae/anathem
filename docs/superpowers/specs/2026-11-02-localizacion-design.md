@@ -1,6 +1,6 @@
 # Localización en/es, con inglés por defecto
 
-**Estado:** diseño, sin implementar.
+**Estado:** diseño aprobado, sin implementar.
 **Motivo:** anathem se va a publicar como open source y el público deja de
 ser una persona que habla español.
 
@@ -240,26 +240,29 @@ no poder reportar ese error.
   `permisos::restringir_a_dueno` y definir qué hace con `LANG` ausente o en
   `C` (respuesta: inglés, sin escribir nada).
 
-## Dos cosas que decide el autor, no el diseño
+## Dos cosas que decidió el autor
 
-Quedan abiertas hasta que las conteste; el resto del documento no depende de
-ellas.
+1. **Las banderas en español se renombran a inglés, con la forma vieja como
+   alias oculto.** `--desde` → `--from`, `--fusionar` → `--merge`,
+   `--limite` → `--limit`, `--todos` → `--all`. La CLI ya mezclaba los dos
+   idiomas —conviven con `--budget`, `--explain`, `--project`, `--tag`— así
+   que esto no traduce una superficie coherente, la vuelve coherente. El
+   alias va con `hide = true`: sigue funcionando para quien lo tenga escrito
+   en un script, y no aparece en la ayuda.
 
-1. **Los nombres de las banderas en español.** `--desde`, `--fusionar`,
-   `--limite` y `--todos` conviven hoy con `--budget`, `--explain`,
-   `--project`, `--tag` y `--merge`: la CLI ya mezcla los dos idiomas. En una
-   herramienta con inglés por defecto, lo coherente es renombrarlas a inglés
-   dejando la forma vieja como alias oculto, que no rompe a nadie. Pero es la
-   superficie pública y la decisión es suya.
+   Ojo con `--merge`: `Import` ya tiene un campo `merge` cuya bandera larga
+   es `--fusionar`. Al renombrar hay que comprobar que no quede una bandera
+   declarada dos veces.
 
-2. **Qué pasa con un binario viejo leyendo un config nuevo.** `config.json`
-   usa `deny_unknown_fields`, así que en cuanto el instalador escriba
-   `"language"`, una versión anterior de `mem` **falla al arrancar** contra ese
-   archivo. Los alias cubren el sentido contrario (archivo viejo, binario
-   nuevo) pero no este. Hay dos salidas: aceptar la ruptura y anunciarla —el
-   proyecto está en 0.2.0 y casi sin usuarios—, o levantar
-   `deny_unknown_fields`, que a cambio pierde la detección de claves mal
-   escritas que `config.rs` eligió a propósito.
+2. **Se acepta que un binario viejo falle contra un config nuevo**, y se
+   anuncia en las notas de la versión. En cuanto el instalador escriba
+   `"language"`, una versión anterior de `mem` no abre ese archivo, porque
+   `config.json` usa `deny_unknown_fields`. Los alias cubren el sentido
+   contrario (archivo viejo, binario nuevo) pero no este. La alternativa era
+   levantar `deny_unknown_fields`, que cuesta la detección de claves mal
+   escritas que `config.rs` eligió tener a propósito; no vale ese precio con
+   el proyecto en 0.2.0 y casi sin usuarios externos. En la práctica la regla
+   es "no bajes de versión después de actualizar".
 
 ## Qué queda a quien lo construya
 
