@@ -9,6 +9,7 @@
 //! the same, with a blank agent and the day's date, which is all that is
 //! known about them.
 
+use crate::lang::Lang;
 use anyhow::{bail, Result};
 use rusqlite::Connection;
 
@@ -30,10 +31,13 @@ pub struct RecentItem {
 ///
 /// With no suffix it assumes hours, the unit of the case that motivated
 /// this: switching agents within the same working day.
-pub fn duration_in_seconds(text: &str) -> Result<i64> {
+pub fn duration_in_seconds(text: &str, lang: Lang) -> Result<i64> {
     let t = text.trim();
     if t.is_empty() {
-        bail!("ventana vacía; usá algo como 6h, 90m o 2d");
+        bail!("{}", lang.pick(
+            "empty window; try something like 6h, 90m or 2d",
+            "ventana vacía; usá algo como 6h, 90m o 2d",
+        ));
     }
     let (number, factor_) = match t.chars().last().unwrap() {
         's' => (&t[..t.len() - 1], 1),
@@ -45,9 +49,15 @@ pub fn duration_in_seconds(text: &str) -> Result<i64> {
     let n: i64 = number
         .trim()
         .parse()
-        .map_err(|_| anyhow::anyhow!("no entiendo la ventana «{text}»; probá 6h, 90m o 2d"))?;
+        .map_err(|_| match lang {
+            Lang::En => anyhow::anyhow!("cannot read the window «{text}»; try 6h, 90m or 2d"),
+            Lang::Es => anyhow::anyhow!("no entiendo la ventana «{text}»; probá 6h, 90m o 2d"),
+        })?;
     if n <= 0 {
-        bail!("la ventana tiene que ser positiva, no «{text}»");
+        bail!("{}", match lang {
+            Lang::En => format!("the window has to be positive, not «{text}»"),
+            Lang::Es => format!("la ventana tiene que ser positiva, no «{text}»"),
+        });
     }
     Ok(n * factor_)
 }
@@ -186,7 +196,7 @@ pub fn handoff_instructions(
     if items == 0 {
         return None;
     }
-    let seconds = duration_in_seconds(window).ok()?;
+    let seconds = duration_in_seconds(window, Lang::Es).ok()?;
     let items = list_recent(conn, Some(project), Some(seconds), items, 140).ok()?;
     if items.is_empty() {
         return None;

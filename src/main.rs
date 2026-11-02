@@ -535,7 +535,7 @@ fn run(cli: Cli) -> Result<()> {
             let window = if since.trim().eq_ignore_ascii_case("todo") {
                 None
             } else {
-                Some(anathem::recent::duration_in_seconds(&since)?)
+                Some(anathem::recent::duration_in_seconds(&since, anathem::lang::Lang::Es)?)
             };
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let project_ = if all_projects {

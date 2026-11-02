@@ -211,7 +211,7 @@ fn call_tool(
             let project = crate::project::resolve(
                 args["project"].as_str().map(str::to_string), &cwd);
             let window = match args["since"].as_str() {
-                Some(s) => match crate::recent::duration_in_seconds(s) {
+                Some(s) => match crate::recent::duration_in_seconds(s, crate::lang::Lang::En) {
                     Ok(v) => Some(v),
                     Err(e) => return Ok(text_result(format!("No se pudo listar: {e}"))),
                 },

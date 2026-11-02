@@ -37,21 +37,21 @@ fn hace(seconds: i64) -> String {
 
 #[test]
 fn windows_are_understood_in_the_usual_units() {
-    assert_eq!(recent::duration_in_seconds("45s").unwrap(), 45);
-    assert_eq!(recent::duration_in_seconds("90m").unwrap(), 5_400);
-    assert_eq!(recent::duration_in_seconds("6h").unwrap(), 21_600);
-    assert_eq!(recent::duration_in_seconds("2d").unwrap(), 172_800);
+    assert_eq!(recent::duration_in_seconds("45s", anathem::lang::Lang::Es).unwrap(), 45);
+    assert_eq!(recent::duration_in_seconds("90m", anathem::lang::Lang::Es).unwrap(), 5_400);
+    assert_eq!(recent::duration_in_seconds("6h", anathem::lang::Lang::Es).unwrap(), 21_600);
+    assert_eq!(recent::duration_in_seconds("2d", anathem::lang::Lang::Es).unwrap(), 172_800);
     // With no suffix it means hours: the unit of the case that motivated this.
-    assert_eq!(recent::duration_in_seconds("12").unwrap(), 43_200);
+    assert_eq!(recent::duration_in_seconds("12", anathem::lang::Lang::Es).unwrap(), 43_200);
 }
 
 #[test]
 fn a_window_it_cannot_parse_fails_and_says_so() {
     for malo in ["", "   ", "ayer", "-3h", "0h", "3x"] {
-        let e = recent::duration_in_seconds(malo);
+        let e = recent::duration_in_seconds(malo, anathem::lang::Lang::Es);
         assert!(e.is_err(), "«{malo}» debería fallar y no lo hizo");
     }
-    let msg = recent::duration_in_seconds("ayer").unwrap_err().to_string();
+    let msg = recent::duration_in_seconds("ayer", anathem::lang::Lang::Es).unwrap_err().to_string();
     assert!(msg.contains("6h"), "el mensaje tiene que sugerir el formato: {msg}");
 }
 
