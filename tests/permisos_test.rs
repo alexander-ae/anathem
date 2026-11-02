@@ -5,6 +5,11 @@
 mod support;
 
 use std::os::unix::fs::PermissionsExt;
+
+extern "C" {
+    #[link_name = "geteuid"]
+    fn libc_geteuid() -> u32;
+}
 use std::path::Path;
 
 fn mode(p: &Path) -> u32 {
@@ -90,11 +95,25 @@ fn an_installed_pack_is_read_only_and_still_replaceable() {
     let instalado = dir.path().join("paquetes").join("mini-es.anathem-pack");
     assert_eq!(mode(&instalado), 0o400, "el paquete instalado tiene que ser 0400");
 
-    // Writing over it in place is what we are preventing.
-    assert!(
-        std::fs::OpenOptions::new().write(true).truncate(true).open(&instalado).is_err(),
-        "no tendría que poder truncarse en su lugar"
-    );
+    // Writing over it in place is what the mode prevents — for everyone
+    // except root, who ignores permission bits entirely. CI runs inside a
+    // container as root, so asserting it there would fail on a protection
+    // that is working exactly as designed.
+    //
+    // The repository already learned this once: `concurrency_test` says a
+    // `packs/` in mode 0555 "does not stop root: in CI inside a container —
+    // the usual case — the test skipped itself entirely". That one found a
+    // mechanism no uid can bypass. Here there is none: 0400 against root is
+    // simply not a thing, so the honest move is to assert it where it
+    // holds and say so where it does not.
+    if unsafe { libc_geteuid() } == 0 {
+        eprintln!("saltado: root ignora los bits de permiso, el 0400 no lo detiene");
+    } else {
+        assert!(
+            std::fs::OpenOptions::new().write(true).truncate(true).open(&instalado).is_err(),
+            "no tendría que poder truncarse en su lugar"
+        );
+    }
 
     // And none of that blocks a reinstall, which renames over it.
     let otro = dir.path().join("otro.anathem-pack");
