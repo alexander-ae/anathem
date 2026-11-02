@@ -632,7 +632,7 @@ fn config_section(dir: &Path) -> Section {
     match config::load(dir) {
         Ok(c) => {
             let values = format!(
-                "peso_bm25={:?}, candidatos={}, extracto={}",
+                "bm25_weight={:?}, candidates={}, excerpt={}",
                 c.bm25_weight, c.candidates, c.excerpt
             );
             if pack_path.exists() {

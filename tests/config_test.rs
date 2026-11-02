@@ -61,7 +61,7 @@ fn candidates_at_zero_is_rejected_naming_file_and_field() {
     std::fs::write(d.path().join("config.json"), r#"{"candidates": 0}"#).unwrap();
     let e = config::load(d.path()).unwrap_err().to_string();
     assert!(e.contains("config.json"), "el error debe nombrar el archivo: {e}");
-    assert!(e.contains("candidatos"), "el error debe nombrar el campo: {e}");
+    assert!(e.contains("candidates"), "el error debe nombrar el campo: {e}");
 }
 
 #[test]
@@ -70,5 +70,16 @@ fn excerpt_at_zero_is_rejected_naming_file_and_field() {
     std::fs::write(d.path().join("config.json"), r#"{"excerpt": 0}"#).unwrap();
     let e = config::load(d.path()).unwrap_err().to_string();
     assert!(e.contains("config.json"), "el error debe nombrar el archivo: {e}");
-    assert!(e.contains("extracto"), "el error debe nombrar el campo: {e}");
+    assert!(e.contains("excerpt"), "el error debe nombrar el campo: {e}");
+}
+
+#[test]
+fn bm25_weight_negative_is_rejected_naming_the_real_key() {
+    // The three validation messages used to name keys that do not exist:
+    // `peso_bm25`, `candidatos`, `extracto`. Whoever set an invalid value
+    // got told to fix a key that `deny_unknown_fields` would reject.
+    let d = tempfile::tempdir().unwrap();
+    std::fs::write(d.path().join("config.json"), r#"{"bm25_weight": -1.0}"#).unwrap();
+    let e = config::load(d.path()).unwrap_err().to_string();
+    assert!(e.contains("bm25_weight"), "el error debe nombrar la clave real: {e}");
 }

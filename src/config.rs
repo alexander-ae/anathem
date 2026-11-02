@@ -126,16 +126,16 @@ pub fn load(dir: &Path) -> Result<Config> {
         .with_context(|| format!("{} no es un config.json válido", pack_path.display()))?;
     if !(c.bm25_weight.is_finite() && c.bm25_weight >= 0.0) {
         bail!(
-            "{}: peso_bm25 debe ser un número mayor o igual a cero, no {}",
+            "{}: bm25_weight debe ser un número mayor o igual a cero, no {}",
             pack_path.display(),
             c.bm25_weight
         );
     }
     if c.candidates == 0 {
-        bail!("{}: candidatos debe ser mayor que cero, no {}", pack_path.display(), c.candidates);
+        bail!("{}: candidates debe ser mayor que cero, no {}", pack_path.display(), c.candidates);
     }
     if c.excerpt == 0 {
-        bail!("{}: extracto debe ser mayor que cero, no {}", pack_path.display(), c.excerpt);
+        bail!("{}: excerpt debe ser mayor que cero, no {}", pack_path.display(), c.excerpt);
     }
     Ok(c)
 }

@@ -160,7 +160,7 @@ fn a_config_with_an_invalid_value_says_which_one() {
     std::fs::write(d.path().join("config.json"), r#"{"candidates": 0}"#).unwrap();
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
-    assert!(o.stdout.contains("candidatos"), "{}", o.stdout);
+    assert!(o.stdout.contains("candidates"), "{}", o.stdout);
 }
 
 #[test]
@@ -170,10 +170,10 @@ fn a_valid_config_shows_the_effective_values() {
     std::fs::write(d.path().join("config.json"), r#"{"candidates": 7}"#).unwrap();
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
-    assert!(o.stdout.contains("candidatos=7"), "{}", o.stdout);
+    assert!(o.stdout.contains("candidates=7"), "{}", o.stdout);
     // The ones left alone appear with their default value: that is what
     // "effective" means here.
-    assert!(o.stdout.contains("extracto=120"), "{}", o.stdout);
+    assert!(o.stdout.contains("excerpt=120"), "{}", o.stdout);
 }
 
 #[test]
