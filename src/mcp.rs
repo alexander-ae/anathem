@@ -304,7 +304,7 @@ pub fn handle_con_agente(
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let project = crate::project::resolve(None, &cwd);
             let traspaso = crate::recent::handoff_instructions(
-                conn, &project, cfg.handoff_items, &cfg.handoff_window, agent.as_deref());
+                conn, &project, cfg.handoff_items, &cfg.handoff_window, agent.as_deref(), crate::lang::Lang::En);
             let mut res = json!({
                 "protocolVersion": PROTOCOL,
                 "capabilities": {"tools": {}},
