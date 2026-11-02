@@ -1,6 +1,7 @@
-# Localización en/es, con inglés por defecto
+# anathem en inglés (originalmente: localización en/es)
 
-**Estado:** diseño aprobado, sin implementar.
+**Estado:** pasos 1 y 2 implementados; el resto **revisado y recortado** el
+2026-11-02, ver «La decisión que revierte a este documento» al final.
 **Motivo:** anathem se va a publicar como open source y el público deja de
 ser una persona que habla español.
 
@@ -274,3 +275,64 @@ no poder reportar ese error.
 - Si `mem doctor` reporta el idioma activo y de qué paso de la cascada salió.
   Probablemente sí: es exactamente lo que el diagnóstico existe para
   responder.
+
+---
+
+## La decisión que revierte a este documento
+
+**2026-11-02, después de implementar los pasos 1 y 2.** Lo que sigue manda
+sobre todo lo de arriba donde se contradigan.
+
+**anathem va a quedar solo en inglés. No hay catálogo, no hay selección de
+idioma, y `Lang` se borra.**
+
+El principio rector no cambia —lo que lee el modelo queda en inglés— pero su
+otra mitad deja de tener consecuencia: lo que lee una persona también queda
+en inglés, así que no hay dos idiomas que elegir.
+
+### Por qué
+
+Lo caro nunca fue traducir, fue sostener dos idiomas. Cada mensaje nuevo
+habría que escribirlo dos veces, indefinidamente, y hay evidencia directa de
+cómo falla eso: implementando el paso 2 —una superficie de unas cuarenta
+cadenas— se escaparon **dos strings mitad inglés mitad español**, y una la
+encontró la revisión y no quien la escribió. A doscientos treinta sitios ese
+modo de falla no mejora.
+
+Los dos pedazos más caros de lo diseñado no compraban mensajes, compraban
+comodidad: la mutación del `Command` de clap compraba ayuda traducida, y la
+cascada con su clave de config y el instalador escribiéndola compraban
+elegir idioma solo.
+
+Y hay una señal del propio repositorio: los commits de octubre de 2026
+migraron comentarios e identificadores de los tests a inglés. Un CLI en
+español habría sido lo único en español que queda en una base de código que
+su autor ya venía anglicizando.
+
+### Qué cae
+
+- **La cascada entera** (`--lang`, `ANATHEM_LANG`, la clave `language`,
+  `LANG`/`LC_ALL`). Con ella cae el barrido manual de `env::args()` y el
+  problema de arranque circular.
+- **La clave `language` en `config.json`**, y con ella **la ruptura de
+  compatibilidad hacia atrás** que se había aceptado: un binario anterior ya
+  no se va a encontrar con una clave desconocida. Esa decisión del autor
+  queda sin efecto porque su causa desapareció.
+- **El instalador escribiendo configuración.** No se toca.
+- **La mutación del `Command` de clap.** Los doc comments se traducen y
+  listo.
+- **El enum `Lang` y su parámetro** en `duration_in_seconds`, `describe`,
+  `format_items`, `handoff_instructions` y `save_with_topic_by`. Con un solo
+  idioma no tiene segundo valor, y un enum con una variante viva y otra
+  muerta es una invitación a que alguien vuelva a dejar algo a medio
+  traducir.
+
+### Qué queda en pie
+
+Todo lo de los pasos 1 y 2, que ya está en `main`. El corte entre superficie
+humana y superficie del modelo sigue siendo la razón por la que `mcp.rs` se
+tradujo primero y por separado, aunque ahora las dos terminen en el mismo
+idioma.
+
+Y la puerta no queda cerrada: reintroducir español es mecánico, y `Lang`
+vuelve del historial de git.
