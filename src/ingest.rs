@@ -1,4 +1,4 @@
-use crate::{chunk, lang::Lang, model::NewMemory};
+use crate::{chunk, model::NewMemory};
 use anyhow::{bail, Result};
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 
@@ -199,7 +199,7 @@ pub fn save_with_topic(
     topic: Option<&str>,
     supersedes: Option<i64>,
 ) -> Result<Saved> {
-    save_with_topic_by(conn, text, project, given_tags, topic, supersedes, None, Lang::Es)
+    save_with_topic_by(conn, text, project, given_tags, topic, supersedes, None)
 }
 
 /// Same as `save_with_topic`, recording which agent saved it.
@@ -218,7 +218,6 @@ pub fn save_with_topic_by(
     topic: Option<&str>,
     supersedes: Option<i64>,
     agent: Option<&str>,
-    lang: Lang,
 ) -> Result<Saved> {
     let topic = topic.map(normalize_topic).transpose()?;
     let tags = if given_tags.is_empty() {
@@ -270,19 +269,11 @@ pub fn save_with_topic_by(
                 })
                 .optional()?;
             match row {
-                None => return Err(BadRequest(match lang {
-                    Lang::En => format!("there is no memory with id:{sid}"),
-                    Lang::Es => format!("no existe la memoria id:{sid}"),
-                }).into()),
+                None => return Err(BadRequest(format!("there is no memory with id:{sid}")).into()),
                 Some((st, _)) if st != "active" => {
-                    return Err(BadRequest(match lang {
-                        Lang::En => format!(
+                    return Err(BadRequest(format!(
                             "memory id:{sid} is not active (status={st}); there is nothing to replace"
-                        ),
-                        Lang::Es => format!(
-                            "la memoria id:{sid} no está activa (status={st}); no hay nada que reemplazar"
-                        ),
-                    })
+                        ))
                     .into())
                 }
                 Some((_, title)) => Some((sid, title)),
@@ -293,18 +284,11 @@ pub fn save_with_topic_by(
     if let (Some((v, _)), Some((e, _))) = (&current_one, &explicit_one) {
         if v != e {
             let key = topic.as_deref().unwrap_or_default();
-            return Err(BadRequest(match lang {
-                Lang::En => format!(
+            return Err(BadRequest(format!(
                     "key «{key}» already has the active memory id:{v} and supersedes points at \
                      id:{e}: a new memory replaces exactly one. Leave only `topic` to update the \
                      current one, or only `supersedes` to correct that other one."
-                ),
-                Lang::Es => format!(
-                    "la clave «{key}» ya tiene la memoria activa id:{v} y supersedes apunta a \
-                     id:{e}: una memoria nueva reemplaza a una sola. Dejá solo `topic` para \
-                     actualizar la current_one, o solo `supersedes` para corregir esa otra."
-                ),
-            })
+                ))
             .into());
         }
     }
@@ -359,63 +343,40 @@ impl Saved {
     /// the project: a typo produces the same "there was nothing" as a
     /// legitimately new key, and without the list nobody can tell them apart.
     /// It costs text only in that case.
-    pub fn describe(&self, lang: Lang) -> Option<String> {
-        let reemplazo = self.replaced.as_ref().map(|r| match lang {
-            Lang::En => format!(
+    pub fn describe(&self) -> Option<String> {
+        let reemplazo = self.replaced.as_ref().map(|r| format!(
                 "replaces memory {} («{}»), which is left superseded. `mem history {}` \
                  shows the chain.",
                 r.id, r.title, self.id
-            ),
-            Lang::Es => format!(
-                "reemplaza a la memoria {} («{}»), que queda superseded. `mem history {}` \
-                 muestra la cadena.",
-                r.id, r.title, self.id
-            ),
-        });
+            ));
         let Some(key) = self.topic.as_deref() else {
             return reemplazo.map(|r| capitalize(&r));
         };
-        let tema = lang.pick("Topic", "Tema");
+        let tema = "Topic";
         match (reemplazo, self.key_is_new) {
             (Some(r), false) => Some(format!("{tema} «{key}»: {r}")),
             (Some(r), true) => Some(format!(
                 "{} {tema} «{key}»: {}",
                 capitalize(&r),
-                lang.pick(
-                    "new key; the next memory under it will replace this one.",
-                    "clave nueva; la próxima memoria con esa clave reemplazará a esta.",
-                ),
+                "new key; the next memory under it will replace this one.",
             )),
             (None, _) => {
                 let mut msg = format!(
                     "{tema} «{key}»: {}",
-                    lang.pick(
-                        "there was no active memory under that key, so it was saved as a new one.",
-                        "no había una memoria activa con esa clave, se guardó como nueva.",
-                    ),
+                    "there was no active memory under that key, so it was saved as a new one.",
                 );
                 if self.other_keys.is_empty() {
-                    msg.push_str(&match lang {
-                        Lang::En => format!(" There are no other topic keys in {}.", self.project),
-                        Lang::Es => format!(" No hay otras claves de tema en {}.", self.project),
-                    });
+                    msg.push_str(&format!(" There are no other topic keys in {}.", self.project));
                 } else {
                     let has_more = self.other_keys.len() > MAX_KEYS_LISTED;
                     let lista: Vec<&str> = self.other_keys.iter()
                         .take(MAX_KEYS_LISTED).map(String::as_str).collect();
                     let puntos = if has_more { ", …" } else { "" };
-                    msg.push_str(&match lang {
-                        Lang::En => format!(
+                    msg.push_str(&format!(
                             " Keys that already exist in {}: {}{}. If you meant to update one \
                              of them, the key did not match: save again with the exact one.",
                             self.project, lista.join(", "), puntos
-                        ),
-                        Lang::Es => format!(
-                            " Claves que ya existen en {}: {}{}. Si querías actualizar una de \
-                             ellas, la clave no coincidió: guardá de nuevo con la exacta.",
-                            self.project, lista.join(", "), puntos
-                        ),
-                    });
+                        ));
                 }
                 Some(msg)
             }

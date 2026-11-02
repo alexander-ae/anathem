@@ -9,7 +9,6 @@ pub mod export;
 pub mod fusion;
 pub mod import;
 pub mod ingest;
-pub mod lang;
 pub mod logsearch;
 pub mod maint;
 pub mod mcp;
