@@ -68,7 +68,7 @@ fn importing_onto_a_nonempty_database_is_rejected_without_merge() {
     // The same database, which already has content.
     let (ok, _, err) = mem(&source, &["import", "--desde", exp.to_str().unwrap()]);
     assert!(!ok, "tenía que negarse: importar encima duplicaría todo");
-    assert!(err.contains("--fusionar"), "el error tiene que decir la salida: {err}");
+    assert!(err.contains("--merge"), "el error tiene que nombrar una bandera que --help muestre: {err}");
 
     // With --fusionar it does, and it does not duplicate what was there.
     let (ok, out, err) = mem(&source, &["import", "--desde", exp.to_str().unwrap(), "--fusionar"]);

@@ -367,7 +367,7 @@ MCP.
 Cuesta tokens en cada sesión, así que se ajusta en `config.json`:
 
 ```json
-{ "traspaso_items": 5, "traspaso_ventana": "24h" }
+{ "handoff_items": 5, "handoff_window": "24h" }
 ```
 
 Con `0` se apaga. Si el proyecto no tuvo actividad en la ventana, no se manda

@@ -202,10 +202,10 @@ candidatos y el cambio no serviría de nada.
 Los dos valores se ajustan en `config.json`, junto a la base:
 
 ```json
-{ "candidatos": 20, "extracto": 120 }
+{ "candidates": 20, "excerpt": 120 }
 ```
 
-En un corpus de documentos cortos conviene bajar `candidatos`: medido sobre
+En un corpus de documentos cortos conviene bajar `candidates`: medido sobre
 mMARCO, con pasajes de ~250 caracteres, el techo satura en 10 y pedir más es
 desperdicio. Con memorias largas, que es para lo que anathem existe, el salto
 de 10 a 20 es el que duplica el techo.
@@ -261,7 +261,7 @@ O sea que estar quieto cuesta 12 MB y volver cuesta 60 ms, una vez. El plazo
 se ajusta en `config.json`; con `0` no se suelta nunca:
 
 ```json
-{ "soltar_paquete_tras": 300 }
+{ "release_pack_after": 300 }
 ```
 
 Soltarlo incluye pedirle al asignador que devuelva las páginas al sistema.
@@ -346,10 +346,10 @@ Cuesta tokens en cada sesión, así que es corto, y se apaga o se achica desde
 `config.json`:
 
 ```json
-{ "traspaso_items": 5, "traspaso_ventana": "24h" }
+{ "handoff_items": 5, "handoff_window": "24h" }
 ```
 
-Con `"traspaso_items": 0` no se manda nada. Y si el proyecto no tuvo actividad
+Con `"handoff_items": 0` no se manda nada. Y si el proyecto no tuvo actividad
 en la ventana, tampoco: no se gastan tokens en decir que no pasó nada.
 
 Para saber qué **archivos** tocó el otro agente, `git diff` es mejor que
