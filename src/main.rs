@@ -640,7 +640,7 @@ mod tests {
     #[test]
     fn resolve_without_home_returns_err_instead_of_panicking() {
         let err = resolve("~/.anathem/mem.db", None)
-            .expect_err("sin HOME, resolve debe fallar en vez de panicar");
+            .expect_err("with no HOME, resolve has to fail instead of panicking");
         assert!(err.to_string().contains("HOME"), "mensaje inesperado: {err}");
     }
 

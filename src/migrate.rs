@@ -40,7 +40,7 @@ fn title_from(body: &str) -> String {
 }
 
 pub fn run(conn: &Connection, path: &Path) -> Result<MigrateReport> {
-    let file = File::open(path).with_context(|| format!("no se pudo abrir {}", path.display()))?;
+    let file = File::open(path).with_context(|| format!("could not open {}", path.display()))?;
     let mut rep = MigrateReport::default();
 
     for (n, line) in BufReader::new(file).lines().enumerate() {
@@ -49,7 +49,7 @@ pub fn run(conn: &Connection, path: &Path) -> Result<MigrateReport> {
             continue;
         }
         let row: Row = serde_json::from_str(&line)
-            .with_context(|| format!("JSON inválido en la línea {}", n + 1))?;
+            .with_context(|| format!("invalid JSON on line {}", n + 1))?;
 
         if row.status.as_deref() == Some("failed") {
             rep.failed += 1;

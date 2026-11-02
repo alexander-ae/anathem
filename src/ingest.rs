@@ -56,7 +56,7 @@ fn insert_row(tx: &Connection, m: &NewMemory, agent: Option<&str>) -> Result<i64
     for (kind, value) in &m.refs {
         if !VALID_REF_KINDS.contains(&kind.as_str()) {
             bail!(
-                "ref kind inválido {kind:?} (value={value:?}); debe ser uno de {VALID_REF_KINDS:?}"
+                "invalid ref kind {kind:?} (value={value:?}); it has to be one of {VALID_REF_KINDS:?}"
             );
         }
         tx.execute(
@@ -139,7 +139,7 @@ pub struct Saved {
 pub fn normalize_topic(key: &str) -> Result<String> {
     let t = key.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
     if t.is_empty() {
-        bail!("la clave de tema no puede estar vacía");
+        bail!("the topic key cannot be empty");
     }
     Ok(t)
 }

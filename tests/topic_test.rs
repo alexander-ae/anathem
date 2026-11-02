@@ -169,7 +169,7 @@ fn an_empty_key_is_rejected_and_nothing_is_saved() {
     let d = tempfile::tempdir().unwrap();
     let (ok, _, err) = mem(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "  "]);
     assert!(!ok, "una clave vacía tiene que fallar");
-    assert!(err.contains("clave de tema"), "{err}");
+    assert!(err.contains("topic key"), "{err}");
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let n: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
     assert_eq!(n, 0);

@@ -27,20 +27,20 @@ use std::path::Path;
 pub fn restringir_a_dueno(path: &Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let md = std::fs::metadata(path)
-        .with_context(|| format!("no se pudo leer los permisos de {}", path.display()))?;
-    let deseado = if md.is_dir() { 0o700 } else { 0o600 };
+        .with_context(|| format!("could not read the permissions of {}", path.display()))?;
+    let wanted = if md.is_dir() { 0o700 } else { 0o600 };
     // Reading first and only writing on a difference is not an
     // optimisation: on a filesystem that does not carry Unix modes — a
     // mounted exFAT drive, a network share — `set_permissions` fails, and
     // failing there would stop `mem` from opening a database that works
     // perfectly well.
-    if md.permissions().mode() & 0o777 == deseado {
+    if md.permissions().mode() & 0o777 == wanted {
         return Ok(());
     }
-    if let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(deseado)) {
+    if let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(wanted)) {
         eprintln!(
-            "aviso: no se pudieron restringir los permisos de {} ({e}); \
-             si la máquina es compartida, otros usuarios pueden leerlo",
+            "warning: could not restrict the permissions of {} ({e}); \
+             if this machine is shared, other users can read it",
             path.display()
         );
     }
@@ -73,7 +73,7 @@ pub fn restringir_a_dueno(_path: &Path) -> Result<()> {
 pub fn solo_lectura(path: &Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let md = std::fs::metadata(path)
-        .with_context(|| format!("no se pudo leer los permisos de {}", path.display()))?;
+        .with_context(|| format!("could not read the permissions of {}", path.display()))?;
     if md.permissions().mode() & 0o777 == 0o400 {
         return Ok(());
     }

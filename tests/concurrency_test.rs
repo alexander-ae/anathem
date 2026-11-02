@@ -150,7 +150,7 @@ fn search_does_not_fail_even_when_it_cannot_reindex() {
     // quietly become a no-op again — which is exactly how it used to void
     // itself when running as root.
     assert!(
-        err.contains("renombrar"),
+        err.contains("could not rename"),
         "el escenario tiene que ser el rename imposible, no otro fallo: {err}"
     );
 

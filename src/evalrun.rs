@@ -61,16 +61,16 @@ pub fn run(
 ) -> Result<EvalResult> {
     let raw = std::fs::read_to_string(evalset)
         .with_context(|| format!(
-            "no se pudo parse el eval set en {}.\n\n\
-             Un eval set es un archivo JSON con las consultas contra las que medir la\n\
-             recuperación, y qué memorias deberían encontrar. Sin él no hay nada que medir.\n\
-             Formato mínimo:\n\
+            "could not parse the eval set at {}.\n\n\
+             An eval set is a JSON file with the queries to measure retrieval\n\
+             against, and which memories they should find. Without it there is\n\
+             nothing to measure. Minimal format:\n\
              \n\
              {{\"cases\": [{{\"id\": \"q1\", \"query\": \"...\", \"expect_docs\": [\"<ext_id>\"], \"kind\": \"factual\"}}]}}\n\
              \n\
-             Los `expect_docs` son valores de `memories.ext_id`. Ver README para el detalle.",
+             The `expect_docs` are `memories.ext_id` values. See the README for the detail.",
             evalset.display()))?;
-    let set: EvalSet = serde_json::from_str(&raw).context("eval set con JSON inválido")?;
+    let set: EvalSet = serde_json::from_str(&raw).context("eval set with invalid JSON")?;
 
     let (mut h5, mut h50) = (0usize, 0usize);
     let (mut rr, mut lat, mut per_case) = (Vec::new(), Vec::new(), Vec::new());

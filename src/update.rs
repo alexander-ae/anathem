@@ -35,11 +35,11 @@ fn fetch(url: &str) -> Result<String> {
     let out_text = intento("curl", &["-fsSL", "--max-time", "20", url])
         .or_else(|| intento("wget", &["-q", "-O", "-", "--timeout=20", url]));
     match out_text {
-        Some(o) => String::from_utf8(o.stdout).context("la respuesta no es UTF-8"),
+        Some(o) => String::from_utf8(o.stdout).context("the response is not UTF-8"),
         None => bail!(
-            "no pude consultar {url}.\n   \
-             Hace falta `curl` o `wget`, y conexión. Si estás sin red, no pasa nada: \
-             anathem funciona igual."
+            "could not query {url}.\n   \
+             It needs `curl` or `wget`, and a connection. If you are offline that is \
+             fine: anathem works all the same."
         ),
     }
 }
@@ -50,9 +50,9 @@ fn latest_published(json: &str) -> Result<String> {
     // that runs once in a while; the response comes from GitLab and the
     // field is stable.
     let marca = "\"tag_name\":\"";
-    let i = json.find(marca).context("la respuesta no trae tag_name")?;
+    let i = json.find(marca).context("the response carries no tag_name")?;
     let resto = &json[i + marca.len()..];
-    let j = resto.find('"').context("tag_name sin cerrar")?;
+    let j = resto.find('"').context("unterminated tag_name")?;
     Ok(resto[..j].trim_start_matches('v').to_string())
 }
 
@@ -81,24 +81,24 @@ pub fn check_for_update() -> Result<bool> {
     let json = fetch(&latest_release_api())?;
     let published = latest_published(&json)?;
     if is_newer(&published, current) {
-        println!("Hay una versión nueva: {published} (tenés la {current}).");
+        println!("There is a new version: {published} (you have {current}).");
         println!();
-        println!("Para actualizar, el instalador hace lo mismo que la primera vez:");
+        println!("To update, the installer does the same as the first time:");
         println!("    curl -fsSL https://gitlab.com/__alexander__/anathem/-/raw/main/scripts/instalar.sh -o instalar.sh");
         println!("    sh instalar.sh");
         println!();
-        println!("Tus memorias no se tocan: viven en la base, no en el binario.");
+        println!("Your memories are untouched: they live in the database, not the binary.");
         Ok(true)
     } else if published == current {
-        println!("Estás al día: {current} es la última publicada.");
+        println!("You are up to date: {current} is the latest published.");
         Ok(false)
     } else {
         // Happens in a copy built from the repository, which runs ahead of
         // what is published. Saying "you are up to date" there would be
         // lying the other way around.
         println!(
-            "Tenés la {current}, más nueva que la última publicada ({published}). \
-             Seguramente la compilaste vos."
+            "You have {current}, newer than the latest published ({published}). \
+             You probably built it yourself."
         );
         Ok(false)
     }
