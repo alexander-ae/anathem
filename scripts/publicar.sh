@@ -134,12 +134,13 @@ paso "4. The vocabulary pack"
 if [ "$SIN_PAQUETE" -eq 1 ]; then
   aviso "not carried over, by request: installs will fall back to bm25"
 else
-  # Por la API y no parseando `glab release list`: su salida es para leer,
-  # no para cortar con awk, y lleva encabezado, sangría y fechas entre
-  # paréntesis. La primera versión de esto la parseaba y falló en la primera
-  # release que publicó — dijo que no había anterior habiendo una, y subió
-  # una release sin paquete de vocabulario. El error fue silencioso: el
-  # script avisó, pero avisó algo falso.
+  # Through the API and not by parsing `glab release list`: that output is
+  # meant to be read, not cut up — it carries a header, indentation and
+  # dates in parentheses. The first version of this parsed it and failed on
+  # the very first release it published: it said there was no previous one
+  # when v0.2.0 was right there, and shipped a release with no vocabulary
+  # pack. The failure was quiet in the worst way — the script did warn, and
+  # the warning was false.
   ANTERIOR="$(glab api "projects/$(printf '%s' "$REPO" | sed 's|/|%2F|')/releases?per_page=1" 2>/dev/null \
     | sed -n 's/.*"tag_name":"\([^"]*\)".*/\1/p' | head -1)"
   if [ -z "$ANTERIOR" ]; then
@@ -203,9 +204,9 @@ else
   exit 1
 fi
 
-# Y que el paquete llegó, si se suponía que iba. Lo mismo que arriba y por
-# el mismo motivo: el paso 4 avisa cuando no lo arrastra, pero un aviso es
-# una afirmación del script sobre sí mismo. Esto pregunta.
+# And that the pack arrived, if it was supposed to. Same as above and for
+# the same reason: step 4 warns when it does not carry it over, but a
+# warning is the script's claim about itself. This one asks.
 if [ "$SIN_PAQUETE" -eq 0 ]; then
   URL_PAQUETE="https://gitlab.com/$REPO/-/releases/$ETIQUETA/downloads/en-es.anathem-pack"
   if curl -fsSL -o /dev/null --retry 2 --connect-timeout 20 -r 0-1023 "$URL_PAQUETE" 2>/dev/null \
