@@ -4,7 +4,7 @@ Local memory for coding agents (Claude Code, opencode): one binary, one
 SQLite file, no daemon and no HTTP server. Search is BM25 by default; an
 optional vector layer (see [`mem
 model`](#subcommands) and
-[`docs/paquetes-de-vocabulario.md`](docs/paquetes-de-vocabulario.md))
+[`docs/vocabulary-packs.md`](docs/vocabulary-packs.md))
 complements it once you install a vocabulary pack, but the binary works just
 as well without it. It replaces self-hosted supermemory.
 
@@ -95,8 +95,8 @@ recall@5 goes from 34% to 58% (n=50). See
 Without compiling anything, on Linux and macOS:
 
 ```bash
-curl -fsSL https://gitlab.com/__alexander__/anathem/-/raw/main/scripts/instalar.sh -o instalar.sh
-sh instalar.sh --setup-path --connect
+curl -fsSL https://gitlab.com/__alexander__/anathem/-/raw/main/scripts/install.sh -o install.sh
+sh install.sh --setup-path --connect
 ```
 
 It downloads the binary from the latest release, verifies its sha256,
@@ -115,7 +115,7 @@ To build from source —another platform, or preference— clone and add
 
 ```bash
 git clone https://gitlab.com/__alexander__/anathem.git && cd anathem
-sh scripts/instalar.sh --setup-path --build
+sh scripts/install.sh --setup-path --build
 ```
 
 That does need Rust and a C compiler; the script stops and tells you which
@@ -123,7 +123,7 @@ command to run if either is missing. On macOS it asks for the Xcode tools.
 For Windows, see [`docs/windows.md`](docs/windows.md).
 
 Step by step, and what each piece does:
-[`docs/instalacion.md`](docs/instalacion.md).
+[`docs/installation.md`](docs/installation.md).
 
 ### The downloads
 
@@ -153,7 +153,7 @@ installed with `mem model install <file>`.
 | `save <text> --topic <key>` | With a topic key, the new memory replaces the active one holding the same key in the same project (the old one is left `superseded`, not edited and not deleted). It says which one it replaced. Without `--topic`, nothing changes | `mem save "The payment provider is Adyen" --topic payment-provider` |
 | `topics` | Lists the topic keys: project, how many memories each one has had and the id of the current one | `mem topics` |
 | `edit <id>` | Edits the body of a memory in `$EDITOR` | `mem edit 42` |
-| `export --out <dir>` | Exports everything to markdown with frontmatter, one file per memory, losing nothing ([format](docs/formato-de-export.md)) | `mem export --out export/` |
+| `export --out <dir>` | Exports everything to markdown with frontmatter, one file per memory, losing nothing ([format](docs/export-format.md)) | `mem export --out export/` |
 | `import --from <dir>` | Reads what `export` wrote: restoring a backup, moving the memory to another machine, or syncing two computers by hand with git. It demands an empty database unless you pass `--merge`, which adds only what is missing | `mem import --from export/` |
 | `reindex` | Rebuilds the chunks and the FTS5 index from `memories.body` | `mem reindex` |
 | `supersede <new> <old>` | Marks `old` as replaced by `new`; it stops showing up in searches | `mem supersede 42 43` |
@@ -176,7 +176,7 @@ That commit is the one at `HEAD` when it was built: it does not reflect uncommit
 changes, and `mem doctor` shows it but does not compare it against anything. Knowing
 whether the installed binary is up to date is still up to whoever runs it: compare it
 with `git rev-parse --short HEAD` in the repository.
-See [`docs/paquetes-de-vocabulario.md`](docs/paquetes-de-vocabulario.md) for
+See [`docs/vocabulary-packs.md`](docs/vocabulary-packs.md) for
 the pack format and how to generate one.
 
 ## Two-stage search
@@ -348,7 +348,7 @@ That text goes into the system prompt, so it is also an injection route: a
 memory an agent saved summarizing a web page ends up there. It goes inside a
 delimited block, sanitized so that its content cannot close it, and labelled
 as data with the name of whoever saved each note. What that covers and what
-it does not is in [`docs/seguridad.md`](docs/seguridad.md).
+it does not is in [`docs/security.md`](docs/security.md).
 
 It costs tokens in every session, so it is short, and it is turned off or
 cut down from `config.json`:
@@ -432,12 +432,12 @@ eval set for any future change to the ranking — the format of
   [`docs/historia/2026-09-21-anathem-fase1.md`](docs/historia/2026-09-21-anathem-fase1.md)
 - Technical inputs for a phase 2 (reranker / vector layer, deferred
   findings): [`docs/superpowers/fase-2-insumos.md`](docs/superpowers/fase-2-insumos.md)
-- Installation and connecting the agents: [`docs/instalacion.md`](docs/instalacion.md)
+- Installation and connecting the agents: [`docs/installation.md`](docs/installation.md)
 - Security: where text you did not write gets in, what happens when it
   reaches the model, what is mitigated and what is not:
-  [`docs/seguridad.md`](docs/seguridad.md)
+  [`docs/security.md`](docs/security.md)
 - Vocabulary packs (the optional vector layer): format, how to generate them
-  and how to install them: [`docs/paquetes-de-vocabulario.md`](docs/paquetes-de-vocabulario.md)
+  and how to install them: [`docs/vocabulary-packs.md`](docs/vocabulary-packs.md)
 
 ## Installing as a Claude Code plugin
 
@@ -449,7 +449,7 @@ need to edit any JSON by hand:
 /plugin install anathem@anathem
 ```
 
-**You have to install the binary first** and leave it on the `PATH` as `mem` — see [`docs/instalacion.md`](docs/instalacion.md). The plugin invokes it
+**You have to install the binary first** and leave it on the `PATH` as `mem` — see [`docs/installation.md`](docs/installation.md). The plugin invokes it
 by name and uses `~/.anathem/mem.db` as the database, which is created on its own.
 
 It was solved this way, and not by asking for the path with the `userConfig`

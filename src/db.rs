@@ -131,14 +131,14 @@ pub fn open(path: &Path) -> Result<Connection> {
 /// Nothing here can fail the open. A database on a filesystem with no Unix
 /// modes works perfectly well, and refusing to open it over a permission
 /// that cannot exist would be trading a real feature for an imaginary
-/// guarantee; `restringir_a_dueno` warns on stderr instead.
+/// guarantee; `restrict_to_owner` warns on stderr instead.
 fn restringir(path: &Path) {
     if let Some(parent) = path.parent() {
         if parent.as_os_str().is_empty() {
             // `--db mem.db`: the parent is the working directory, which is
             // not ours to narrow.
         } else {
-            let _ = crate::permisos::restringir_a_dueno(parent);
+            let _ = crate::permissions::restrict_to_owner(parent);
         }
     }
     let anexo = |sufijo: &str| {
@@ -148,7 +148,7 @@ fn restringir(path: &Path) {
     };
     for p in [path.to_path_buf(), anexo("-wal"), anexo("-shm")] {
         if p.exists() {
-            let _ = crate::permisos::restringir_a_dueno(&p);
+            let _ = crate::permissions::restrict_to_owner(&p);
         }
     }
 }

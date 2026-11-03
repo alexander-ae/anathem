@@ -20,7 +20,7 @@ REPO_GH="${ANATHEM_REPO_GH:-alexander-ae/anathem}"
 REPO_GL="${ANATHEM_REPO:-__alexander__/anathem}"
 
 if [ -z "$ETIQUETA" ]; then
-  echo "Usage: sh scripts/publicar-mac.sh <tag>    (for example v0.1.0)" >&2
+  echo "Usage: sh scripts/publish-mac.sh <tag>    (for example v0.1.0)" >&2
   echo >&2
   echo "Variables: ANATHEM_REPO_GH (where it is built), ANATHEM_REPO (where it is published)" >&2
   exit 2

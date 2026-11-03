@@ -4,11 +4,11 @@
 # El binario de macOS no sale de acá: los runners macOS de GitLab son solo
 # Premium y Ultimate, y cruzar desde Linux necesitaría el SDK de Apple, cuya
 # licencia lo limita a hardware Apple. Se construye aparte y se sube a la
-# misma release; ver scripts/publicar-mac.sh.
+# misma release; ver scripts/publish-mac.sh.
 #
 # Si los pipelines no arrancan, es que la cuenta todavía no verificó una
 # tarjeta: GitLab lo exige para usar sus runners compartidos en el plan Free.
-# Sin eso, scripts/publicar.sh hace lo mismo desde tu máquina.
+# Sin eso, scripts/publish.sh hace lo mismo desde tu máquina.
 
 stages:
   - probar

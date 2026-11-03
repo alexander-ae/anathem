@@ -5,8 +5,8 @@
 Nothing has to be compiled and Rust does not have to be installed:
 
 ```bash
-curl -fsSL https://gitlab.com/__alexander__/anathem/-/raw/main/scripts/instalar.sh -o instalar.sh
-sh instalar.sh --setup-path
+curl -fsSL https://gitlab.com/__alexander__/anathem/-/raw/main/scripts/install.sh -o install.sh
+sh install.sh --setup-path
 ```
 
 The script detects your platform, downloads the binary from the latest
@@ -28,16 +28,16 @@ Useful options:
 
 ```bash
 # compile from source even though there is a binary (needs cloning the repo)
-sh scripts/instalar.sh --setup-path --build
+sh scripts/install.sh --setup-path --build
 
 # use a vocabulary pack you already have on disk
-sh instalar.sh --setup-path --pack ~/Downloads/en-es.anathem-pack
+sh install.sh --setup-path --pack ~/Downloads/en-es.anathem-pack
 
 # no vector layer: lexical search only, nothing to download
-sh instalar.sh --setup-path --no-pack
+sh install.sh --setup-path --no-pack
 
 # pin a version instead of the latest one
-sh instalar.sh --tag v0.1.0
+sh install.sh --tag v0.1.0
 ```
 
 Everything that gets downloaded is checked against its sha256, and if it
@@ -194,7 +194,7 @@ has not been decided. Today there are two ways to get it:
 - **Have someone send it to you.** It is a loose file: sending it by any means
   works. It does not depend on the operating system or the architecture — it
   is a table of numbers, the same on Linux, macOS or Windows.
-- **Generate it yourself**, with `tools/construir_paquete.py`. That requires
+- **Generate it yourself**, with `tools/build_pack.py`. That requires
   downloading the 512 MB base model and a text sample in the languages you
   want to cover. The full procedure is in
   [`paquetes-de-vocabulario.md`](paquetes-de-vocabulario.md).
@@ -261,7 +261,7 @@ ones that really use the memory pay for it.
 ## 6. Connecting it to Claude Code
 
 The shortest way is to let the CLI do it, which is what
-`instalar.sh --connect` does:
+`install.sh --connect` does:
 
 ```bash
 claude mcp add --scope user anathem -- ~/.local/bin/mem --db ~/.anathem/mem.db serve

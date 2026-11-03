@@ -1,4 +1,4 @@
-use anathem::permisos::restringir_a_dueno;
+use anathem::permissions::restrict_to_owner;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
@@ -423,10 +423,10 @@ fn run(cli: Cli) -> Result<()> {
             // the happy path — also covers the editor exiting with an
             // error.
             let carpeta = tempfile::Builder::new().prefix("anathem-edit-").tempdir()?;
-            restringir_a_dueno(carpeta.path())?;
+            restrict_to_owner(carpeta.path())?;
             let tmp = carpeta.path().join(format!("{id}.md"));
             std::fs::write(&tmp, &body)?;
-            restringir_a_dueno(&tmp)?;
+            restrict_to_owner(&tmp)?;
             let editor = std::env::var("EDITOR")
                 .unwrap_or_else(|_| default_editor(cfg!(windows)).to_string());
             let status = std::process::Command::new(&editor).arg(&tmp).status()?;

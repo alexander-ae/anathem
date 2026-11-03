@@ -84,8 +84,8 @@ pub fn check_for_update() -> Result<bool> {
         println!("There is a new version: {published} (you have {current}).");
         println!();
         println!("To update, the installer does the same as the first time:");
-        println!("    curl -fsSL https://gitlab.com/__alexander__/anathem/-/raw/main/scripts/instalar.sh -o instalar.sh");
-        println!("    sh instalar.sh");
+        println!("    curl -fsSL https://gitlab.com/__alexander__/anathem/-/raw/main/scripts/install.sh -o install.sh");
+        println!("    sh install.sh");
         println!();
         println!("Your memories are untouched: they live in the database, not the binary.");
         Ok(true)

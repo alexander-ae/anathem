@@ -3,9 +3,9 @@
 
 Un paquete es el modelo estático recortado a los idiomas que te interesan:
 el tokenizador sin las piezas que no vas a usar y la tabla de embeddings
-cuantizada a int8. Ver docs/paquetes-de-vocabulario.md.
+cuantizada a int8. Ver docs/vocabulary-packs.md.
 
-    python3 tools/construir_paquete.py --nombre en-es \
+    python3 tools/build_pack.py --nombre en-es \
         --muestra textos_en.txt textos_es.txt --salida en-es.anathem-pack
 """
 import argparse, hashlib, json, struct, sys

@@ -43,7 +43,7 @@ plain text file per language, one line per passage. Any public corpus will do
 determines which vocabulary pieces are kept, so it is worth making it varied
 and **not the corpus you are going to index afterwards**.
 
-    python3 tools/construir_paquete.py \
+    python3 tools/build_pack.py \
         --nombre en-es-pt \
         --muestra textos_en.txt textos_es.txt textos_pt.txt \
         --salida en-es-pt.anathem-pack

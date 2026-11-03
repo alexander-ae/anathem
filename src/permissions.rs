@@ -24,7 +24,7 @@ use std::path::Path;
 /// and a fix that only covered new files would leave exactly the
 /// installations that have the most saved in them unprotected.
 #[cfg(unix)]
-pub fn restringir_a_dueno(path: &Path) -> Result<()> {
+pub fn restrict_to_owner(path: &Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let md = std::fs::metadata(path)
         .with_context(|| format!("could not read the permissions of {}", path.display()))?;
@@ -48,7 +48,7 @@ pub fn restringir_a_dueno(path: &Path) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-pub fn restringir_a_dueno(_path: &Path) -> Result<()> {
+pub fn restrict_to_owner(_path: &Path) -> Result<()> {
     Ok(())
 }
 
@@ -70,7 +70,7 @@ pub fn restringir_a_dueno(_path: &Path) -> Result<()> {
 /// the **directory**, not on the file, so `install` and `remove` go on
 /// working exactly as before.
 #[cfg(unix)]
-pub fn solo_lectura(path: &Path) -> Result<()> {
+pub fn read_only(path: &Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let md = std::fs::metadata(path)
         .with_context(|| format!("could not read the permissions of {}", path.display()))?;
@@ -88,6 +88,6 @@ pub fn solo_lectura(path: &Path) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-pub fn solo_lectura(_path: &Path) -> Result<()> {
+pub fn read_only(_path: &Path) -> Result<()> {
     Ok(())
 }
