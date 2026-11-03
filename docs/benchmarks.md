@@ -150,6 +150,61 @@ questions while breaking two others: seven of the nine failures are the same
 questions in both runs. Whatever is missing there, a second lexical-adjacent
 ranking is not it.
 
+## LongMemEval-M: the same question, ten times the haystack
+
+-S gives each question about 50 sessions to search. -M gives it 460 to 490.
+That is the variable that made the comparison with the paper unreadable, so
+it is the one to pin down.
+
+94 questions (`--questions 100`, six of them abstention and skipped), 47,298
+memories, every question searching ~476 sessions. All 168 evidence sessions
+verified present in the database before measuring.
+
+|                                   | -S bm25 | -S hybrid | -M bm25 | -M hybrid |
+|-----------------------------------|--------:|----------:|--------:|----------:|
+| recall@5, any evidence session    |   96.0% |     96.0% |   88.3% |     89.4% |
+| recall@5, fraction of evidence    |   90.5% |     92.9% |   78.0% |     81.6% |
+| recall@5, every evidence session  |   82.3% |     87.9% |   68.1% |     73.4% |
+| MRR                               |   0.910 |     0.920 |   0.819 |     0.789 |
+| p50 per query                     |   375ms |     369ms |   763ms |     822ms |
+
+**The pack earns more as the haystack deepens**: +2.4 points of fraction
+recall on -S, +3.6 on -M. That is the opposite of a vanishing effect, and it
+is the argument for carrying 22 MB around.
+
+**And on -M it costs MRR while gaining recall** — 0.819 down to 0.789. More
+evidence lands inside the top five and the first hit sits lower in it: RRF
+fusing two rankings dilutes a confident BM25 rank-1. For a tool that hands a
+model five candidates rather than one answer, that is the right side of the
+trade, but it is a trade.
+
+`recall@50` stops being a tautology here and starts meaning something: 97%,
+because 50 candidates out of 476 sessions is a real cut.
+
+| question type              |   n | -M bm25 | -M hybrid |     Δ |
+|----------------------------|----:|--------:|----------:|------:|
+| single-session-user        |  12 |    1.00 |      1.00 | +0.00 |
+| knowledge-update           |  14 |    0.96 |      0.96 | +0.00 |
+| single-session-assistant   |  12 |    1.00 |      0.92 | -0.08 |
+| multi-session              |  24 |    0.67 |      0.77 | +0.10 |
+| temporal-reasoning         |  26 |    0.69 |      0.72 | +0.04 |
+| single-session-preference  |   6 |    0.33 |      0.50 | +0.17 |
+
+The single-session types do not notice the extra 400 distractors at all:
+still 1.00 with ten times the haystack. What degrades under depth is what was
+already weak — `multi-session` and `temporal-reasoning` sit around 0.7 on
+both splits.
+
+Two rows are now reproduced on both splits, which is what makes them worth
+believing. The pack buys `multi-session` (+0.17 on -S, +0.10 on -M) and it
+costs `single-session-assistant` (-0.04 on -S, -0.08 on -M). The regressions
+on -S were questions pointing at the conversation rather than at a topic, and
+the same shape repeats here.
+
+The preference row is the one not to quote. Six questions: a 95% interval of
+roughly -0.05 to 0.71, and it moves +0.17 here while -S says +0.00 at n=30.
+That is noise with a plausible-looking face on it.
+
 ## Against published numbers
 
 Resist the comparison. Two gaps make most of them meaningless, and both are
@@ -164,26 +219,29 @@ axis. Those figures are also vendor self-reports; an independent run of Mem0's
 open-source edition came out at 32.4% against the platform's 93.4%, which says
 more about reproducibility in this area than about either system.
 
-**The paper's retriever table is not confirmed to be this split.** LongMemEval's
-Appendix E.1 gives session-level Recall@5 of 0.634 for BM25, 0.723 for
-Contriever and 0.720 for Stella V5 1.5B, against 0.905 measured here for BM25
-alone. That gap is too large to take at face value: the appendix does not name
-its split, the adjacent table uses LongMemEval-**M**, and -M gives every
-question roughly 500 sessions of haystack where -S gives about 50. Retrieval
-over ten times the distractors is a different problem.
+**The paper's retriever table is closer to comparable, with one unknown
+left.** LongMemEval's Appendix E.1 gives session-level Recall@5 of 0.634 for
+BM25, 0.723 for Contriever and 0.720 for Stella V5 1.5B. Against anathem's
+BM25 on -S, 0.905, that gap was too large to take at face value, and the
+appendix does not name its split while the adjacent table uses -M.
 
-There is a second candidate explanation that would be real rather than an
-artefact: anathem indexes chunks and lifts the best chunk to its memory, while
-a plain session-level BM25 scores each whole session as one document, and term
+Measuring -M closes most of it. On the harder haystack anathem's BM25 is
+0.780, against the appendix's 0.634 — a 15-point gap where -S showed 27. The
+95% interval on 94 questions is [0.696, 0.864], so 0.634 sits outside it and
+the remainder is not sampling noise. With the pack the figure is 0.816, above
+the appendix's Contriever (0.723) and Stella V5 1.5B (0.720) rows as well.
+
+What is left is one methodology difference, and it is a plausible one:
+anathem scores chunks and lifts the best chunk to its memory, while a
+session-level BM25 scores each whole session as one document, and term
 frequency dilutes in a long one. Chunk-level retrieval beating document-level
-BM25 on long documents is a known effect.
+BM25 on long documents is a known effect, and it is the kind of difference
+that would survive any split.
 
-Both explanations fit, and this measurement cannot separate them. Running
-LongMemEval-M (`longmemeval_m_cleaned.json`, 2.7 GB) would: it is the harder
-haystack, and if the gap survives there the architecture is doing the work.
-Until someone does that, the honest claim is the narrow one — the pack buys
-2.4 points of recall over BM25 on -S, and the two sit in the same range as the
-retrievers the paper tried.
+So: anathem's retrieval is in the range of the paper's dense retrievers and
+above its BM25 row, and the most likely reason is the indexing unit rather
+than anything clever. That is a narrower claim than "anathem beats BM25 by 15
+points", and it is the one the measurement supports.
 
 ## What this does not measure
 
