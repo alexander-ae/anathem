@@ -341,9 +341,67 @@ fn database_section(db: &Path) -> (Section, Option<Connection>) {
         }
         Ok(_) => s.bien(format!("{} opens fine", db.display())),
     }
+    permissions_section(db, &mut s);
     check_database(&conn, &mut s);
     (s, Some(conn))
 }
+
+/// Whether the database is readable by anyone but its owner.
+///
+/// It only reports. `mem doctor` promises to change nothing, and the fix
+/// belongs to `db::open`, which every command that actually opens the
+/// database goes through — the diagnostic opens it `immutable=1` and never
+/// gets there.
+///
+/// That asymmetry is exactly why this check exists. An installation
+/// upgraded from a version before the permissions fix keeps its `0644`
+/// until some command opens the database for real, and until then the
+/// diagnostic was printing eighteen green lines and `All good.` without a
+/// word about the memories being readable by every local user. A diagnostic
+/// that stays quiet about the one thing it can see and the user cannot is
+/// worse than one that does not look.
+#[cfg(unix)]
+fn permissions_section(db: &Path, s: &mut Section) {
+    use std::os::unix::fs::PermissionsExt;
+    let modo = |p: &Path| -> Option<u32> {
+        std::fs::metadata(p).ok().map(|m| m.permissions().mode() & 0o777)
+    };
+    let mut abiertos: Vec<String> = Vec::new();
+    // The directory too: `0755` on it leaks the names of the packs and of
+    // anything else living beside the database.
+    if let Some(parent) = db.parent().filter(|p| !p.as_os_str().is_empty()) {
+        if let Some(m) = modo(parent) {
+            if m & 0o077 != 0 {
+                abiertos.push(format!("{} is {:04o}", parent.display(), m));
+            }
+        }
+    }
+    // The `-wal` and `-shm` carry the same content as the database, so a
+    // narrow `mem.db` beside a wide `mem.db-wal` protects nothing.
+    for sufijo in ["", "-wal", "-shm"] {
+        let mut ruta = db.as_os_str().to_os_string();
+        ruta.push(sufijo);
+        let ruta = std::path::PathBuf::from(ruta);
+        if let Some(m) = modo(&ruta) {
+            if m & 0o077 != 0 {
+                abiertos.push(format!("{} is {:04o}", ruta.display(), m));
+            }
+        }
+    }
+    if abiertos.is_empty() {
+        s.bien("readable only by its owner");
+    } else {
+        s.warning(format!(
+            "readable by other users on this machine — {}. Anything that opens the \
+             database narrows it: `mem search \"\"` is enough. This diagnostic does not, \
+             because it changes nothing",
+            abiertos.join(", ")
+        ));
+    }
+}
+
+#[cfg(not(unix))]
+fn permissions_section(_db: &Path, _s: &mut Section) {}
 
 fn check_database(conn: &Connection, s: &mut Section) {
     match missing_vector_tables(conn) {
