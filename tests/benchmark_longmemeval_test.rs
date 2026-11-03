@@ -137,3 +137,81 @@ fn ext_ids_are_namespaced_so_two_questions_can_share_a_session_id() {
     assert_eq!(ids.len(), n, "two memories share an ext_id: {ids:?}");
     assert!(ids.iter().all(|i| i.contains('/')), "ext_ids are not namespaced: {ids:?}");
 }
+
+/// LongMemEval lists the same session twice inside one instance in 13 of its
+/// 500 cases. Writing the file twice is harmless when the content matches,
+/// but reporting a count that does not match what landed on disk is not:
+/// this repository has been bitten three times by a tool that announced work
+/// it had not done.
+const DUPLICATE_FIXTURE: &str = r#"[
+  {
+    "question_id": "dup",
+    "question_type": "multi-session",
+    "question": "what happened",
+    "haystack_session_ids": ["s1", "s1", "s2"],
+    "haystack_dates": ["2023/05/01 (Mon) 09:00", "2023/05/01 (Mon) 09:00", "2023/05/02 (Tue) 09:00"],
+    "haystack_sessions": [
+      [{"role": "user", "content": "the same session listed twice"}],
+      [{"role": "user", "content": "the same session listed twice"}],
+      [{"role": "user", "content": "a different one"}]
+    ],
+    "answer_session_ids": ["s1"]
+  }
+]"#;
+
+const CONFLICTING_FIXTURE: &str = r#"[
+  {
+    "question_id": "clash",
+    "question_type": "multi-session",
+    "question": "what happened",
+    "haystack_session_ids": ["s1", "s1"],
+    "haystack_dates": ["2023/05/01 (Mon) 09:00", "2023/05/02 (Tue) 09:00"],
+    "haystack_sessions": [
+      [{"role": "user", "content": "one body"}],
+      [{"role": "user", "content": "a completely different body"}]
+    ],
+    "answer_session_ids": ["s1"]
+  }
+]"#;
+
+fn convert(py: &str, dir: &std::path::Path, fixture: &str) -> std::process::Output {
+    let input = dir.join("in.json");
+    std::fs::write(&input, fixture).unwrap();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    Command::new(py)
+        .arg(root.join("tools/longmemeval_to_memories.py"))
+        .arg(&input)
+        .arg(dir.join("out"))
+        .output()
+        .expect("could not run the converter")
+}
+
+#[test]
+fn the_count_it_reports_matches_the_files_on_disk() {
+    let Some(py) = python() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let out = convert(&py, dir.path(), DUPLICATE_FIXTURE);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+
+    let on_disk = std::fs::read_dir(dir.path().join("out/memories")).unwrap().count();
+    let said = String::from_utf8_lossy(&out.stdout);
+    let reported: usize = said.split_whitespace().next().unwrap().parse().unwrap();
+    assert_eq!(reported, on_disk, "it reported {reported} memories and wrote {on_disk}: {said}");
+    assert_eq!(on_disk, 2, "the repeated session is one memory, not two");
+    assert!(said.contains("duplicate"), "the repetition has to be said out loud: {said}");
+}
+
+#[test]
+fn it_refuses_when_a_repeated_session_id_carries_different_bodies() {
+    let Some(py) = python() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let out = convert(&py, dir.path(), CONFLICTING_FIXTURE);
+
+    // Here the second write would silently replace the first, and the lost
+    // memory can be the evidence the question is scored on. Failing loudly is
+    // the only honest option: the measurement would be wrong and nothing
+    // would say so.
+    assert!(!out.status.success(), "it should have refused");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("clash/s1"), "the message has to name the ext_id: {err}");
+}

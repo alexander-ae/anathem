@@ -89,7 +89,14 @@ def convert(instances, out):
     memories = out / "memories"
     memories.mkdir(parents=True, exist_ok=True)
     cases = []
-    written = 0
+    # ext_id -> body already written. LongMemEval lists the same session
+    # twice inside one instance in 13 of its 500 cases. Writing it twice is
+    # harmless when the body matches; writing a *different* body over it
+    # loses a memory, and the lost one can be the evidence the question is
+    # scored on, so that stops the run instead of skewing the number.
+    seen = {}
+    duplicates = 0
+    conflicts = []
 
     for inst in instances:
         qid = inst["question_id"]
@@ -105,6 +112,13 @@ def convert(instances, out):
             if not body:
                 continue
             ext_id = f"{qid}/{sid}"
+            if ext_id in seen:
+                if seen[ext_id] == body:
+                    duplicates += 1
+                else:
+                    conflicts.append(ext_id)
+                continue
+            seen[ext_id] = body
             created = iso_date(dates[n] if n < len(dates) else "")
             title = " ".join(body.split())[:120]
             text = (
@@ -119,7 +133,6 @@ def convert(instances, out):
                 f"{body}\n"
             )
             (memories / file_name(ext_id)).write_text(text, encoding="utf-8")
-            written += 1
 
         if answerable:
             cases.append({
@@ -137,7 +150,7 @@ def convert(instances, out):
         }, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    return written, len(cases)
+    return len(seen), len(cases), duplicates, conflicts
 
 
 def main(argv):
@@ -151,9 +164,22 @@ def main(argv):
     if isinstance(instances, dict):
         instances = [instances]
 
-    written, cases = convert(instances, pathlib.Path(argv[2]))
+    written, cases, duplicates, conflicts = convert(instances, pathlib.Path(argv[2]))
+    if conflicts:
+        print(
+            "the same session id carries two different bodies, so one would be\n"
+            "silently lost — and the lost one can be the evidence a question is\n"
+            "scored on:\n  " + "\n  ".join(sorted(set(conflicts))),
+            file=sys.stderr,
+        )
+        return 1
+
     skipped = len(instances) - cases
-    print(f"{written} memories, {cases} cases, {skipped} instances skipped (abstention or no evidence)")
+    extra = f", {duplicates} duplicate sessions collapsed" if duplicates else ""
+    print(
+        f"{written} memories, {cases} cases, "
+        f"{skipped} instances skipped (abstention or no evidence){extra}"
+    )
     return 0
 
 
