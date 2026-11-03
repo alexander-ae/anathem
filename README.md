@@ -397,6 +397,10 @@ mem --db ~/.anathem/mem.db eval --evalset eval/evalset.json --label "anathem bm2
   --out eval/results/anathem-bm25.json
 ```
 
+Those numbers come from the author's private corpus, which nobody else can
+reproduce. For a measurement anyone can repeat, over a public dataset with a
+licence that permits it, see [`docs/benchmarks.md`](docs/benchmarks.md).
+
 `eval/evalset.json` and `eval/results/` are not versioned (see the caveats
 above: the eval set is built on the author's private corpus). `mem eval`
 works just as well as a regression test over your own corpus and your own
@@ -439,6 +443,7 @@ eval set for any future change to the ranking — the format of
 - Vocabulary packs (the optional vector layer): format, how to generate them
   and how to install them: [`docs/vocabulary-packs.md`](docs/vocabulary-packs.md)
 - What changed in each version: [`CHANGELOG.md`](CHANGELOG.md)
+- Measuring retrieval against a public dataset: [`docs/benchmarks.md`](docs/benchmarks.md)
 
 ## Installing as a Claude Code plugin
 

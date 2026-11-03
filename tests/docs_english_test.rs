@@ -114,17 +114,32 @@ fn every_documented_mem_command_exists() {
             if !in_block { continue; }
             let t = line.trim_start().trim_start_matches("$ ");
             let Some(resto) = t.strip_prefix("mem ") else { continue };
-            // Saltea las banderas globales para llegar al subcomando.
-            let sub = resto
-                .split_whitespace()
-                .find(|w| !w.starts_with('-') && !w.contains('/') && !w.contains('~'));
+            // Skips the global flags to reach the subcommand. `--db` takes a
+            // value, so its value has to be skipped as well: without that,
+            // `mem --db bench.db init` reads `bench.db` as the subcommand and
+            // the guard reports a command that nobody documented. It only
+            // looked right while every documented path happened to carry a
+            // `/`.
+            let mut words = resto.split_whitespace();
+            let mut sub = None;
+            while let Some(w) = words.next() {
+                if w == "--db" {
+                    words.next();
+                    continue;
+                }
+                if w.starts_with('-') || w.contains('/') || w.contains('~') {
+                    continue;
+                }
+                sub = Some(w);
+                break;
+            }
             let Some(sub) = sub else { continue };
             if !known.iter().any(|k| k == sub) {
-                offenders.push(format!("{}:{} `mem {sub}` no existe", f.display(), n + 1));
+                offenders.push(format!("{}:{} `mem {sub}` does not exist", f.display(), n + 1));
             }
         }
     }
-    assert!(offenders.is_empty(), "comandos documentados que no existen:\n{}", offenders.join("\n"));
+    assert!(offenders.is_empty(), "documented commands that do not exist:\n{}", offenders.join("\n"));
 }
 
 /// Todo archivo del repositorio que un documento nombra existe de verdad.

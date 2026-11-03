@@ -14,6 +14,13 @@ struct Case {
     id: String,
     query: String,
     expect_docs: Vec<String>,
+    /// The project this case's haystack lives in. A benchmark that gives
+    /// every question its own history needs the search confined to it:
+    /// pooling the haystacks and searching all of them measures something
+    /// harder than the benchmark defines. `None` searches everything, which
+    /// is what an eval set over a single corpus wants.
+    #[serde(default)]
+    project: Option<String>,
     #[serde(default)]
     kind: Option<String>,
     #[serde(default)]
@@ -78,8 +85,9 @@ pub fn run(
     for c in &set.cases {
         let q = search::Query {
             text: c.query.clone(),
+            project: c.project.clone(),
             limit: 50,
-            budget_tokens: usize::MAX, // el eval mide recuperación, no inyección
+            budget_tokens: usize::MAX,
             // The eval measures retrieval, not injection: trimming the
             // snippet would falsify its figures. It is already the default,
             // but it is left explicit so it does not depend on `Default`
