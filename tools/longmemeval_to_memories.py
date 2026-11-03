@@ -15,6 +15,11 @@ the file:
     mem --db bench.db import --from bench/memories
     mem --db bench.db eval --evalset bench/evalset.json --label "anathem bm25"
 
+`--questions N` keeps only the first N instances, corpus included. It exists
+for `longmemeval_m_cleaned.json`, where each question drags around 500
+haystack sessions and all 500 questions do not fit on a laptop: what makes -M
+the harder benchmark is the depth of one haystack, not how many there are.
+
 What it writes:
 
   bench/memories/*.md   one file per history session, in the frontmatter
@@ -154,17 +159,41 @@ def convert(instances, out):
 
 
 def main(argv):
-    if len(argv) != 3:
+    args, questions = [], None
+    rest = argv[1:]
+    while rest:
+        a = rest.pop(0)
+        if a == "--questions":
+            if not rest:
+                print("--questions needs a number", file=sys.stderr)
+                return 2
+            questions = int(rest.pop(0))
+        else:
+            args.append(a)
+
+    if len(args) != 2:
         print(__doc__.split("\n\n")[0], file=sys.stderr)
-        print(f"\nusage: {argv[0]} <longmemeval file.json> <output dir>", file=sys.stderr)
+        print(
+            f"\nusage: {argv[0]} <longmemeval file.json> <output dir> [--questions N]",
+            file=sys.stderr,
+        )
         return 2
 
-    src = pathlib.Path(argv[1])
+    src = pathlib.Path(args[0])
     instances = json.loads(src.read_text(encoding="utf-8"))
     if isinstance(instances, dict):
         instances = [instances]
 
-    written, cases, duplicates, conflicts = convert(instances, pathlib.Path(argv[2]))
+    if questions is not None:
+        # A prefix and not a random sample: there is no seed to record, and
+        # the same N hands anyone who repeats the run the same corpus.
+        # LongMemEval-M carries around 500 haystack sessions per question,
+        # and 500 of those do not fit on a laptop. What makes -M the harder
+        # benchmark is the depth of one haystack, not how many there are, so
+        # fewer questions keeps the comparison and drops the cost.
+        instances = instances[:questions]
+
+    written, cases, duplicates, conflicts = convert(instances, pathlib.Path(args[1]))
     if conflicts:
         print(
             "the same session id carries two different bodies, so one would be\n"

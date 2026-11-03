@@ -215,3 +215,38 @@ fn it_refuses_when_a_repeated_session_id_carries_different_bodies() {
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains("clash/s1"), "the message has to name the ext_id: {err}");
 }
+
+#[test]
+fn it_can_take_a_prefix_of_the_questions() {
+    let Some(py) = python() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("in.json");
+    std::fs::write(&input, FIXTURE).unwrap();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let out = Command::new(&py)
+        .arg(root.join("tools/longmemeval_to_memories.py"))
+        .arg(&input)
+        .arg(dir.path().join("out"))
+        .arg("--questions")
+        .arg("1")
+        .output()
+        .expect("could not run the converter");
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+
+    // LongMemEval-M gives each question around 500 haystack sessions, and
+    // 500 questions of that do not fit on a laptop. What makes -M the harder
+    // benchmark is the depth of one haystack, not how many of them there
+    // are, so taking fewer questions keeps the comparison and drops the cost.
+    // A prefix, not a sample: no seed to record, and the same N gives the
+    // same corpus to anyone who runs it.
+    let raw = std::fs::read_to_string(dir.path().join("out/evalset.json")).unwrap();
+    let set: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(set["cases"].as_array().unwrap().len(), 1);
+    assert_eq!(set["cases"][0]["id"], "gpt4_abc");
+
+    // And the dropped question's sessions are not in the corpus either: they
+    // would be distractors nothing ever searches, inflating the index for
+    // nothing.
+    let n = std::fs::read_dir(dir.path().join("out/memories")).unwrap().count();
+    assert_eq!(n, 2, "only the kept question's two sessions");
+}

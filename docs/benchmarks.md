@@ -46,6 +46,12 @@ With a vocabulary pack installed, `mem reindex` before the eval measures the
 hybrid layer instead of BM25 alone, and the two result files are directly
 comparable.
 
+For `longmemeval_m_cleaned.json` — 2.6 GB, around 500 haystack sessions per
+question — add `--questions N` to the converter. It keeps the first N
+instances with their full histories, which is the part that makes -M hard;
+all 500 of them do not fit on a laptop. A prefix and not a random sample, so
+there is no seed to record and the same N gives everyone the same corpus.
+
 ## Two decisions the conversion makes
 
 **Every question searches only its own history.** Each memory is namespaced
