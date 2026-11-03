@@ -124,3 +124,51 @@ fn an_installed_pack_is_read_only_and_still_replaceable() {
     );
     assert_eq!(mode(&instalado), 0o400);
 }
+
+/// `mem doctor` tiene que decir cuando la base está abierta a otros usuarios.
+///
+/// El diagnóstico abre la base en `immutable=1`, así que NO pasa por
+/// `db::open` y por lo tanto no aplica la corrección de permisos. Eso está
+/// bien —su contrato dice que no modifica nada— pero callarlo no: una
+/// instalación con la base en 0644 recibía dieciocho líneas en verde y un
+/// «All good.» sin una palabra sobre el asunto. Medido sobre una instalación
+/// real que venía de una versión anterior.
+#[test]
+fn doctor_reports_a_world_readable_database() {
+    let d = tempfile::tempdir().unwrap();
+    let home = d.path().join("anathem");
+    let db = home.join("mem.db");
+    assert!(mem(&db, &["init"]));
+    assert!(mem(&db, &["save", "una nota"]));
+
+    // Como la dejaría una versión anterior al arreglo.
+    std::fs::set_permissions(&db, std::fs::Permissions::from_mode(0o644)).unwrap();
+    std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let o = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
+        .arg("--db").arg(&db).arg("doctor").output().unwrap();
+    let out = String::from_utf8_lossy(&o.stdout).to_string();
+
+    assert!(out.contains("0644"), "tiene que decir qué permisos tiene: {out}");
+    assert!(
+        out.to_lowercase().contains("readable") || out.to_lowercase().contains("other users"),
+        "y qué significa: {out}"
+    );
+    // Es un aviso y no un problema: la base funciona perfectamente.
+    assert_eq!(o.status.code(), Some(0), "no puede hacer fallar el diagnóstico: {out}");
+
+    // Y no la corrige: doctor no modifica nada.
+    let modo = std::fs::metadata(&db).unwrap().permissions().mode() & 0o777;
+    assert_eq!(modo, 0o644, "doctor no tiene que cambiar los permisos");
+}
+
+#[test]
+fn doctor_says_nothing_when_the_permissions_are_right() {
+    let d = tempfile::tempdir().unwrap();
+    let db = d.path().join("anathem").join("mem.db");
+    assert!(mem(&db, &["init"]));
+    let o = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
+        .arg("--db").arg(&db).arg("doctor").output().unwrap();
+    let out = String::from_utf8_lossy(&o.stdout).to_string();
+    assert!(!out.contains("0644"), "con 0600 no hay nada que decir: {out}");
+}
