@@ -399,7 +399,10 @@ mem --db ~/.anathem/mem.db eval --evalset eval/evalset.json --label "anathem bm2
 
 Those numbers come from the author's private corpus, which nobody else can
 reproduce. For a measurement anyone can repeat, over a public dataset with a
-licence that permits it, see [`docs/benchmarks.md`](docs/benchmarks.md).
+licence that permits it, see [`docs/benchmarks.md`](docs/benchmarks.md): on
+LongMemEval-S, 470 questions over 23,854 memories, recall@5 is 82.3% with
+BM25 alone and 87.9% with the vocabulary pack, counting a question as found
+only when every evidence session it needs is in the top five.
 
 `eval/evalset.json` and `eval/results/` are not versioned (see the caveats
 above: the eval set is built on the author's private corpus). `mem eval`
