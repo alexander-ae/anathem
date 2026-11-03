@@ -86,3 +86,50 @@ fn it_classifies_code_review_with_a_reviewer() {
     let t = tags::classify("el revisor aprobó los cambios tras revisarlos").unwrap();
     assert!(t.contains(&"code-review".to_string()), "tags: {t:?}");
 }
+
+/// Las siete reglas por defecto tienen que disparar en los dos idiomas.
+///
+/// La taxonomía por defecto es, a propósito, de ingeniería general: sin
+/// nombres propios ni vocabulario de un stack o equipo. Pero sus patrones
+/// nacieron escritos contra memorias en español, así que para alguien que
+/// guarda en inglés varias quedaban mudas — y una herramienta que dice
+/// clasificar sola y no clasifica nada parece rota, no neutral.
+///
+/// Un `tags.json` propio sigue reemplazándolas por completo; esto es solo
+/// qué pasa cuando no hay ninguno.
+#[test]
+fn the_default_taxonomy_fires_in_both_languages() {
+    // (tag esperado, texto en español, texto en inglés)
+    let casos: &[(&str, &str, &str)] = &[
+        ("decision",    "Se decidió usar SQLite por la concurrencia",
+                        "We decided to use SQLite because of concurrency"),
+        ("bug",         "Hay un bug en el importador que rompe la carga",
+                        "There is a bug in the importer that breaks the load"),
+        ("convention",  "La convención del equipo es correr lint antes del push",
+                        "The team convention is to run lint before pushing"),
+        ("performance", "La consulta tiene un N+1 y sube la latencia",
+                        "The query has an N+1 and raises latency"),
+        ("testing",     "Faltan specs y la cobertura bajó",
+                        "Specs are missing and coverage dropped"),
+        ("docs",        "Actualizar la documentación y el changelog",
+                        "Update the documentation and the changelog"),
+        ("code-review", "Lo levantó el reviewer en el PR #4821",
+                        "The reviewer raised it in PR #4821"),
+    ];
+    for (tag, es, en) in casos {
+        for (idioma, texto) in [("español", es), ("inglés", en)] {
+            let t = tags::classify(texto).unwrap();
+            assert!(
+                t.contains(&tag.to_string()),
+                "la regla «{tag}» no disparó en {idioma} con «{texto}» — salió {t:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_merge_request_counts_as_a_review_too() {
+    // El proyecto vive en GitLab, donde no se llaman pull requests.
+    let t = tags::classify("Lo discutimos en el merge request").unwrap();
+    assert!(t.contains(&"code-review".to_string()), "tags: {t:?}");
+}
