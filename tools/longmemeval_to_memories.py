@@ -15,7 +15,9 @@ the file:
     mem --db bench.db import --from bench/memories
     mem --db bench.db eval --evalset bench/evalset.json --label "anathem bm25"
 
-`--questions N` keeps only the first N instances, corpus included. It exists
+`--questions N` keeps N instances spread evenly through the file, corpus
+included — not the first N, which in `longmemeval_m` would be nothing but
+`single-session-*` questions. It exists
 for `longmemeval_m_cleaned.json`, where each question drags around 500
 haystack sessions and all 500 questions do not fit on a laptop: what makes -M
 the harder benchmark is the depth of one haystack, not how many there are.
@@ -184,14 +186,24 @@ def main(argv):
     if isinstance(instances, dict):
         instances = [instances]
 
-    if questions is not None:
-        # A prefix and not a random sample: there is no seed to record, and
-        # the same N hands anyone who repeats the run the same corpus.
-        # LongMemEval-M carries around 500 haystack sessions per question,
-        # and 500 of those do not fit on a laptop. What makes -M the harder
-        # benchmark is the depth of one haystack, not how many there are, so
-        # fewer questions keeps the comparison and drops the cost.
-        instances = instances[:questions]
+    if questions is not None and questions < len(instances):
+        # Evenly spaced, NOT the first N. The file is sorted by question
+        # type: the first 100 instances of longmemeval_m are entirely
+        # `single-session-*`, the two types that are easiest to retrieve,
+        # while the file as a whole is 54% `multi-session` and
+        # `temporal-reasoning`. A prefix would measure the easy stratum and
+        # call it the benchmark.
+        #
+        # Spacing rather than a random sample so there is no seed to write
+        # down: the same N hands anyone repeating the run the same corpus.
+        #
+        # Why subset at all: LongMemEval-M carries around 476 haystack
+        # sessions per question, and all 500 questions of that is 237,655
+        # sessions. What makes -M the harder benchmark is the depth of one
+        # haystack, not how many there are, so fewer questions keeps the
+        # comparison and drops the cost.
+        total = len(instances)
+        instances = [instances[(i * total) // questions] for i in range(questions)]
 
     written, cases, duplicates, conflicts = convert(instances, pathlib.Path(args[1]))
     if conflicts:

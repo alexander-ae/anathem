@@ -46,11 +46,22 @@ With a vocabulary pack installed, `mem reindex` before the eval measures the
 hybrid layer instead of BM25 alone, and the two result files are directly
 comparable.
 
-For `longmemeval_m_cleaned.json` — 2.6 GB, around 500 haystack sessions per
-question — add `--questions N` to the converter. It keeps the first N
-instances with their full histories, which is the part that makes -M hard;
-all 500 of them do not fit on a laptop. A prefix and not a random sample, so
-there is no seed to record and the same N gives everyone the same corpus.
+For `longmemeval_m_cleaned.json` — 2.6 GB, 460 to 490 haystack sessions per
+question, 237,655 sessions in all — add `--questions N` to the converter. It
+keeps N instances spread evenly through the file, with their histories
+intact: the depth of one haystack is what makes -M hard, and all 500 of them
+do not fit on a laptop.
+
+**Evenly spread, not the first N.** The file is sorted by question type. Its
+first 100 instances are 100% `single-session-user` and
+`single-session-assistant` — the two types anathem already answers perfectly
+on -S — while the file as a whole is 54% `multi-session` and
+`temporal-reasoning`. A prefix measures the easy stratum and reports it as
+the benchmark. With the spacing, `--questions 100` lands within three points
+of the full set on every question type.
+
+The selection is deterministic, so there is no seed to record and the same N
+gives everyone the same corpus.
 
 ## Two decisions the conversion makes
 

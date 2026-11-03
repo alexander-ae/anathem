@@ -217,7 +217,7 @@ fn it_refuses_when_a_repeated_session_id_carries_different_bodies() {
 }
 
 #[test]
-fn it_can_take_a_prefix_of_the_questions() {
+fn it_can_take_a_subset_of_the_questions() {
     let Some(py) = python() else { return };
     let dir = tempfile::tempdir().unwrap();
     let input = dir.path().join("in.json");
@@ -237,8 +237,8 @@ fn it_can_take_a_prefix_of_the_questions() {
     // 500 questions of that do not fit on a laptop. What makes -M the harder
     // benchmark is the depth of one haystack, not how many of them there
     // are, so taking fewer questions keeps the comparison and drops the cost.
-    // A prefix, not a sample: no seed to record, and the same N gives the
-    // same corpus to anyone who runs it.
+    // No seed to record: the selection is deterministic, so the same N gives
+    // the same corpus to anyone who runs it.
     let raw = std::fs::read_to_string(dir.path().join("out/evalset.json")).unwrap();
     let set: serde_json::Value = serde_json::from_str(&raw).unwrap();
     assert_eq!(set["cases"].as_array().unwrap().len(), 1);
@@ -249,4 +249,55 @@ fn it_can_take_a_prefix_of_the_questions() {
     // nothing.
     let n = std::fs::read_dir(dir.path().join("out/memories")).unwrap().count();
     assert_eq!(n, 2, "only the kept question's two sessions");
+}
+
+/// Four instances, two of each type, laid out the way LongMemEval-M really
+/// is: sorted by question type. A prefix of this file is all of one type.
+const SORTED_FIXTURE: &str = r#"[
+  {"question_id":"easy_1","question_type":"single-session-user","question":"q1",
+   "haystack_session_ids":["a"],"haystack_dates":["2023/05/01 (Mon) 09:00"],
+   "haystack_sessions":[[{"role":"user","content":"one"}]],"answer_session_ids":["a"]},
+  {"question_id":"easy_2","question_type":"single-session-user","question":"q2",
+   "haystack_session_ids":["a"],"haystack_dates":["2023/05/01 (Mon) 09:00"],
+   "haystack_sessions":[[{"role":"user","content":"two"}]],"answer_session_ids":["a"]},
+  {"question_id":"hard_1","question_type":"multi-session","question":"q3",
+   "haystack_session_ids":["a"],"haystack_dates":["2023/05/01 (Mon) 09:00"],
+   "haystack_sessions":[[{"role":"user","content":"three"}]],"answer_session_ids":["a"]},
+  {"question_id":"hard_2","question_type":"multi-session","question":"q4",
+   "haystack_session_ids":["a"],"haystack_dates":["2023/05/01 (Mon) 09:00"],
+   "haystack_sessions":[[{"role":"user","content":"four"}]],"answer_session_ids":["a"]}
+]"#;
+
+#[test]
+fn a_subset_keeps_the_mix_of_question_types() {
+    let Some(py) = python() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("in.json");
+    std::fs::write(&input, SORTED_FIXTURE).unwrap();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let out = Command::new(&py)
+        .arg(root.join("tools/longmemeval_to_memories.py"))
+        .arg(&input)
+        .arg(dir.path().join("out"))
+        .arg("--questions")
+        .arg("2")
+        .output()
+        .expect("could not run the converter");
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+
+    let raw = std::fs::read_to_string(dir.path().join("out/evalset.json")).unwrap();
+    let set: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    let kinds: Vec<&str> = set["cases"].as_array().unwrap()
+        .iter().map(|c| c["kind"].as_str().unwrap()).collect();
+
+    // LongMemEval-M is sorted by question type: its first 100 instances are
+    // entirely `single-session-*`, the two types anathem already answers
+    // perfectly, while the file as a whole is 54% `multi-session` and
+    // `temporal-reasoning`. Taking a prefix would measure the easiest
+    // stratum and report it as the benchmark.
+    assert_eq!(kinds.len(), 2);
+    assert!(
+        kinds.contains(&"single-session-user") && kinds.contains(&"multi-session"),
+        "a subset of a type-sorted file has to span the types, got {kinds:?}"
+    );
 }
