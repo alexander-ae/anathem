@@ -88,12 +88,18 @@ LongMemEval-S, `longmemeval_s_cleaned.json`
 470 answerable questions over 23,854 memories, on one laptop. The hybrid run
 uses the `en-es` pack, 256 dimensions, 623,648 chunks, full coverage.
 
-|                              |  bm25 | hybrid |      Δ |
-|------------------------------|------:|-------:|-------:|
-| recall@5, any evidence       | 96.0% |  96.0% |  +0.0% |
-| recall@5, all evidence       | 82.3% |  87.9% |  +5.5% |
-| MRR                          | 0.910 |  0.920 | +0.010 |
-| p50 per query                | 375ms |  369ms |   -6ms |
+|                                   |  bm25 | hybrid |      Δ |
+|-----------------------------------|------:|-------:|-------:|
+| recall@5, any evidence session    | 96.0% |  96.0% |  +0.0% |
+| recall@5, fraction of evidence    | 90.5% |  92.9% |  +2.4% |
+| recall@5, every evidence session  | 82.3% |  87.9% |  +5.5% |
+| MRR                               | 0.910 |  0.920 | +0.010 |
+| p50 per query                     | 375ms |  369ms |   -6ms |
+
+The middle row is the textbook Recall@k when a query has several relevant
+documents — the mean fraction of them inside the top k — and it is the one to
+quote next to anybody else's number. The other two bound it: the first is
+generous, the last is what answering the question actually needs.
 
 The headline says nothing: on the loose measure the two are identical. The
 whole difference is in the questions that need several sessions, which is
@@ -126,6 +132,41 @@ It is the worst type for both at 70%, and the vector layer rescues two
 questions while breaking two others: seven of the nine failures are the same
 questions in both runs. Whatever is missing there, a second lexical-adjacent
 ranking is not it.
+
+## Against published numbers
+
+Resist the comparison. Two gaps make most of them meaningless, and both are
+about what is being measured rather than how well.
+
+**The memory products report a different quantity.** Mem0 and Zep publish
+LongMemEval scores around 93% and 71%: binary LLM-as-judge accuracy on the
+*answer*. anathem never answers anything — it hands candidates to a model and
+the model answers — so there is no number here that can be put beside theirs.
+A retrieval recall of 92.9% is not "worse than Mem0's 93%"; it is not the same
+axis. Those figures are also vendor self-reports; an independent run of Mem0's
+open-source edition came out at 32.4% against the platform's 93.4%, which says
+more about reproducibility in this area than about either system.
+
+**The paper's retriever table is not confirmed to be this split.** LongMemEval's
+Appendix E.1 gives session-level Recall@5 of 0.634 for BM25, 0.723 for
+Contriever and 0.720 for Stella V5 1.5B, against 0.905 measured here for BM25
+alone. That gap is too large to take at face value: the appendix does not name
+its split, the adjacent table uses LongMemEval-**M**, and -M gives every
+question roughly 500 sessions of haystack where -S gives about 50. Retrieval
+over ten times the distractors is a different problem.
+
+There is a second candidate explanation that would be real rather than an
+artefact: anathem indexes chunks and lifts the best chunk to its memory, while
+a plain session-level BM25 scores each whole session as one document, and term
+frequency dilutes in a long one. Chunk-level retrieval beating document-level
+BM25 on long documents is a known effect.
+
+Both explanations fit, and this measurement cannot separate them. Running
+LongMemEval-M (`longmemeval_m_cleaned.json`, 2.7 GB) would: it is the harder
+haystack, and if the gap survives there the architecture is doing the work.
+Until someone does that, the honest claim is the narrow one — the pack buys
+2.4 points of recall over BM25 on -S, and the two sit in the same range as the
+retrievers the paper tried.
 
 ## What this does not measure
 
