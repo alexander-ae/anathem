@@ -35,6 +35,19 @@ for cmd in gh glab; do
 done
 
 paso "1. Check that the release exists on GitLab"
+
+# Before anything else: that the active `gh` account can see the repository
+# where it builds. Without this the failure lands in step 2 as a GraphQL
+# "Could not resolve to a Repository", which reads like the repo does not
+# exist rather than like the wrong account is active — and `gh` happily
+# keeps several.
+if ! gh api "repos/$REPO_GH" >/dev/null 2>&1; then
+  malo "the active gh account ($(gh api user --jq .login 2>/dev/null || echo unknown)) cannot see $REPO_GH."
+  echo "    If you have more than one account: gh auth switch --user <the one that owns it>" >&2
+  echo "    Check with: gh auth status" >&2
+  exit 1
+fi
+ok "gh sees $REPO_GH"
 # Uploading to a nonexistent release would create a loose, pointless one, so it
 # is checked beforehand instead of discovered at the end.
 if ! glab release view "$ETIQUETA" --repo "$REPO_GL" >/dev/null 2>&1; then
@@ -73,6 +86,11 @@ trap 'rm -rf "$TEMPORAL"' EXIT INT TERM
 gh run download "$CORRIDA" --repo "$REPO_GH" --dir "$TEMPORAL"
 # `gh run download` makes one directory per artifact; we put them together.
 find "$TEMPORAL" -type f -name 'mem-macos-*' -exec mv {} "$TEMPORAL"/ \; 2>/dev/null || true
+# And then the now-empty directories go, because they are named after the
+# artifact — `mem-macos-arm64` — so they match the same glob the upload loop
+# uses, and `glab release upload` fails on a directory. That is how v0.2.1
+# ended up with the binaries built, verified, and not uploaded.
+find "$TEMPORAL" -mindepth 1 -type d -exec rmdir {} + 2>/dev/null || true
 CUANTOS="$(find "$TEMPORAL" -maxdepth 1 -type f -name 'mem-macos-*.tar.gz' | wc -l)"
 [ "$CUANTOS" -gt 0 ] || { malo "no macOS binary was downloaded"; exit 1; }
 ok "$CUANTOS macOS binaries"
@@ -89,6 +107,9 @@ done
 
 paso "5. Upload to the GitLab release"
 for f in "$TEMPORAL"/mem-macos-*; do
+  # Belt and braces against the same thing: whatever the glob matches, only
+  # a regular file gets uploaded.
+  [ -f "$f" ] || continue
   glab release upload "$ETIQUETA" "$f" --repo "$REPO_GL"
   ok "uploaded: $(basename "$f")"
 done
