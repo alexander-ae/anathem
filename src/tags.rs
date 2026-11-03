@@ -10,16 +10,24 @@ struct Rule {
 
 /// The default taxonomy: a small set of general-purpose engineering tags —
 /// no proper nouns and no vocabulary tied to a particular stack or team.
+///
+/// Each pattern covers both languages, which is not decoration: the rules
+/// were first written against a corpus of Spanish memories, and for someone
+/// saving in English several of them stayed silent. A tool that claims to
+/// classify on its own and tags nothing does not look neutral, it looks
+/// broken. `code-review` also knows about merge requests, because this
+/// project lives on GitLab, where nobody says pull request.
+///
 /// Any installation can replace it entirely with a `tags.json` file next to
 /// the database; see `load_rules` and the README.
 const DEFAULT_RULES: &[Rule] = &[
-    Rule { tag: "decision",    pat: r"(?i)\bse decidi[oó]\b|\bse descart[oó]\b|\bse opt[oó] por\b|\btrade-?offs?\b|\bpor qu[eé] se eligi[oó]\b" },
-    Rule { tag: "bug",         pat: r"(?i)\bbugs?\b|\berror(es)?\b|\bfalla(s)?\b|\bregresi[oó]n(es)?\b|\bincidente(s)?\b" },
-    Rule { tag: "convention",  pat: r"(?i)\bconvenci[oó]n(es)?\b|\best[aá]ndar(es)?\b|\blint\b|\bstyle ?guide\b" },
-    Rule { tag: "performance", pat: r"(?i)\bN\+1\b|\b\d+\s*MB\b|\bqueries?\b|\bconsultas?\b|\blatencia\b|\bbenchmark\b|\bbloat\b" },
-    Rule { tag: "testing",     pat: r"(?i)\btests?\b|\btesting\b|\bspecs?\b|\bsuites?\b|\bcobertura\b" },
-    Rule { tag: "docs",        pat: r"(?i)\bdocs?\b|\bdocumentaci[oó]n\b|\breadme\b|\bchangelog\b" },
-    Rule { tag: "code-review", pat: r"(?i)\bPR\s*#\d+|\bpull request\b|\breview(?:er|ó|o)?\b|\brevis(?:ar|é|ó|ando|or|ión|iones)\b" },
+    Rule { tag: "decision",    pat: r"(?i)\bse decidi[oó]\b|\bse descart[oó]\b|\bse opt[oó] por\b|\bpor qu[eé] se eligi[oó]\b|\bwe (decided|chose|settled on|ruled out)\b|\bdecided (to|against)\b|\btrade-?offs?\b|\brationale\b" },
+    Rule { tag: "bug",         pat: r"(?i)\bbugs?\b|\berror(es)?\b|\bfalla(s)?\b|\bregresi[oó]n(es)?\b|\bincidente(s)?\b|\bregressions?\b|\bincidents?\b|\boutages?\b|\bcrash(es|ed)?\b" },
+    Rule { tag: "convention",  pat: r"(?i)\bconvenci[oó]n(es)?\b|\best[aá]ndar(es)?\b|\blint\b|\bstyle ?guide\b|\bconventions?\b|\bstandards?\b|\bguidelines?\b" },
+    Rule { tag: "performance", pat: r"(?i)\bN\+1\b|\b\d+\s*MB\b|\bqueries?\b|\bconsultas?\b|\blatencia\b|\blatency\b|\bbenchmark\b|\bbloat\b|\bthroughput\b|\bslow(er|ness)?\b" },
+    Rule { tag: "testing",     pat: r"(?i)\btests?\b|\btesting\b|\bspecs?\b|\bsuites?\b|\bcobertura\b|\bcoverage\b|\bflaky\b" },
+    Rule { tag: "docs",        pat: r"(?i)\bdocs?\b|\bdocumentaci[oó]n\b|\bdocumentation\b|\breadme\b|\bchangelog\b" },
+    Rule { tag: "code-review", pat: r"(?i)\bPR\s*#\d+|\bMR\s*!\d+|\bpull requests?\b|\bmerge requests?\b|\breview(?:er|ed|s|ó|o)?\b|\brevis(?:ar|é|ó|ando|or|ión|iones)\b" },
 ];
 
 /// One `{tag, pattern}` rule exactly as it comes from an overriding
