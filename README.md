@@ -438,6 +438,7 @@ eval set for any future change to the ranking — the format of
   [`docs/security.md`](docs/security.md)
 - Vocabulary packs (the optional vector layer): format, how to generate them
   and how to install them: [`docs/vocabulary-packs.md`](docs/vocabulary-packs.md)
+- What changed in each version: [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Installing as a Claude Code plugin
 
@@ -462,3 +463,11 @@ instead of the plugin.
 If you already had anathem configured by hand in `~/.claude.json`, **remove
 that entry** when installing the plugin: both declare a server with the same
 name.
+
+## License
+
+MIT. See [`LICENSE`](LICENSE).
+
+You can use it, change it and ship it, including in closed-source products.
+The one condition is that the copyright notice and the licence text travel
+with any substantial portion of the code you redistribute.

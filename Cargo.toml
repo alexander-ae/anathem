@@ -3,6 +3,10 @@ name = "anathem"
 version = "0.2.1"
 edition = "2021"
 rust-version = "1.97"
+license = "MIT"
+description = "Local memory for coding agents: one binary, one SQLite file, BM25 plus an optional static-embedding vector layer, and an MCP server."
+repository = "https://gitlab.com/__alexander__/anathem"
+readme = "README.md"
 
 [lib]
 name = "anathem"
