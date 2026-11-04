@@ -243,6 +243,45 @@ above its BM25 row, and the most likely reason is the indexing unit rather
 than anything clever. That is a narrower claim than "anathem beats BM25 by 15
 points", and it is the one the measurement supports.
 
+## One head-to-head, with its caveats
+
+Published scores from the memory products cannot be compared with these
+(above). So one was run here instead: the same corpus, the same questions,
+the same machine, the same metric. **supermemory** v0.0.8, self-hosted, 46
+questions over 2,374 sessions of LongMemEval-S, scoped per question
+(`containerTags` where anathem uses `project`).
+
+|                                  | supermemory | anathem bm25 | anathem hybrid |
+|----------------------------------|------------:|-------------:|---------------:|
+| recall@5, fraction of evidence   |       0.473 |        0.912 |          0.933 |
+| recall@1                         |       0.500 |        0.826 |          0.891 |
+| MRR                              |       0.511 |        0.885 |          0.937 |
+| p50 per query                    |       39 ms |        45 ms |          47 ms |
+| ingesting the 2,374 sessions     |      ~1 hour |     < 1 min |        < 1 min |
+
+**Read that gap correctly: it is not ranking quality.** supermemory returns
+1.3 documents per query on average, never more than 4, whatever `limit` says.
+It returned *nothing at all* for 19 of the 46 questions — and for the 27
+where it did answer, the evidence was among its results 89% of the time. It
+is not worse at ordering candidates; it abstains, and when it speaks it is
+usually right. Its recall@50 equals its recall@5 for the same reason: there
+is no fiftieth candidate to find.
+
+That is a different design, not a worse one. anathem hands a model fifty
+candidates and lets the model filter; supermemory hands back a few it is
+confident about. Which is better depends on what is downstream.
+
+**The caveats, which are not small.** Its LLM provider key was expired on
+this machine, so its memory agent never ran and every document finalized with
+`0 memories`: what was measured is its chunk layer, not the whole product.
+46 questions is a small sample. It is v0.0.8 with v0.0.9 available. And it
+refuses to start at all without a model provider key, where anathem talks to
+nothing — a real difference, but one that also means this run could not be
+made fair without an account somewhere.
+
+The ingestion row has no such asterisk: same 2,374 documents, same machine,
+measured end to end.
+
 ## What this does not measure
 
 Retrieval, and only retrieval: recall@5, recall@50 and MRR over the session
