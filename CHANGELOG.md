@@ -12,6 +12,16 @@ live in the database, not in the binary.
 
 ### Fixed
 
+- The installation guide an agent reads, [`AGENTS.md`](AGENTS.md), assumed the
+  `claude` and `opencode` commands are on the `PATH`. With only a desktop
+  application installed they are not, and the file's answer was the plugin,
+  which depends on that same `PATH`, and a relative link to
+  `docs/installation.md` that leads nowhere when the file is read from its raw
+  URL — which is how an agent reads it when the repository is not cloned. The
+  `mcpServers` entry with its absolute paths is now written out where it is
+  needed, and so is the condition under which the script passes over opencode
+  without saying anything.
+
 - The CI uploaded the Linux and Windows binaries to package version `0.2.2`
   and registered the release links against `v0.2.2`. The job finished green,
   the release page looked complete, and every Linux and Windows download
