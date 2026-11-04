@@ -139,7 +139,12 @@ def convert(instances, out):
                 "---\n\n"
                 f"{body}\n"
             )
-            (memories / file_name(ext_id)).write_text(text, encoding="utf-8")
+            # newline="\n" explicito: en Windows, Python traduce \n a \r\n al
+            # escribir, y `mem import` lee el archivo como si no tuviera
+            # frontmatter y lo saltea en silencio.
+            with (memories / file_name(ext_id)).open(
+                    "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(text)
 
         if answerable:
             cases.append({

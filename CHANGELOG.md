@@ -10,6 +10,15 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Fixed
+
+- A memory whose frontmatter is separated by CRLF is no longer dropped on
+  import. `mem export` writes LF everywhere, but anything that rewrites a
+  memory on Windows — an editor, a script using the platform's default
+  newline — turns those separators into CRLF, and `mem import` skipped the
+  file as if it had no frontmatter: no error, no count, the memory simply
+  gone.
+
 ## [0.2.2] - 2026-11-04
 
 ### Added

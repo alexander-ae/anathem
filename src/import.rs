@@ -62,6 +62,20 @@ fn inline_list(v: &str) -> Vec<String> {
 /// frontmatter, so `--desde` can be pointed at a folder with other things
 /// inside without blowing up.
 pub fn parse(text: &str) -> Option<ParsedMemory> {
+    // CRLF has to be normalized before anything else. `mem export` writes LF
+    // on every platform, but anything that rewrites a memory on Windows — an
+    // editor, a script using the platform's default newline — turns the
+    // frontmatter separators into CRLF. Without this the `strip_prefix` below
+    // fails, `parse` returns `None`, and the caller skips the file as if it
+    // had no frontmatter: the memory disappears from the import with no error
+    // and no count.
+    let normalizado;
+    let text = if text.contains('\r') {
+        normalizado = text.replace("\r\n", "\n");
+        normalizado.as_str()
+    } else {
+        text
+    };
     let resto = text.strip_prefix("---\n")?;
     let fin = resto.find("\n---\n")?;
     let (cabecera, body) = (&resto[..fin], &resto[fin + 5..]);

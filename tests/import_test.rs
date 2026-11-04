@@ -117,3 +117,29 @@ fn the_fields_export_writes_are_read_back() {
     // Nor is it with frontmatter but no project.
     assert!(import::parse("---\nid: 1\n---\n\ncuerpo\n").is_none());
 }
+
+#[test]
+fn a_memory_with_windows_line_endings_is_not_silently_dropped() {
+    // `parse` returning None means "no frontmatter", and the caller skips the
+    // file without a word — that is deliberate, so a folder can hold other
+    // things. It also means that a file whose frontmatter is separated by
+    // CRLF disappears on import with no error and no count: the shape of a
+    // silent data loss.
+    //
+    // It is not hypothetical. `mem export` writes LF on every platform, but
+    // anything that rewrites a memory on Windows — an editor, a Python script
+    // using the default newline translation — turns those separators into
+    // CRLF, and the next `mem import` skips every one of them.
+    let lf = "---\nproject: \"p\"\ndescription: \"a title\"\ncreated: \"2026-11-04\"\next_id: \"a/1\"\n---\n\nthe body of the memory\n";
+    let crlf = lf.replace('\n', "\r\n");
+
+    let a = anathem::import::parse(lf).expect("the LF form parses");
+    let b = anathem::import::parse(&crlf).expect("the CRLF form has to parse too");
+
+    assert_eq!(b.project, a.project);
+    assert_eq!(b.ext_id, a.ext_id);
+    assert_eq!(b.title, a.title);
+    // The body must not keep the carriage returns either: they would travel
+    // into the database and come back out in every search snippet.
+    assert_eq!(b.body, a.body, "the body still carries \\r");
+}
