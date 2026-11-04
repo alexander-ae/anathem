@@ -12,6 +12,12 @@ live in the database, not in the binary.
 
 ### Fixed
 
+- The CI uploaded the Linux and Windows binaries to package version `0.2.2`
+  and registered the release links against `v0.2.2`. The job finished green,
+  the release page looked complete, and every Linux and Windows download
+  returned 404. A new `verificar:release` job now downloads each link it just
+  published and fails the pipeline if any of them does not answer 200.
+
 - A memory whose frontmatter is separated by CRLF is no longer dropped on
   import. `mem export` writes LF everywhere, but anything that rewrites a
   memory on Windows — an editor, a script using the platform's default
