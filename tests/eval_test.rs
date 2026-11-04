@@ -97,3 +97,36 @@ fn it_serializes_to_the_shared_format() {
         assert!(j.get(k).is_some(), "falta la clave {k} en {j}");
     }
 }
+
+#[test]
+fn a_case_scoped_to_a_project_does_not_see_the_other_projects() {
+    // A benchmark like LongMemEval gives every question its own haystack:
+    // the evidence has to be found among that user's sessions, not among
+    // everyone's. Pooling them into one database and searching all of it
+    // measures something harder than the benchmark defines, and the number
+    // stops being comparable with anything published. So a case can name the
+    // project it belongs to, and the search is confined to it.
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    for (project, ext) in [("q1", "q1-s3"), ("q2", "q2-s7")] {
+        ingest::insert(&conn, &NewMemory {
+            project: project.into(),
+            title: "the deploy was rolled back after the cache went stale".into(),
+            body: "the deploy was rolled back after the cache went stale".into(),
+            created: "2026-09-01".into(), event_start: None, event_end: None,
+            source: "migrated".into(), ext_id: Some(ext.into()),
+            tags: vec![], refs: vec![],
+        }).unwrap();
+    }
+
+    let evalset = dir.path().join("evalset.json");
+    let mut f = std::fs::File::create(&evalset).unwrap();
+    write!(f, r#"{{"cases": [
+        {{"id":"q1","query":"cache went stale","project":"q1","expect_docs":["q1-s3"]}}
+      ]}}"#).unwrap();
+
+    let r = evalrun::run(&conn, &evalset, "anathem bm25", &search::SearchContext::bm25_only()).unwrap();
+    assert_eq!(r.per_case[0].returned, vec!["q1-s3".to_string()],
+        "the case names project q1, so q2's session must not be in the results");
+    assert_eq!(r.per_case[0].first_rank, Some(1));
+}

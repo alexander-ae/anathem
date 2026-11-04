@@ -22,18 +22,33 @@ Measured over the same 50 Spanish queries and the same corpus (ground truth
 restricted to 171 curated documents — see the caveats below):
 
 ```
-                   recall@5   recall@50   MRR     p50
-anathem (BM25)        66%        88%      0.537   5.4 ms
-supermemory            24%        34%      0.120   47.2 ms
+                   recall@5   MRR     p50
+anathem (BM25)        66%     0.537   5.4 ms
+supermemory           24%     0.120   47.2 ms
 ```
 
-anathem wins on all four metrics. But the average hides the real finding —
-stratified by query type:
+**The second row does not mean what it looks like.** supermemory's search
+returns about one document per query and never more than four, whatever
+`limit` you ask it for. It is not ranking the right answer low; it declines
+to answer. Measured again in November over a public corpus, it returned
+nothing at all for 19 of 46 questions — and for the 27 where it did answer,
+the evidence was among its results 89% of the time. A `recall@50` for it
+would be a fact about its API's ceiling and not about its ranking, which is
+why that column is not in this table. The two tools make different bets:
+anathem hands a model fifty candidates and lets the model filter,
+supermemory hands back a few it is confident about.
+
+These figures are also from September, over a corpus nobody else can see.
+For the same comparison on a public dataset, with the same corpus and the
+same metric for both and every caveat spelled out, see
+[`docs/benchmarks.md`](docs/benchmarks.md).
+
+The average hides the real finding anyway — stratified by query type:
 
 ```
                 lexical (n=34)                  paraphrastic (n=16)
 anathem         recall@5  88%  recall@50 100%   recall@5  19%  recall@50 62%
-supermemory     recall@5  35%  recall@50  50%   recall@5   0%  recall@50  0%
+supermemory     recall@5  35%                   recall@5   0%
 ```
 
 BM25 on its own completely solves the lexical queries (identifiers, exact
@@ -41,9 +56,9 @@ jargon). On the paraphrastic ones it finds the right document 62% of the
 time (recall@50) but only puts it in the top 5 19% of the time (recall@5) —
 a **ranking** problem for the ones it does find (the lever is a reranker)
 and a **retrieval** problem for the ones that never show up in the top 50
-(the lever is a vector layer or query expansion). supermemory, on the other
-hand, does not get a single one of the 16 paraphrastic queries into the top
-50.
+(the lever is a vector layer or query expansion). supermemory surfaced
+none of the 16 paraphrastic queries, though with at most four results per
+query it had little room to.
 
 **A vector layer? It is here already, and it is optional.** Those numbers
 were the input to the question; these are the answer, measured over the same
@@ -397,6 +412,15 @@ mem --db ~/.anathem/mem.db eval --evalset eval/evalset.json --label "anathem bm2
   --out eval/results/anathem-bm25.json
 ```
 
+Those numbers come from the author's private corpus, which nobody else can
+reproduce. For a measurement anyone can repeat, over a public dataset with a
+licence that permits it, see [`docs/benchmarks.md`](docs/benchmarks.md). On
+LongMemEval-S — 470 questions over 23,854 memories — recall@5 is 82.3% with
+BM25 alone and 87.9% with the vocabulary pack, counting a question as found
+only when every evidence session it needs is in the top five. On
+LongMemEval-M, where each question searches around 476 sessions instead of
+50, the same figures are 68.1% and 73.4%.
+
 `eval/evalset.json` and `eval/results/` are not versioned (see the caveats
 above: the eval set is built on the author's private corpus). `mem eval`
 works just as well as a regression test over your own corpus and your own
@@ -439,6 +463,7 @@ eval set for any future change to the ranking — the format of
 - Vocabulary packs (the optional vector layer): format, how to generate them
   and how to install them: [`docs/vocabulary-packs.md`](docs/vocabulary-packs.md)
 - What changed in each version: [`CHANGELOG.md`](CHANGELOG.md)
+- Measuring retrieval against a public dataset: [`docs/benchmarks.md`](docs/benchmarks.md)
 
 ## Installing as a Claude Code plugin
 
