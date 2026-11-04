@@ -22,11 +22,60 @@ source, and there it does ask for Rust and a C compiler.
 
 ## What the script cannot do on its own
 
-**opencode, in some cases.** The script configures it by itself: it looks for
-`~/.config/opencode/opencode.jsonc`, then `.json`, and honors
-`OPENCODE_CONFIG` if it is set. It inserts a line inside the `"mcp"` key
-instead of rewriting the file — that way the comments are not lost — and
-leaves a copy at `.bak-anathem`.
+One rule before the cases, because it covers all of them: **the paths you write
+into a configuration file have to be absolute** — `/Users/USUARIO/...` on
+macOS, `/home/USUARIO/...` on Linux — never `~` and never `$HOME`. A desktop
+application is started by the system, not by a shell: it does not always
+inherit the shell's `PATH`, and nothing expands a `~` on its behalf. The script
+prints the absolute paths it used; copy those.
+
+**Claude Code without the `claude` command.** The registration uses `claude mcp
+add --scope user`. When that command is not on the `PATH` — the usual case if
+only the desktop application is installed — the script says so and carries on.
+Register it yourself, by adding this key to `~/.claude.json`:
+
+```json
+"mcpServers": {
+  "anathem": {
+    "command": "/home/USUARIO/.local/bin/mem",
+    "args": ["--db", "/home/USUARIO/.anathem/mem.db", "serve"]
+  }
+}
+```
+
+If the file already has other top-level keys, add this one next to them instead
+of replacing the file. And say one thing out loud when you finish: Claude Code
+rewrites `~/.claude.json` by itself, so an edit made while it is open can be
+lost when it closes. If the tools do not appear after restarting, check whether
+the key is still there and write it again with the application closed.
+
+The plugin is the other route, from inside Claude Code and without touching any
+file:
+
+```
+/plugin marketplace add https://gitlab.com/__alexander__/anathem.git
+/plugin install anathem@anathem
+```
+
+It is shorter, but it invokes `mem` by name, so it works only if Claude Code
+sees `~/.local/bin` on the `PATH` it was launched with — which is precisely
+what a desktop application does not guarantee. When the CLI is missing, prefer
+the entry above: it carries the absolute path, so it cannot fail for that
+reason. The step by step is in
+[`docs/installation.md`](https://gitlab.com/__alexander__/anathem/-/blob/main/docs/installation.md).
+
+**opencode, when its command is not on the `PATH`.** The script configures it
+by itself, but only when `command -v opencode` finds it. If it does not — an
+installation that never put the command there, a `PATH` that has not been
+reloaded — opencode is invisible to the script, which then passes over it
+without a word. Silence is not an answer, so ask whether they use it.
+
+When it does find it and there is no configuration yet, it writes
+`~/.config/opencode/opencode.json` already pointing at the absolute path. When
+a configuration does exist, it looks for `~/.config/opencode/opencode.jsonc`,
+then `.json`, and honors `OPENCODE_CONFIG` if it is set. It inserts a line
+inside the `"mcp"` key instead of rewriting the file — that way the comments
+are not lost — and leaves a copy at `.bak-anathem`.
 
 It holds back, and prints the entry for you, when the file has a shape it
 cannot edit without risk: no `"mcp"` key, the key written in a compact form, or
@@ -41,25 +90,11 @@ without touching anything else:
 }
 ```
 
-Replace the path with the one the script printed.
+If there is no configuration file at all, create it with that entry inside a
+`"mcp"` key and nothing else.
 
-**Claude Code without the CLI.** The registration uses `claude mcp add --scope
-user`. If the `claude` command is not on the `PATH` — which happens when only
-the desktop application is installed — the script says so and carries on. The
-simplest way out is to install it as a plugin, from inside Claude Code and
-without touching any file:
-
-```
-/plugin marketplace add https://gitlab.com/__alexander__/anathem.git
-/plugin install anathem@anathem
-```
-
-One detail that matters: the plugin invokes `mem` by name, so it depends on
-`~/.local/bin` being on the `PATH` that Claude Code sees when it launches the
-server. Desktop apps do not always inherit the shell's `PATH`. If the tools do
-not show up after restarting, the bulletproof route is the CLI one — which
-writes the absolute path — or the hand-written `mcpServers` entry described in
-[`docs/installation.md`](docs/installation.md).
+Pointing both agents at the same `mem.db` is the whole idea: what one saves,
+the other finds. There is no reason to give them separate databases.
 
 **Restarting the agent.** The new tools show up in a new session, not in the
 one that is running. Tell them so when you finish.
