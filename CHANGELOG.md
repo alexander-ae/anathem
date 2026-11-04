@@ -10,8 +10,22 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-04
+
 ### Added
 
+- A **licence**: MIT. Without one the default is that nobody may copy, modify
+  or redistribute the code, which is the opposite of what a public repository
+  is for.
+- This changelog, and the `license`, `description`, `repository` and `readme`
+  fields the manifest was missing.
+- **A benchmark anyone can reproduce**, over LongMemEval, with its numbers and
+  its caveats in [`docs/benchmarks.md`](docs/benchmarks.md). The figures in
+  the README were measured on a corpus nobody else can see; these are not.
+  `tools/longmemeval_to_memories.py` converts the dataset, which is not
+  redistributed here.
+- An eval case can name its `project`, and the search is confined to it —
+  needed by any benchmark that gives each question its own history.
 - `mem doctor` reports whether the database is readable by other users on the
   machine, and says so without failing the diagnosis.
 
@@ -119,7 +133,8 @@ First release with prebuilt binaries.
 - The project lives on GitLab. GitHub remains only as the macOS builder, since
   GitLab's macOS runners are Premium and Ultimate only.
 
-[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v0.2.1...main
+[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v0.2.2...main
+[0.2.2]: https://gitlab.com/__alexander__/anathem/-/compare/v0.2.1...v0.2.2
 [0.2.1]: https://gitlab.com/__alexander__/anathem/-/compare/v0.2.0...v0.2.1
 [0.2.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.1.0...v0.2.0
 [0.1.0]: https://gitlab.com/__alexander__/anathem/-/releases/v0.1.0
