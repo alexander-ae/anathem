@@ -384,6 +384,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         limit: 10,
         budget_tokens: 10_000,
         excerpt: None,
+        outline: false,
     };
     let r = anathem::vecstore::search_vectors(&conn, &query_, &with_project, 50).unwrap();
     assert_eq!(r.len(), 1, "el filtro de proyecto tiene que valer también acá: {r:?}");
@@ -396,6 +397,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         limit: 10,
         budget_tokens: 10_000,
         excerpt: None,
+        outline: false,
     };
     let r = anathem::vecstore::search_vectors(&conn, &query_, &with_tag, 50).unwrap();
     assert_eq!(r.len(), 1, "el filtro de tags tiene que valer también acá: {r:?}");
@@ -409,6 +411,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         limit: 10,
         budget_tokens: 10_000,
         excerpt: None,
+        outline: false,
     };
     let r = anathem::vecstore::search_vectors(&conn, &query_, &sin, 50).unwrap();
     assert_eq!(r.len(), 2, "sin filtros tienen que venir las dos: {r:?}");
@@ -423,6 +426,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         limit: 10,
         budget_tokens: 10_000,
         excerpt: None,
+        outline: false,
     };
     let r = anathem::vecstore::search_vectors(&conn, &query_, &with_topic, 50).unwrap();
     assert_eq!(r.len(), 1, "el filtro de topic tiene que valer también acá: {r:?}");

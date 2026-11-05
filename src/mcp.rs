@@ -119,6 +119,7 @@ fn call_tool(
                 // short candidates fit in the same token budget instead of a
                 // few full snippets.
                 excerpt: Some(cfg.excerpt),
+                outline: cfg.outline,
             };
             let q = match scopes.onto(q) {
                 Ok(q) => q,

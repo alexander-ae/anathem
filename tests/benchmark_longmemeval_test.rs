@@ -301,3 +301,109 @@ fn a_subset_keeps_the_mix_of_question_types() {
         "a subset of a type-sorted file has to span the types, got {kinds:?}"
     );
 }
+
+/// A fixture with enough distractors that a fraction of them is a
+/// meaningful thing to take: one evidence session and six that are not.
+const FIXTURE_MANY_DISTRACTORS: &str = r#"[
+  {
+    "question_id": "gpt4_many",
+    "question_type": "multi-session",
+    "question": "What did I say about the cache?",
+    "answer": "it went stale",
+    "question_date": "2023/05/20 (Sat) 10:11",
+    "haystack_session_ids": ["answer_1", "d1", "d2", "d3", "d4", "d5", "d6"],
+    "haystack_dates": ["2023/05/01 (Mon) 09:00", "2023/05/02 (Tue) 09:00",
+                       "2023/05/03 (Wed) 09:00", "2023/05/04 (Thu) 09:00",
+                       "2023/05/05 (Fri) 09:00", "2023/05/06 (Sat) 09:00",
+                       "2023/05/07 (Sun) 09:00"],
+    "haystack_sessions": [
+      [{"role": "user", "content": "the cache went stale"}],
+      [{"role": "user", "content": "distractor one"}],
+      [{"role": "user", "content": "distractor two"}],
+      [{"role": "user", "content": "distractor three"}],
+      [{"role": "user", "content": "distractor four"}],
+      [{"role": "user", "content": "distractor five"}],
+      [{"role": "user", "content": "distractor six"}]
+    ],
+    "answer_session_ids": ["answer_1"]
+  }
+]"#;
+
+fn run_with_distractors(py: &str, dir: &std::path::Path, keep: &str) -> Vec<String> {
+    let input = dir.join("fixture.json");
+    std::fs::write(&input, FIXTURE_MANY_DISTRACTORS).unwrap();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let out = Command::new(py)
+        .arg(root.join("tools/longmemeval_to_memories.py"))
+        .arg(&input)
+        .arg(dir.join("out"))
+        .arg("--distractors")
+        .arg(keep)
+        .output()
+        .expect("could not run the converter");
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let mut names: Vec<String> = std::fs::read_dir(dir.path_join_out())
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
+        .collect();
+    names.sort();
+    names
+}
+
+/// A helper so the line above reads: the memories live under `out/memories`.
+trait OutDir {
+    fn path_join_out(&self) -> std::path::PathBuf;
+}
+impl OutDir for std::path::Path {
+    fn path_join_out(&self) -> std::path::PathBuf {
+        self.join("out/memories")
+    }
+}
+
+#[test]
+fn dropping_distractors_never_drops_an_evidence_session() {
+    // The synthetic scope the research issue asks for is "all the evidence,
+    // fewer distractors". A run that loses evidence is not a bound on what
+    // scoping could buy; it is a different and worse benchmark.
+    let Some(py) = python() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let names = run_with_distractors(&py, dir.path(), "0.25");
+
+    assert!(
+        names.iter().any(|n| n.contains("answer_1")),
+        "la sesión con la evidencia no puede caer nunca: {names:?}"
+    );
+    assert!(names.len() < 7, "tiene que haber sacado distractores: {names:?}");
+    assert!(names.len() > 1, "y no todos: {names:?}");
+}
+
+#[test]
+fn the_distractors_kept_are_the_same_ones_every_run() {
+    // No seed to write down: two people running the same command have to
+    // get the same corpus, or the numbers are not comparable.
+    let Some(py) = python() else { return };
+    let a = tempfile::tempdir().unwrap();
+    let b = tempfile::tempdir().unwrap();
+    assert_eq!(
+        run_with_distractors(&py, a.path(), "0.5"),
+        run_with_distractors(&py, b.path(), "0.5")
+    );
+}
+
+#[test]
+fn a_distractor_fraction_outside_zero_to_one_is_refused() {
+    let Some(py) = python() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("fixture.json");
+    std::fs::write(&input, FIXTURE_MANY_DISTRACTORS).unwrap();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let out = Command::new(py)
+        .arg(root.join("tools/longmemeval_to_memories.py"))
+        .arg(&input)
+        .arg(dir.path().join("out"))
+        .arg("--distractors")
+        .arg("1.5")
+        .output()
+        .unwrap();
+    assert!(!out.status.success(), "una fracción fuera de rango no puede pasar en silencio");
+}

@@ -40,6 +40,21 @@ pub struct Config {
     #[serde(default = "default_excerpt")]
     pub excerpt: usize,
 
+    /// Replaces a long memory's excerpt with a deterministic outline of the
+    /// whole memory: its first paragraph and its headings. Off by default.
+    ///
+    /// The excerpt is a window on one chunk, so a memory with sections is
+    /// represented by whichever slice matched and nothing says whether the
+    /// rest is relevant. The outline answers that — with no model, nothing
+    /// generated and nothing stored, so `mem export` stays reproducible.
+    ///
+    /// It is off because it costs tokens on every candidate that carries
+    /// one, and what it buys is not something `recall@5` can see. See
+    /// `docs/benchmarks.md` for the measurement and for what it does and
+    /// does not show.
+    #[serde(default)]
+    pub outline: bool,
+
     /// How many recent memories to tell the agent about on connect, so it
     /// knows what the previous one left behind without having to ask.
     ///
@@ -116,6 +131,7 @@ impl Default for Config {
             bm25_weight: default_bm25_weight(),
             candidates: default_candidates(),
             excerpt: default_excerpt(),
+            outline: false,
             handoff_items: default_handoff_items(),
             handoff_window: default_handoff_window(),
             release_pack_after: release_after_default(),

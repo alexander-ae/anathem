@@ -421,8 +421,11 @@ fn run(cli: Cli) -> Result<()> {
                 text: query, project, tags: tag, topic: None, limit,
                 budget_tokens: budget.unwrap_or(anathem::search::DEFAULT_BUDGET_TOKENS),
                 // The CLI does not trim: `mem search` still shows the whole
-                // chunk, as it always has.
+                // chunk, as it always has, and for the same reason it shows
+                // no outline: a person reading the terminal is not paying a
+                // token budget for it.
                 excerpt: None,
+                outline: false,
             };
             let q = scopes.onto(q)?;
             let hits = anathem::search::run_explained(&conn, &q, &ctx)?;

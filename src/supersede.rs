@@ -35,8 +35,10 @@ pub fn candidates(conn: &Connection, body: &str, project: &str, k: usize) -> Res
         limit: k + 1,
         budget_tokens: usize::MAX,
         // This compares bodies to spot possible duplicates, it is not
-        // building an answer to show: no trimming.
+        // building an answer to show: no trimming, and no outline either —
+        // an outline would hide the text being compared.
         excerpt: None,
+        outline: false,
     };
     // Called right after an insert, when the vector for the just-saved
     // memory may not be synced yet: the vector index would be incomplete in

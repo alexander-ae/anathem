@@ -22,6 +22,13 @@ for `longmemeval_m_cleaned.json`, where each question drags around 500
 haystack sessions and all 500 questions do not fit on a laptop: what makes -M
 the harder benchmark is the depth of one haystack, not how many there are.
 
+`--distractors FRACTION` keeps every evidence session and an evenly spaced
+share of the rest. It is how the synthetic scope in `docs/benchmarks.md` is
+built: the most a perfect scope could do is drop distractors while keeping
+all the evidence, so a corpus shaped that way bounds what scoping could buy.
+It is a bound and not a product — nothing in anathem builds a corpus this way
+for a user.
+
 What it writes:
 
   bench/memories/*.md   one file per history session, in the frontmatter
@@ -92,7 +99,38 @@ def file_name(ext_id):
     return re.sub(r"[^A-Za-z0-9_.-]", "_", ext_id) + ".md"
 
 
-def convert(instances, out):
+def kept_sessions(ids, sessions, dates, evidence, fraction):
+    """Every evidence session, plus an evenly spaced share of the rest.
+
+    This is what the research issue calls a synthetic scope: the best case a
+    perfect scoping could reach is all of the evidence and fewer of the
+    distractors. Dropping an evidence session would not be a bound on that —
+    it would be a different and worse benchmark — so evidence is never a
+    candidate for removal.
+
+    Evenly spaced rather than sampled, for the reason `--questions` is:
+    there is no seed to write down, and two people running the same command
+    get the same corpus.
+    """
+    if fraction is None:
+        return list(zip(ids, sessions, dates))
+
+    rows = list(zip(ids, sessions, dates))
+    evidence = set(evidence or [])
+    keep = [r for r in rows if r[0] in evidence]
+    others = [r for r in rows if r[0] not in evidence]
+    n = int(len(others) * fraction)
+    total = len(others)
+    if n and total:
+        keep += [others[(i * total) // n] for i in range(n)]
+    # Back into the original order, so the corpus does not depend on which
+    # sessions happened to be evidence.
+    order = {sid: i for i, sid in enumerate(ids)}
+    keep.sort(key=lambda r: order[r[0]])
+    return keep
+
+
+def convert(instances, out, distractors=None):
     memories = out / "memories"
     memories.mkdir(parents=True, exist_ok=True)
     cases = []
@@ -113,8 +151,11 @@ def convert(instances, out):
         ids = inst.get("haystack_session_ids") or []
         sessions = inst.get("haystack_sessions") or []
         dates = inst.get("haystack_dates") or []
+        # `dates` is shorter than `ids` in some instances; padded here so the
+        # three can travel together through the filter below.
+        dates = list(dates) + [""] * (len(ids) - len(dates))
 
-        for n, (sid, session) in enumerate(zip(ids, sessions)):
+        for sid, session, date in kept_sessions(ids, sessions, dates, evidence, distractors):
             body = render(session)
             if not body:
                 continue
@@ -126,7 +167,7 @@ def convert(instances, out):
                     conflicts.append(ext_id)
                 continue
             seen[ext_id] = body
-            created = iso_date(dates[n] if n < len(dates) else "")
+            created = iso_date(date)
             title = " ".join(body.split())[:120]
             text = (
                 "---\n"
@@ -166,7 +207,7 @@ def convert(instances, out):
 
 
 def main(argv):
-    args, questions = [], None
+    args, questions, distractors = [], None, None
     rest = argv[1:]
     while rest:
         a = rest.pop(0)
@@ -175,13 +216,25 @@ def main(argv):
                 print("--questions needs a number", file=sys.stderr)
                 return 2
             questions = int(rest.pop(0))
+        elif a == "--distractors":
+            if not rest:
+                print("--distractors needs a fraction between 0 and 1", file=sys.stderr)
+                return 2
+            distractors = float(rest.pop(0))
+            if not 0.0 <= distractors <= 1.0:
+                print(
+                    f"--distractors {distractors} is not a fraction between 0 and 1",
+                    file=sys.stderr,
+                )
+                return 2
         else:
             args.append(a)
 
     if len(args) != 2:
         print(__doc__.split("\n\n")[0], file=sys.stderr)
         print(
-            f"\nusage: {argv[0]} <longmemeval file.json> <output dir> [--questions N]",
+            f"\nusage: {argv[0]} <longmemeval file.json> <output dir> "
+            "[--questions N] [--distractors FRACTION]",
             file=sys.stderr,
         )
         return 2
@@ -210,7 +263,9 @@ def main(argv):
         total = len(instances)
         instances = [instances[(i * total) // questions] for i in range(questions)]
 
-    written, cases, duplicates, conflicts = convert(instances, pathlib.Path(args[1]))
+    written, cases, duplicates, conflicts = convert(
+        instances, pathlib.Path(args[1]), distractors
+    )
     if conflicts:
         print(
             "the same session id carries two different bodies, so one would be\n"

@@ -2,7 +2,7 @@ use crate::model::SearchHit;
 use crate::pack::Pack;
 use anyhow::Result;
 use regex::Regex;
-use rusqlite::{types::Value, Connection};
+use rusqlite::{types::Value, Connection, OptionalExtension};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -49,6 +49,10 @@ pub struct Query {
     /// snippets. `None` keeps the long-standing behaviour: the whole snippet
     /// counts against the budget.
     pub excerpt: Option<usize>,
+    /// Replaces a long memory's excerpt with a deterministic outline of the
+    /// whole memory. Off by default, and below `OUTLINE_THRESHOLD`
+    /// characters it changes nothing at all. See `outline`.
+    pub outline: bool,
 }
 
 impl Default for Query {
@@ -61,8 +65,68 @@ impl Default for Query {
             limit: 10,
             budget_tokens: DEFAULT_BUDGET_TOKENS,
             excerpt: None,
+            outline: false,
         }
     }
+}
+
+/// Below this many characters a memory is its own summary, and an outline
+/// would spend tokens repeating what the excerpt already says. Above
+/// `CHUNK_SIZE` on purpose: a memory that fits in one chunk has no "rest"
+/// for the reader to wonder about.
+pub const OUTLINE_THRESHOLD: usize = 800;
+
+/// At most this many headings. A memory with forty sections would otherwise
+/// cost more in outline than in body.
+const OUTLINE_HEADINGS: usize = 6;
+
+/// And at most this many characters of each heading.
+const OUTLINE_HEADING_CHARS: usize = 60;
+
+/// What a long memory looks like from outside: its first paragraph and the
+/// headings underneath, computed from its own text.
+///
+/// The excerpt a candidate carries is a window on **one chunk**
+/// (`ingest::CHUNK_SIZE`), so a memory with sections is represented by
+/// whichever 500-character slice happened to match, and nothing in it says
+/// whether the rest is relevant. This is the tier that would answer that,
+/// and it is built the only way this project is willing to build it: no
+/// model, nothing generated, nothing stored. The same body gives the same
+/// outline forever, which is what keeps `mem export` reproducible.
+///
+/// Below `OUTLINE_THRESHOLD` the text comes back untouched: a short note is
+/// already its own outline.
+pub fn outline(body: &str, excerpt: usize) -> String {
+    if body.chars().count() <= OUTLINE_THRESHOLD {
+        return body.to_string();
+    }
+    let is_heading = |l: &str| l.trim_start().starts_with('#');
+    let first: String = body
+        .split("\n\n")
+        .map(str::trim)
+        .find(|p| !p.is_empty() && !is_heading(p))
+        .unwrap_or("")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(excerpt)
+        .collect();
+    let headings: Vec<String> = body
+        .lines()
+        .filter(|l| is_heading(l))
+        .map(|l| {
+            l.trim_start_matches(['#', ' ']).trim().chars().take(OUTLINE_HEADING_CHARS).collect()
+        })
+        .filter(|h: &String| !h.is_empty())
+        .take(OUTLINE_HEADINGS)
+        .collect();
+    if headings.is_empty() {
+        // Nothing to index, so nothing is added: the acceptance criterion is
+        // that a single-paragraph memory costs no more than it does today.
+        return first;
+    }
+    format!("{first}\nsections: {}", headings.join(" / "))
 }
 
 fn word_re() -> &'static Regex {
@@ -499,8 +563,21 @@ pub fn run_explained(
         // nothing. Trim by characters, not bytes: the corpus is in Spanish,
         // with accents, and cutting mid UTF-8 would break the snippet (see
         // `chunk::split`).
+        if q.outline {
+            // From the whole memory and not from the chunk that won: the
+            // point is to say what the rest holds, and the chunk is the
+            // part we already know matched.
+            if let Some(body) = memory_body(conn, hit.memory_id)? {
+                hit.snippet = outline(&body, q.excerpt.unwrap_or(usize::MAX));
+            }
+        }
         if let Some(n) = q.excerpt {
-            hit.snippet = hit.snippet.chars().take(n).collect();
+            // An outline is already bounded by its own rules; trimming it
+            // here would cut the headings off the end, which is the half
+            // that is not in the excerpt to begin with.
+            if !q.outline {
+                hit.snippet = hit.snippet.chars().take(n).collect();
+            }
         }
         let cost = est_tokens(&hit.title) + est_tokens(&hit.snippet);
         if !out.is_empty() && spent + cost > q.budget_tokens {
@@ -512,6 +589,14 @@ pub fn run_explained(
         out.push(Explained { hit, bm25, cosine });
     }
     Ok(out)
+}
+
+/// A memory's whole body, for the outline. One row per candidate, which is
+/// twenty rows on the default settings.
+fn memory_body(conn: &Connection, memory_id: i64) -> Result<Option<String>> {
+    Ok(conn
+        .query_row("select body from memories where id = ?1", [memory_id], |r| r.get(0))
+        .optional()?)
 }
 
 pub fn run(conn: &Connection, q: &Query, ctx: &SearchContext) -> Result<Vec<SearchHit>> {

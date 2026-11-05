@@ -512,3 +512,85 @@ fn an_invalid_scope_over_mcp_is_an_explained_error_and_not_a_crash() {
     let texto = serde_json::to_string(&r).unwrap();
     assert!(texto.contains("autor"), "el modelo tiene que poder corregirlo: {texto}");
 }
+
+// ---------------------------------------------------------------------------
+// The deterministic outline: what a long memory looks like from outside,
+// computed from its own text, with no model anywhere near it.
+// ---------------------------------------------------------------------------
+
+const LARGA: &str = "El runbook de la caché cubre el ciclo entero de la invalidación.\n\n\
+# Síntomas\n\nLa latencia sube en el percentil 99 y el breakdown queda viejo.\n\n\
+# Diagnóstico\n\nSe mira el TTL efectivo contra el que dice la configuración.\n\n\
+# Remedio\n\nSe purga por prefijo y se vuelve a calentar con el job nocturno.\n\n\
+# Lo que no hay que hacer\n\nPurgar entero en hora punta: la estampida tira la base.\n\n\
+Relleno para que la memoria pase el umbral y el esquema valga la pena: \
+una nota corta no necesita índice y el índice no puede gastar tokens repitiendo \
+lo que el fragmento ya dice. Este párrafo existe nada más para que el cuerpo sea \
+largo de verdad y la prueba mida lo que dice medir, no un caso de borde. El umbral está por encima del tamaño de un fragmento a propósito: una memoria que entra entera en un fragmento no tiene un resto sobre el que el lector pueda dudar, así que no hay nada que resumirle. Este relleno la empuja por encima de ese umbral sin inventar secciones que no existen, que es lo que la prueba necesita para medir el caso real y no uno de borde.";
+
+#[test]
+fn a_long_memory_shows_its_headings_in_the_outline() {
+    let o = anathem::search::outline(LARGA, 120);
+    assert!(o.contains("Síntomas") && o.contains("Remedio"), "{o}");
+    assert!(
+        o.contains("runbook"),
+        "y el primer párrafo, que es de qué trata: {o}"
+    );
+    assert!(
+        !o.contains("estampida"),
+        "pero no el cuerpo entero, que es lo que get_memory devuelve: {o}"
+    );
+}
+
+#[test]
+fn a_memory_without_headings_is_no_longer_than_the_excerpt() {
+    // The acceptance criterion: a 200-character note needs no outline, and
+    // the outline must not spend tokens saying what the excerpt already says.
+    let plana = "Una sola idea, sin títulos ni secciones, escrita de corrido y \
+                 sin nada que indexar porque no hay partes que distinguir.";
+    let o = anathem::search::outline(plana, 120);
+    assert!(o.chars().count() <= 120, "midió {}: {o}", o.chars().count());
+}
+
+#[test]
+fn a_memory_below_the_threshold_comes_back_exactly_as_today() {
+    let corta = "La caché del breakdown no se justifica.";
+    assert_eq!(anathem::search::outline(corta, 120), corta);
+}
+
+#[test]
+fn the_outline_is_off_unless_it_is_asked_for() {
+    let (_d, conn) = fixture();
+    let id = seed(&conn, "larga", "acme-billing", LARGA);
+    assert!(id > 0);
+
+    let q = search::Query { text: "runbook caché".into(), ..Default::default() };
+    let sin = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
+    assert!(!sin.is_empty());
+    // The chunk that matched may well contain some headings — they are in
+    // its first 500 characters. What it cannot contain is the index of the
+    // WHOLE memory, which is the thing the outline adds.
+    assert!(
+        !sin[0].snippet.contains("sections:"),
+        "sin pedirlo, el fragmento tiene que ser el de siempre: {}",
+        sin[0].snippet
+    );
+
+    let q = search::Query {
+        text: "runbook caché".into(),
+        outline: true,
+        excerpt: Some(200),
+        ..Default::default()
+    };
+    let con = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
+    assert!(
+        con[0].snippet.contains("sections:"),
+        "pidiéndolo, tiene que verse la estructura: {}",
+        con[0].snippet
+    );
+    assert!(
+        con[0].snippet.contains("Lo que no hay que hacer"),
+        "incluidas las secciones que caen fuera del fragmento que ganó: {}",
+        con[0].snippet
+    );
+}
