@@ -6,16 +6,16 @@
 # maintains anathem saw these exact bytes". A key living in CI cannot say
 # that: it signs whatever the pipeline produced, which is what the `.sha256`
 # already attests, so it would be ceremony rather than a guarantee. On top of
-# that, this project builds on two systems — GitLab CI does Linux and
-# Windows, a private GitHub repository does macOS (see publish-mac.sh) — so a
-# CI key would have to exist in both places to sign everything, doubling the
-# exposure to sign half the artifacts each.
+# that, the binaries are not built where they are published: GitHub Actions
+# compiles all four platforms and `scripts/publish-binaries.sh` uploads them
+# here. A key on either side would attest to a pipeline's work, not to a
+# person having seen the bytes that went out.
 #
 # There is already a manual step with a person's credentials on it:
-# publish-mac.sh. This joins it rather than adding a new one.
+# publish-binaries.sh. This joins it rather than adding a new one.
 #
 # Needs minisign and glab, and the release already published with all its
-# assets. Run it after publish-mac.sh.
+# assets. Run it after publish-binaries.sh.
 #
 #     sh scripts/sign-release.sh v0.3.0
 #

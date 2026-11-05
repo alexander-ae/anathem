@@ -1,75 +1,150 @@
-# Compila los binarios de macOS y los deja como artefactos.
+# Builds every published binary and leaves them as artifacts.
 #
-# anathem vive en GitLab; esto es lo único que quedó acá, y por un motivo
-# concreto: compilar para macOS exige hardware Apple —cruzar desde Linux
-# necesitaría el SDK de Apple, cuya licencia lo limita a máquinas Apple— y los
-# runners macOS de GitLab son solo Premium y Ultimate. GitHub los da gratis
-# para repositorios públicos... y este es privado, así que corre contra la
-# cuota de minutos; una release son unos pocos minutos de macOS al mes.
+# anathem lives on GitLab. This repository is a mirror that exists to compile:
+# GitHub Actions is free and unlimited for public repositories on all three
+# operating systems, while GitLab's shared-runner quota is 400 minutes a month
+# and one release used to spend 28 of them on Windows alone — and macOS was
+# never available there at all, since those runners are Premium and Ultimate
+# only.
 #
-# No publica nada: deja los archivos como artefactos y `scripts/publish-mac.sh`
-# los baja y los sube a la release de GitLab. Se hace así a propósito, para que
-# no haya un token de GitLab guardado del lado de GitHub.
-
-name: binarios de macOS
+# It publishes nothing. The files are left as artifacts and
+# `scripts/publish-binaries.sh`, run from the maintainer's machine, downloads
+# them and uploads them to the GitLab release. That is deliberate: no GitLab
+# credential is stored on GitHub's side, and every publication is made by a
+# person knowingly.
+#
+# WHAT WENT WRONG BEFORE, and what guards it now. This workflow used to check
+# out with no `ref`, which meant it built whatever sat on the mirror's default
+# branch while the tag it was handed went unused. Nothing ever synced the
+# mirror, so the macOS binaries published as v0.2.1 and v0.2.2 were both built
+# from v0.2.0's code — and nobody could tell, because a macOS binary does not
+# run on the Linux machine that published it. Two things stop that now: the
+# checkout takes the tag, and every job refuses to upload a binary that does
+# not report the version it was asked to build.
+name: binaries
 
 on:
   workflow_dispatch:
     inputs:
-      etiqueta:
-        description: 'Etiqueta que se está publicando, por ejemplo v0.1.0'
+      tag:
+        description: 'The tag being published, for example v0.3.0'
         required: true
 
 jobs:
-  construir:
-    name: ${{ matrix.nombre }}
-    runs-on: macos-14
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - nombre: macos-arm64
-            objetivo: aarch64-apple-darwin
-          # El Mac Intel se compila cruzado desde Apple Silicon: `macos-13` se
-          # retiró en diciembre de 2025 y un job que lo pida queda en cola para
-          # siempre. El SDK de Apple apunta a las dos arquitecturas desde
-          # cualquiera de las dos. Lo que se pierde es correr el binario para
-          # comprobarlo, porque el runner no puede ejecutar x86_64.
-          - nombre: macos-x86_64
-            objetivo: x86_64-apple-darwin
-            cruzado: true
+          - name: linux-x86_64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar
+          - name: windows-x86_64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+          - name: macos-arm64
+            runner: macos-14
+            target: aarch64-apple-darwin
+            archive: tar
+          # The Intel Mac is cross-compiled from Apple Silicon: `macos-13` was
+          # retired in December 2025 and a job asking for it queues forever.
+          # Apple's SDK targets both architectures from either one. What is
+          # lost is running the binary to check it, because the runner cannot
+          # execute x86_64 — so the architecture is checked with `file`
+          # instead, and the version is read out of the binary rather than
+          # asked for.
+          - name: macos-x86_64
+            runner: macos-14
+            target: x86_64-apple-darwin
+            archive: tar
+            cross: true
 
     steps:
+      # The tag, and not the default branch. This is the line whose absence
+      # shipped v0.2.0's code as v0.2.2 on macOS.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          # `build.rs` reads the commit with `git rev-parse HEAD`, and a
+          # shallow checkout is enough for that; what it is not enough for is
+          # being sure the tag is the one asked for, which the step below
+          # checks against the ref instead.
+          fetch-depth: 1
 
-      - name: Instalar el objetivo de Rust
-        run: rustup target add ${{ matrix.objetivo }}
+      - name: Add the Rust target
+        run: rustup target add ${{ matrix.target }}
 
-      - name: Compilar
-        run: cargo build --release --locked --target ${{ matrix.objetivo }}
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
 
-      - name: Comprobar que el binario corre y sabe su commit
-        if: '!matrix.cruzado'
-        run: ./target/${{ matrix.objetivo }}/release/mem --version
-
-      - name: Comprobar que el binario es de la arquitectura pedida
-        if: matrix.cruzado
+      - name: Check the binary is the version that was asked for
+        shell: bash
         run: |
           set -eu
-          file "target/${{ matrix.objetivo }}/release/mem"
-          file "target/${{ matrix.objetivo }}/release/mem" | grep -q x86_64
+          bin="target/${{ matrix.target }}/release/mem"
+          [ -f "$bin" ] || bin="$bin.exe"
+          esperado="${{ inputs.tag }}"
+          esperado="${esperado#v}"
+          # A binary that can run says it; one that cannot is read with
+          # `strings`, which finds the same constant compiled into it.
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            obtenido="$(strings "$bin" | grep -oE '^0\.[0-9]+\.[0-9]+$' | head -1 || true)"
+          else
+            obtenido="$("$bin" --version | awk '{print $2}')"
+          fi
+          echo "asked for $esperado, built $obtenido"
+          if [ "$esperado" != "$obtenido" ]; then
+            echo "::error::built $obtenido while publishing $esperado — the checkout is not the tag" >&2
+            exit 1
+          fi
 
-      - name: Empaquetar
+      - name: Check the architecture, when it cannot be run
+        if: matrix.cross
         run: |
           set -eu
-          nombre="mem-${{ matrix.nombre }}"
-          tar -C "target/${{ matrix.objetivo }}/release" -czf "$nombre.tar.gz" mem
-          shasum -a 256 "$nombre.tar.gz" > "$nombre.tar.gz.sha256"
+          file "target/${{ matrix.target }}/release/mem"
+          file "target/${{ matrix.target }}/release/mem" | grep -q x86_64
+
+      - name: Pack it
+        shell: bash
+        run: |
+          set -eu
+          cd "target/${{ matrix.target }}/release"
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            7z a "mem-${{ matrix.name }}.zip" mem.exe
+          else
+            tar -czf "mem-${{ matrix.name }}.tar.gz" mem
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
-          name: mem-${{ matrix.nombre }}
+          name: mem-${{ matrix.name }}
           path: |
-            mem-${{ matrix.nombre }}.tar.gz
-            mem-${{ matrix.nombre }}.tar.gz.sha256
+            target/${{ matrix.target }}/release/mem-${{ matrix.name }}.tar.gz
+            target/${{ matrix.target }}/release/mem-${{ matrix.name }}.zip
+          if-no-files-found: error
           retention-days: 7
+
+  # The suite, on the two platforms where paths and processes behave
+  # differently. Free here, where it used to be 28 minutes of a 400-minute
+  # monthly quota on GitLab.
+  test:
+    name: test ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            runner: ubuntu-latest
+          - name: windows
+            runner: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - run: cargo test --locked

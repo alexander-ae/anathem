@@ -1,19 +1,28 @@
-# CI de anathem: corre la batería y publica los binarios de cada etiqueta.
+# CI de anathem: la batería en Linux, en cada push.
 #
-# Cubre Linux y Windows, que es lo que los runners del plan Free alcanzan.
-# El binario de macOS no sale de acá: los runners macOS de GitLab son solo
-# Premium y Ultimate, y cruzar desde Linux necesitaría el SDK de Apple, cuya
-# licencia lo limita a hardware Apple. Se construye aparte y se sube a la
-# misma release; ver scripts/publish-mac.sh.
+# Compilar NO se hace acá. Las cuatro plataformas —Linux, Windows y las dos de
+# macOS— se compilan en GitHub Actions, que es gratis e ilimitado para
+# repositorios públicos en los tres sistemas operativos, y `mem` vive también
+# como espejo público en github.com/alexander-ae/anathem con ese único
+# propósito. `scripts/publish-binaries.sh` dispara esa compilación desde la
+# máquina de quien publica, baja los artefactos y los sube a la release de
+# acá; así no queda ninguna credencial de GitLab del lado de GitHub.
+#
+# El motivo es la cuota. El plan Free da 400 minutos de runners compartidos al
+# mes, y una sola release se llevaba 28 de ellos entre compilar y probar en
+# Windows. Medido sobre los 24 pipelines que este proyecto alcanzó a correr,
+# el job de Windows se llevaba el 79% de todo el tiempo de CI. Los runners de
+# macOS, además, son solo Premium y Ultimate: ese binario nunca pudo salir de
+# acá.
+#
+# Lo que se queda son los dos jobs baratos que dan la respuesta rápida en cada
+# push: la batería en Linux —unos 3 minutos— y el escaneo de dependencias.
 #
 # Si los pipelines no arrancan, es que la cuenta todavía no verificó una
 # tarjeta: GitLab lo exige para usar sus runners compartidos en el plan Free.
-# Sin eso, scripts/publish.sh hace lo mismo desde tu máquina.
 
 stages:
   - probar
-  - construir
-  - publicar
 
 variables:
   CARGO_TERM_COLOR: always
@@ -82,173 +91,3 @@ auditar:dependencias:
     - test -x "$CARGO_HOME/bin/cargo-audit" || cargo install cargo-audit --locked --version "^0.22"
   script:
     - cargo audit --deny warnings
-
-probar:windows:
-  stage: probar
-  tags:
-    - saas-windows-medium-amd64
-  <<: *cache_cargo
-  variables:
-    CARGO_HOME: $CI_PROJECT_DIR\.cargo
-  before_script:
-    # El runner de Windows no trae Rust. Chocolatey sí, y `rust-ms` es el
-    # toolchain con MSVC, que es el que usa el binario publicado.
-    - choco install rust-ms -y --no-progress
-    - $env:Path = "C:\Program Files\Rust stable MSVC 1.*\bin;$env:Path"
-    - rustc --version
-  script:
-    - cargo test --locked
-    - cargo run --locked --quiet -- --version
-  allow_failure: true
-  # No en cada push. Medido sobre los 24 pipelines que llegó a correr este
-  # proyecto: este job solo se llevó el 79% de todo el tiempo de CI —unos 14
-  # minutos por corrida, contra 2 del de Linux— y es `allow_failure`, así que
-  # nunca frenó nada. Falló 3 de 24 veces sin consecuencia alguna. Pagar eso
-  # en cada push agotó la cuota mensual en dos días.
-  #
-  # Donde sí tiene que correr es antes de una etiqueta, que es cuando "probado
-  # en Windows" pasa a ser una afirmación sobre algo que la gente se baja.
-  # Fuera de ahí queda manual: está a un clic cuando se toca algo que lo
-  # merece —rutas, archivos, procesos— y no cuesta nada cuando no.
-  rules:
-    - if: $CI_COMMIT_TAG
-    - when: manual
-      allow_failure: true
-
-construir:linux:
-  stage: construir
-  # Sin esperar a la etapa de pruebas: en el runner de Windows la batería
-  # tarda media hora, y dejaba la publicación entera detrás de ella.
-  needs: []
-  image: rust:1-bookworm
-  <<: *cache_cargo
-  variables:
-    CARGO_HOME: $CI_PROJECT_DIR/.cargo
-  script:
-    - cargo build --release --locked
-    - ./target/release/mem --version
-    - tar -C target/release -czf mem-linux-x86_64.tar.gz mem
-    - sha256sum mem-linux-x86_64.tar.gz > mem-linux-x86_64.tar.gz.sha256
-  artifacts:
-    paths:
-      - mem-linux-x86_64.tar.gz
-      - mem-linux-x86_64.tar.gz.sha256
-    expire_in: 1 week
-  rules:
-    - if: $CI_COMMIT_TAG
-
-construir:windows:
-  stage: construir
-  needs: []
-  # Que Windows no bloquee la release: el job que publica saltea el archivo
-  # que falte y lo dice.
-  allow_failure: true
-  tags:
-    - saas-windows-medium-amd64
-  <<: *cache_cargo
-  variables:
-    CARGO_HOME: $CI_PROJECT_DIR\.cargo
-  before_script:
-    - choco install rust-ms -y --no-progress
-    - $env:Path = "C:\Program Files\Rust stable MSVC 1.*\bin;$env:Path"
-  script:
-    - cargo build --release --locked
-    - Compress-Archive -Path target\release\mem.exe -DestinationPath mem-windows-x86_64.zip
-    - (Get-FileHash mem-windows-x86_64.zip -Algorithm SHA256).Hash.ToLower() + "  mem-windows-x86_64.zip" | Out-File -Encoding ascii mem-windows-x86_64.zip.sha256
-  artifacts:
-    paths:
-      - mem-windows-x86_64.zip
-      - mem-windows-x86_64.zip.sha256
-    expire_in: 1 week
-  rules:
-    - if: $CI_COMMIT_TAG
-
-publicar:
-  stage: publicar
-  needs:
-    - job: construir:linux
-      artifacts: true
-    - job: construir:windows
-      artifacts: true
-  # Esta imagen trae release-cli, que es lo que la palabra `release` necesita
-  # para crear la release; una imagen cualquiera falla ahí.
-  image: registry.gitlab.com/gitlab-org/release-cli:latest
-  rules:
-    - if: $CI_COMMIT_TAG
-  before_script:
-    # La imagen de release-cli no trae curl, y sin esto el job falla recién al
-    # final, después de haber compilado las cuatro plataformas.
-    - command -v curl >/dev/null || apk add --no-cache curl
-  script:
-    # La `v` se queda. El bloque `release:` de abajo arma los enlaces con
-    # $CI_COMMIT_TAG y NO puede expandir ${CI_COMMIT_TAG#v}: no hay sintaxis
-    # de shell ahí. Si acá se sube a `0.2.2` y allá se enlaza a `v0.2.2`, el
-    # job termina en verde, la release se ve completa, y cada enlace de Linux
-    # y Windows devuelve 404. Pasó en la v0.2.2.
-    - VERSION="${CI_COMMIT_TAG}"
-    - |
-      for f in mem-linux-x86_64.tar.gz mem-linux-x86_64.tar.gz.sha256 \
-               mem-windows-x86_64.zip mem-windows-x86_64.zip.sha256; do
-        [ -f "$f" ] || { echo "falta $f, lo salteo"; continue; }
-        echo "subiendo $f"
-        curl --fail-with-body --silent --show-error \
-          --header "JOB-TOKEN: $CI_JOB_TOKEN" \
-          --upload-file "$f" \
-          "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PAQUETE}/${VERSION}/${f}"
-      done
-  release:
-    tag_name: $CI_COMMIT_TAG
-    description: 'Ver el README para instalar. Los binarios y el paquete de vocabulario cuelgan de acá.'
-    assets:
-      # `filepath` no es decoración: sin él, el enlace apunta directo al
-      # registro de paquetes y la URL `/-/releases/<tag>/downloads/<archivo>`
-      # —la que usa el instalador— devuelve 404 aunque el archivo figure en la
-      # release. Pasó en la v0.2.0 y no se nota hasta que alguien instala.
-      links:
-        - name: mem-linux-x86_64.tar.gz
-          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/anathem/${CI_COMMIT_TAG}/mem-linux-x86_64.tar.gz'
-          filepath: '/mem-linux-x86_64.tar.gz'
-        - name: mem-linux-x86_64.tar.gz.sha256
-          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/anathem/${CI_COMMIT_TAG}/mem-linux-x86_64.tar.gz.sha256'
-          filepath: '/mem-linux-x86_64.tar.gz.sha256'
-        - name: mem-windows-x86_64.zip
-          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/anathem/${CI_COMMIT_TAG}/mem-windows-x86_64.zip'
-          filepath: '/mem-windows-x86_64.zip'
-        - name: mem-windows-x86_64.zip.sha256
-          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/anathem/${CI_COMMIT_TAG}/mem-windows-x86_64.zip.sha256'
-          filepath: '/mem-windows-x86_64.zip.sha256'
-
-# Un job que falla si los enlaces que acaba de publicar no se pueden bajar.
-# El job `publicar` termina en verde con enlaces rotos —solo registra URLs,
-# no las prueba— y eso no se nota hasta que alguien instala. Esto lo nota en
-# el mismo pipeline.
-verificar:release:
-  stage: publicar
-  needs: ["publicar"]
-  image: alpine:latest
-  rules:
-    - if: $CI_COMMIT_TAG
-  before_script:
-    - apk add --no-cache curl
-  script:
-    - |
-      ROTOS=0
-      for f in mem-linux-x86_64.tar.gz mem-linux-x86_64.tar.gz.sha256 \
-               mem-windows-x86_64.zip mem-windows-x86_64.zip.sha256; do
-        URL="${CI_PROJECT_URL}/-/releases/${CI_COMMIT_TAG}/downloads/${f}"
-        CODIGO=$(curl -s -o /dev/null -w '%{http_code}' -L "$URL")
-        if [ "$CODIGO" = "200" ]; then
-          echo "ok   $f"
-        else
-          echo "ROTO $f -> HTTP $CODIGO"
-          echo "     $URL"
-          ROTOS=$((ROTOS + 1))
-        fi
-      done
-      [ "$ROTOS" -eq 0 ] || {
-        echo
-        echo "$ROTOS enlaces de la release no se pueden bajar."
-        echo "Es la URL que usa scripts/install.sh: la release se ve completa"
-        echo "y la instalacion falla con 404."
-        exit 1
-      }

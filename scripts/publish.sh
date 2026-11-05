@@ -8,8 +8,9 @@
 #
 # It is deliberately NOT a full replacement. It builds for THIS machine only,
 # so a release made here carries one platform's binary. What is missing is
-# printed at the end, with how to add it: `scripts/publish-mac.sh` brings the
-# macOS ones, and Windows needs a Windows machine or the pipeline.
+# printed at the end, with how to add it: `scripts/publish-binaries.sh` builds
+# every platform on GitHub Actions and uploads them here, which is the normal
+# route; this script is the one that needs nothing but your own machine.
 #
 # A release with one binary is not a broken release: the installer falls back
 # to compiling from source on any platform it finds no binary for. It is worse
@@ -224,7 +225,7 @@ for p in linux-x86_64 macos-arm64 macos-x86_64; do
   FALTAN="$FALTAN $p"
 done
 aviso "this release has no binary for:$FALTAN, and none for Windows"
-echo "      macOS:   sh scripts/publish-mac.sh $ETIQUETA"
+echo "      todas:   sh scripts/publish-binaries.sh $ETIQUETA"
 echo "      Windows: it needs a Windows machine, or the pipeline"
 echo "      On a platform with no binary the installer compiles from source,"
 echo "      which works but asks for Rust and a C compiler."
