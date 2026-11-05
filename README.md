@@ -167,6 +167,7 @@ installed with `mem model install <file>`.
 | `save <text>` | Saves a new memory; without `--project` it derives it from the repository you are standing in | `mem save "The /api/x endpoint now pages by 50"` |
 | `save <text> --topic <key>` | With a topic key, the new memory replaces the active one holding the same key in the same project (the old one is left `superseded`, not edited and not deleted). It says which one it replaced. Without `--topic`, nothing changes | `mem save "The payment provider is Adyen" --topic payment-provider` |
 | `topics` | Lists the topic keys: project, how many memories each one has had and the id of the current one | `mem topics` |
+| `show --topic <key>` | What that topic says today — the body of the version that answers for the key — and below it every version it has had, with ids, dates and states. `topics` is the index; this is the content | `mem show --topic payment-provider` |
 | `edit <id>` | Edits the body of a memory in `$EDITOR` | `mem edit 42` |
 | `export --out <dir>` | Exports everything to markdown with frontmatter, one file per memory, losing nothing ([format](docs/export-format.md)) | `mem export --out export/` |
 | `import --from <dir>` | Reads what `export` wrote: restoring a backup, moving the memory to another machine, or syncing two computers by hand with git. It demands an empty database unless you pass `--merge`, which adds only what is missing | `mem import --from export/` |

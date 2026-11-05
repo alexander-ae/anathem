@@ -762,3 +762,78 @@ fn an_older_database_gets_the_unique_index_too() {
     row_with_key(&conn, "p", Some("k"), "active").unwrap();
     assert!(row_with_key(&conn, "p", Some("k"), "active").is_err());
 }
+
+// ---------------------------------------------------------------------------
+// `mem show --topic`: the state of a subject without reading every version.
+// `mem topics` is the index — project, key, how many versions, which is
+// current — and until now the only way to read what a topic *says* was to
+// copy an id out of it and go to `mem history` or `mem export`.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn show_topic_prints_the_current_body_and_the_chain_below_it() {
+    let d = tempfile::tempdir().unwrap();
+    // A body of two lines: the title is the first one (`ingest::title_from`),
+    // so the second is content that only a printed body would show. With a
+    // one-line memory the title *is* the body and the assertion below could
+    // not tell "prints the chain" from "prints every body".
+    let viejo = format!("{PAGOS_VIEJO}\nla clave de prueba era stripe-sk-vieja");
+    mem_ok(d.path(), &["save", &viejo, "--project", "p", "--topic", "pagos"]);
+    mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
+
+    let out = mem_ok(d.path(), &["show", "--topic", "pagos", "--project", "p"]);
+    assert!(out.contains(PAGOS_NUEVO), "tiene que estar el cuerpo vigente: {out}");
+    assert!(
+        !out.contains("stripe-sk-vieja"),
+        "el cuerpo de la versión reemplazada no, solo su título en la cadena: {out}"
+    );
+    assert!(out.contains("id:2"), "y de quién es ese cuerpo: {out}");
+    assert!(out.contains("id:1"), "la cadena tiene que nombrar la versión vieja: {out}");
+    assert!(out.contains("superseded"), "y decir en qué estado quedó: {out}");
+}
+
+#[test]
+fn show_topic_on_an_unknown_key_lists_the_ones_that_exist() {
+    let d = tempfile::tempdir().unwrap();
+    mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
+    mem_ok(d.path(), &["save", "la política de ramas es trunk", "--project", "p", "--topic", "ramas"]);
+    mem_ok(d.path(), &["save", "otro proyecto", "--project", "q", "--topic", "ajeno"]);
+
+    let out = mem_ok(d.path(), &["show", "--topic", "cache", "--project", "p"]);
+    assert!(out.contains("cache"), "tiene que decir qué clave se pidió: {out}");
+    assert!(out.contains("pagos") && out.contains("ramas"), "y cuáles hay: {out}");
+    assert!(
+        !out.contains("ajeno"),
+        "las de otro proyecto no son alternativas de este: {out}"
+    );
+}
+
+#[test]
+fn show_topic_says_so_when_every_version_was_forgotten() {
+    // The key exists — `mem topics` lists it — but nothing answers for it
+    // today. Printing nothing would read exactly like a key that never
+    // existed, which is the one thing this command is for telling apart.
+    let d = tempfile::tempdir().unwrap();
+    mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
+    mem_ok(d.path(), &["forget", "1"]);
+
+    let out = mem_ok(d.path(), &["show", "--topic", "pagos", "--project", "p"]);
+    assert!(out.contains("pagos"), "{out}");
+    assert!(
+        out.contains("no current version") || out.contains("forgotten"),
+        "tiene que distinguirse de una clave inexistente: {out}"
+    );
+    assert!(out.contains("id:1"), "y la historia sigue ahí: {out}");
+}
+
+#[test]
+fn show_topic_is_byte_identical_across_runs() {
+    let d = tempfile::tempdir().unwrap();
+    mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
+    mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
+
+    let a = mem_ok(d.path(), &["show", "--topic", "pagos", "--project", "p"]);
+    let b = mem_ok(d.path(), &["show", "--topic", "pagos", "--project", "p"]);
+    assert_eq!(a, b, "la salida tiene que ser diffeable, no depender de la corrida");
+    assert!(!a.contains('\u{1b}'), "nada de códigos de color en una salida que se canaliza");
+}

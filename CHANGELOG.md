@@ -10,6 +10,17 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Added
+
+- **`mem show --topic <key>`**: what a subject says right now, without
+  reading every version of it. It prints the body of the memory that answers
+  for the key, who saved it and when, and below it every version the key has
+  had — ids, dates and states, no bodies. `mem topics` was the index and
+  there was no way to read the content short of copying an id out of it and
+  going to `mem history` or `mem export`. Deterministic output, no colour
+  codes, made to be piped. An unknown key lists the keys that project does
+  have, the same courtesy `save_memory` already extends.
+
 ### Changed
 
 - `mem model install` **refuses a pack that arrives with no `.sha256` beside

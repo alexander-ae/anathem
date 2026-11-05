@@ -164,6 +164,10 @@ What is worth knowing:
   the memory, not the question as it would be said out loud: the database is
   lexical. It returns candidates with a short excerpt; for the whole body of
   one, `get_memory` with its id.
+- **Reading the state of a subject** with `mem show --topic <key>`, which
+  prints what that topic says now and the versions it had before. It is the
+  shortest way to pick a thread back up when you already know its key;
+  `mem topics` lists the keys.
 - **Resuming** with `recent_memories`, which lists the latest from the project
   by date and says which agent saved it. On top of that, when connecting,
   anathem sends that summary in the protocol greeting, so if the client honors

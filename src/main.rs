@@ -114,6 +114,19 @@ enum Cmd {
     },
     /// Lists the topic keys: project, how many memories each had, and which is current
     Topics,
+    /// What a topic says today, and what it said before
+    ///
+    /// `topics` is the index; this is the content. It prints the body of the
+    /// version that answers for the key right now, and below it every
+    /// version the key has had — ids, dates and states, no bodies.
+    Show {
+        /// The topic key
+        #[arg(long = "topic", value_name = "KEY")]
+        topic: String,
+        /// Project; by default the one of the repository you are standing in
+        #[arg(long)]
+        project: Option<String>,
+    },
     /// What was saved lately, newest first, and who saved it
     ///
     /// Search ranks by relevance; this ranks by date. Useful for picking
@@ -185,6 +198,25 @@ enum ModelCmd {
     Status,
     /// Removes the pack and its vectors; search goes back to bm25 only
     Remove,
+}
+
+/// Shortens a stored instant to what a listing can read.
+///
+/// `created_ts` is a full RFC 3339 timestamp down to the nanosecond, and
+/// `created` is a bare date; `coalesce` hands back either. Nanoseconds and a
+/// zone offset are noise in a column meant to be skimmed, and the minute is
+/// the resolution that matters — two versions of one topic saved the same
+/// afternoon are exactly the case `mem recent` already says a day cannot
+/// tell apart.
+///
+/// Cut by characters rather than parsed: anything unexpected comes back
+/// shortened instead of turning into a wrong date, and a bare date is left
+/// alone.
+fn short_when(raw: &str) -> String {
+    if raw.len() <= 10 {
+        return raw.to_string();
+    }
+    raw.chars().take(16).collect::<String>().replacen('T', " ", 1).trim_end().to_string()
 }
 
 /// Resolves a `~/` prefix against `home`, without touching the environment —
@@ -527,6 +559,53 @@ fn run(cli: Cli) -> Result<()> {
                 }
             }
         }
+        Cmd::Show { topic, project } => {
+            let conn = anathem::db::open(&path)?;
+            let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let project = anathem::project::resolve(project, &cwd);
+            match anathem::maint::topic_state(&conn, &project, &topic)? {
+                anathem::maint::TopicLookup::Unknown(keys) => {
+                    // Exit 0, like every other read command here: nothing
+                    // went wrong, the answer is simply that the key is not
+                    // there, and the list is the useful half of saying so.
+                    println!("no topic \"{topic}\" in project {project}.");
+                    if keys.is_empty() {
+                        println!("That project has no topic keys yet. They are created by saving with `mem save \"...\" --topic <key>`.");
+                    } else {
+                        println!("Keys it does have:");
+                        for k in keys {
+                            println!("  {k}");
+                        }
+                    }
+                }
+                anathem::maint::TopicLookup::Found(state) => {
+                    println!("topic: {}", state.topic);
+                    println!("project: {}", state.project);
+                    match &state.current {
+                        Some(c) => {
+                            let who = c.agent.as_deref().map_or(String::new(), |a| format!(" by {a}"));
+                            println!("current: id:{}, saved {}{who}", c.id, short_when(&c.when));
+                            println!();
+                            println!("{}", c.body.trim_end());
+                        }
+                        None => println!(
+                            "current: none — every version of this key was forgotten"
+                        ),
+                    }
+                    println!();
+                    println!("history, newest first:");
+                    let width = state
+                        .chain
+                        .iter()
+                        .map(|v| v.status.chars().count())
+                        .max()
+                        .unwrap_or(0);
+                    for v in &state.chain {
+                        println!("  id:{:<6} {}  [{:<width$}]  {}", v.id, short_when(&v.when), v.status, v.title);
+                    }
+                }
+            }
+        }
         Cmd::Import { from, merge } => {
             let conn = anathem::db::open(&path)?;
             let r = anathem::import::import_dir(&conn, &from, merge)?;
@@ -658,6 +737,26 @@ mod tests {
         let err = resolve("~/.anathem/mem.db", None)
             .expect_err("with no HOME, resolve has to fail instead of panicking");
         assert!(err.to_string().contains("HOME"), "mensaje inesperado: {err}");
+    }
+
+    #[test]
+    fn short_when_leaves_a_bare_date_alone() {
+        assert_eq!(super::short_when("2026-10-28"), "2026-10-28");
+    }
+
+    #[test]
+    fn short_when_cuts_a_timestamp_at_the_minute() {
+        assert_eq!(
+            super::short_when("2026-11-05T09:02:40.305529008-05:00"),
+            "2026-11-05 09:02"
+        );
+    }
+
+    #[test]
+    fn short_when_does_not_invent_a_date_out_of_something_it_cannot_read() {
+        // Shortened, never reinterpreted: a wrong date that looks right is
+        // worse than an odd-looking string.
+        assert_eq!(super::short_when("no es una fecha en absoluto"), "no es una fecha");
     }
 
     #[test]

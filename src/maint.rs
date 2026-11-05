@@ -99,3 +99,98 @@ pub fn topics(conn: &Connection) -> Result<Vec<Tema>> {
         .collect::<rusqlite::Result<_>>()?;
     Ok(rows)
 }
+
+/// One version of a topic key, as the chain under `mem show --topic` lists
+/// it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TopicVersion {
+    pub id: i64,
+    /// `created_ts` when it is there, the date in `created` otherwise — the
+    /// same value `mem recent` orders by.
+    pub when: String,
+    pub status: String,
+    pub title: String,
+}
+
+/// The active version of a topic: the part a person is actually after.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CurrentTopic {
+    pub id: i64,
+    pub body: String,
+    pub when: String,
+    /// Who saved it, when that was known. Null for everything saved from the
+    /// CLI; see `db::add_column`.
+    pub agent: Option<String>,
+}
+
+/// What a topic says today, and what it said before.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TopicState {
+    pub project: String,
+    pub topic: String,
+    /// `None` when every version of the key was forgotten. The key still
+    /// exists and still has a history; nothing answers for it today. That is
+    /// a different answer from a key that was never used, and telling the
+    /// two apart is most of why this command exists.
+    pub current: Option<CurrentTopic>,
+    /// Every version, newest first, the active one included.
+    pub chain: Vec<TopicVersion>,
+}
+
+/// The answer to "what does this topic say", or the keys that project does
+/// have when it does not have this one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TopicLookup {
+    Found(Box<TopicState>),
+    /// Ordered, as `topics` returns them.
+    Unknown(Vec<String>),
+}
+
+/// Reads a topic key's state in one project.
+///
+/// The chain is every memory carrying the key, newest id first, and not the
+/// walk of `supersedes_id` that `history` does. They differ: once the
+/// current version of a key is forgotten, the next save under that key
+/// supersedes nothing (see `ingest::save_with_topic`), so the key's history
+/// is several disjoint chains and walking one of them would quietly report
+/// a shorter past than `mem topics` counts in the same breath.
+pub fn topic_state(conn: &Connection, project: &str, topic: &str) -> Result<TopicLookup> {
+    let key = crate::ingest::normalize_topic(topic)?;
+    let mut stmt = conn.prepare(
+        "select id, coalesce(created_ts, created), status, title, body, agent
+           from memories
+          where project = ?1 and topic = ?2
+          order by id desc",
+    )?;
+    let versions = stmt
+        .query_map(params![project, key], |r| {
+            Ok((
+                TopicVersion { id: r.get(0)?, when: r.get(1)?, status: r.get(2)?, title: r.get(3)? },
+                r.get::<_, String>(4)?,
+                r.get::<_, Option<String>>(5)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    if versions.is_empty() {
+        // The courtesy `save_memory` already extends when a key turns out to
+        // be new: a typo and a genuinely new subject look identical, and the
+        // list is what separates them.
+        let keys =
+            topics(conn)?.into_iter().filter(|t| t.project == project).map(|t| t.topic).collect();
+        return Ok(TopicLookup::Unknown(keys));
+    }
+
+    // At most one can be active: the unique index over (project, topic) for
+    // active rows is what guarantees it, and `doctor` reports a database
+    // where that stopped being true.
+    let current = versions.iter().find(|(v, _, _)| v.status == "active").map(|(v, body, agent)| {
+        CurrentTopic { id: v.id, body: body.clone(), when: v.when.clone(), agent: agent.clone() }
+    });
+    Ok(TopicLookup::Found(Box::new(TopicState {
+        project: project.to_string(),
+        topic: key,
+        current,
+        chain: versions.into_iter().map(|(v, _, _)| v).collect(),
+    })))
+}
