@@ -55,7 +55,7 @@ enum Cmd {
     },
     /// Saves a new memory
     Save {
-        /// The memory's body
+        /// The memory's body, or `-` to read it from stdin
         text: String,
         /// Which project it belongs to. Without this it is derived from
         /// the repository you are standing in: the name of the `origin`
@@ -71,6 +71,15 @@ enum Cmd {
         /// `mem topics`.
         #[arg(long)]
         topic: Option<String>,
+        /// This memory was sent by another agent or another machine
+        ///
+        /// It is saved as a draft, invisible to search until someone runs
+        /// `mem accept <id>`. Requires --from and --project.
+        #[arg(long)]
+        external: bool,
+        /// Who sent it: a free label such as `claude-code@my-laptop`
+        #[arg(long = "from", value_name = "LABEL", requires = "external")]
+        from: Option<String>,
     },
     /// Edits an existing memory's body in $EDITOR
     Edit {
@@ -127,12 +136,22 @@ enum Cmd {
     /// version that answers for the key right now, and below it every
     /// version the key has had — ids, dates and states, no bodies.
     Show {
+        /// A memory's id. Give this or --topic, not both
+        id: Option<i64>,
         /// The topic key
-        #[arg(long = "topic", value_name = "KEY")]
-        topic: String,
+        #[arg(long = "topic", value_name = "KEY", conflicts_with = "id")]
+        topic: Option<String>,
         /// Project; by default the one of the repository you are standing in
         #[arg(long)]
         project: Option<String>,
+    },
+    /// Accepts a memory that arrived from elsewhere, making it searchable
+    ///
+    /// A received memory is saved as a draft on purpose: it is text another
+    /// agent wrote, and nothing injects it into a model's context before a
+    /// person has read it. `mem show <id>` is how you read one.
+    Accept {
+        id: i64,
     },
     /// What was saved lately, newest first, and who saved it
     ///
@@ -480,9 +499,45 @@ fn run(cli: Cli) -> Result<()> {
                 println!("    {}", e.hit.snippet.chars().take(180).collect::<String>());
             }
         }
-        Cmd::Save { text, project, tag, topic } => {
+        Cmd::Save { text, project, tag, topic, external, from } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+            // `-` means the body comes on stdin, which is what lets a note
+            // travel over SSH without going through a shell argument:
+            //   ssh host mem save - --external --from me --project p < note.md
+            let text = if text == "-" {
+                let mut buf = String::new();
+                std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf)?;
+                buf
+            } else {
+                text
+            };
+            if external {
+                let Some(from) = from else {
+                    anyhow::bail!("--external needs --from <label>: a received memory with no \
+                                   sender records nothing worth recording");
+                };
+                let Some(project) = project else {
+                    anyhow::bail!("--external needs --project: deriving it from the directory you \
+                                   are standing in would file someone else's note under whatever \
+                                   repository happens to be here");
+                };
+                if topic.is_some() {
+                    anyhow::bail!("--topic cannot be used with --external: a topic key replaces \
+                                   the current version of a subject, and a memory from another \
+                                   machine replacing a local one needs a rule about which of the \
+                                   two is current. Save it without a key and use `mem supersede` \
+                                   after accepting it, if that is what you meant.");
+                }
+                let g = anathem::ingest::save_received(&conn, &text, &project, tag, &from)?;
+                println!(
+                    "received memory {} in {project}, from {from}, saved as a draft",
+                    g.id
+                );
+                println!("Nothing searches it until you accept it: `mem show {}` to read it, `mem accept {}` to let it in.", g.id, g.id);
+                sync_after_write(&conn, &dir);
+                return Ok(());
+            }
             // When the project is derived instead of given, say so: an
             // implicit value nobody sees is the one nobody can later explain
             // the wrongness of.
@@ -618,7 +673,41 @@ fn run(cli: Cli) -> Result<()> {
                 }
             }
         }
-        Cmd::Show { topic, project } => {
+        Cmd::Accept { id } => {
+            let conn = anathem::db::open(&path)?;
+            let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+            let from = anathem::maint::accept(&conn, id)?;
+            println!("accepted memory {id}, received from {from}; searches can see it now");
+            sync_after_write(&conn, &dir);
+        }
+        Cmd::Show { id: Some(id), .. } => {
+            let conn = anathem::db::open(&path)?;
+            let Some(m) = anathem::maint::memory(&conn, id)? else {
+                anyhow::bail!("there is no memory with id:{id}");
+            };
+            println!("id: {}", m.id);
+            println!("project: {}", m.project);
+            println!("status: {}", m.status);
+            let who = m
+                .received_from
+                .as_deref()
+                .map(|f| format!(", received from {f}"))
+                .or_else(|| m.agent.as_deref().map(|a| format!(", saved by {a}")))
+                .unwrap_or_default();
+            println!("saved: {}{who}", short_when(&m.when));
+            if let Some(t) = &m.topic {
+                println!("topic: {t}");
+            }
+            if m.status == "draft" {
+                println!("Waiting: nothing searches it until `mem accept {id}`.");
+            }
+            println!();
+            println!("{}", m.body.trim_end());
+        }
+        Cmd::Show { id: None, topic, project } => {
+            let Some(topic) = topic else {
+                anyhow::bail!("`mem show` needs a memory id or --topic <key>");
+            };
             let conn = anathem::db::open(&path)?;
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let project = anathem::project::resolve(project, &cwd);

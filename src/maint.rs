@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
 /// Marks a memory as `forgotten`. It does not delete the row: `search::run`
 /// filters by `status = 'active'`, so changing the status is enough to take
@@ -31,6 +31,74 @@ pub fn pin(conn: &Connection, id: i64, on: bool) -> Result<()> {
         anyhow::bail!("there is no memory with id:{id}");
     }
     Ok(())
+}
+
+/// Promotes a received memory from `draft` to `active`, which is what makes
+/// it visible to search.
+///
+/// Only a draft can be accepted. Accepting something already active is not a
+/// no-op worth being quiet about — it means whoever ran it had the wrong id,
+/// and the useful answer is to say so.
+pub fn accept(conn: &Connection, id: i64) -> Result<String> {
+    let row: Option<(String, Option<String>)> = conn
+        .query_row("select status, received_from from memories where id = ?1", [id], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .optional()?;
+    let Some((status, from)) = row else {
+        anyhow::bail!("there is no memory with id:{id}");
+    };
+    if status != "draft" {
+        anyhow::bail!("memory id:{id} is {status}, not a draft waiting to be accepted");
+    }
+    conn.execute(
+        "update memories set status = 'active', updated = ?2 where id = ?1",
+        params![id, chrono::Local::now().format("%Y-%m-%d").to_string()],
+    )?;
+    Ok(from.unwrap_or_else(|| "an unrecorded sender".to_string()))
+}
+
+/// One memory, whole, as `mem show <id>` prints it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Memory {
+    pub id: i64,
+    pub project: String,
+    pub title: String,
+    pub body: String,
+    pub status: String,
+    pub when: String,
+    pub agent: Option<String>,
+    pub topic: Option<String>,
+    pub received_from: Option<String>,
+}
+
+/// Reads one memory by id, whatever its status.
+///
+/// Deliberately not filtered by `status = 'active'` like search is: the
+/// reason this exists is to read a draft before deciding whether to accept
+/// it, and a reviewer who cannot see what they are reviewing is not one.
+pub fn memory(conn: &Connection, id: i64) -> Result<Option<Memory>> {
+    Ok(conn
+        .query_row(
+            "select id, project, title, body, status, coalesce(created_ts, created),
+                    agent, topic, received_from
+               from memories where id = ?1",
+            [id],
+            |r| {
+                Ok(Memory {
+                    id: r.get(0)?,
+                    project: r.get(1)?,
+                    title: r.get(2)?,
+                    body: r.get(3)?,
+                    status: r.get(4)?,
+                    when: r.get(5)?,
+                    agent: r.get(6)?,
+                    topic: r.get(7)?,
+                    received_from: r.get(8)?,
+                })
+            },
+        )
+        .optional()?)
 }
 
 /// Returns (id, title, status) from `id` backwards along the supersession

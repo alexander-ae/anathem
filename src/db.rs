@@ -23,7 +23,11 @@ create table if not exists memories (
   access_count  integer not null default 0,
   supersedes_id integer references memories(id),
   ext_id        text unique,
-  topic         text   -- topic key; see `ingest::save_with_topic`
+  topic         text,  -- topic key; see `ingest::save_with_topic`
+  -- Who sent this memory, when it was not written here, and when it
+  -- arrived. Null for everything local. See `db::add_provenance_columns`.
+  received_from text,
+  received_at   text
 );
 
 create table if not exists memory_tags (
@@ -114,6 +118,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     add_topic_column(&conn)?;
     add_handoff_columns(&conn)?;
     add_follow_up_column(&conn)?;
+    add_provenance_columns(&conn)?;
     restringir(path);
     Ok(conn)
 }
@@ -253,6 +258,23 @@ fn rename_columns_to_english(conn: &Connection) -> Result<()> {
 /// "yes, and which one was not recorded": the truth about them.
 fn add_follow_up_column(conn: &Connection) -> Result<()> {
     add_column(conn, "search_log", "followed_up_id", "integer")
+}
+
+/// Where a memory came from, when it did not come from here.
+///
+/// `received_from` is a free label naming the agent or machine that sent it
+/// — `claude-code@alexander-lenovo` — and `received_at` when it arrived.
+/// Null means a local memory, which is every memory written before this and
+/// every one anybody writes on their own machine, so the columns cost two
+/// nulls and change nothing for them.
+///
+/// They are columns and not a value in `source`, which already distinguishes
+/// `explicit` from `migrated`: `source` carries a CHECK constraint, and
+/// changing a CHECK in SQLite means rebuilding the table and copying every
+/// row. The cheap-looking option was the expensive one.
+fn add_provenance_columns(conn: &Connection) -> Result<()> {
+    add_column(conn, "memories", "received_from", "text")?;
+    add_column(conn, "memories", "received_at", "text")
 }
 
 fn add_handoff_columns(conn: &Connection) -> Result<()> {

@@ -127,6 +127,75 @@ pub struct Saved {
     pub other_keys: Vec<String>,
 }
 
+/// Saves a memory that arrived from somewhere else, as a draft.
+///
+/// `from` is a free label naming who sent it. It is required: a received
+/// memory with no provenance records nothing worth recording, and the label
+/// is the whole reason this path exists rather than a plain `mem save` over
+/// SSH.
+///
+/// It lands `draft`, which every search filters out (`search::run` and
+/// `vecstore::search_vectors` both require `status = 'active'`). That is the
+/// point. A memory from another machine is text another model wrote, perhaps
+/// while summarising a page it read, and injecting it into an agent's
+/// context before a person has looked at it once would make the provenance
+/// label decorative — it would record who sent it after the agent had
+/// already read it. `maint::accept` is how a person promotes one.
+///
+/// No topic key. A key means "this replaces the current version of that
+/// subject", and letting a memory from elsewhere do that to a local one
+/// needs a rule about which of the two is current — which costs the unique
+/// index over (project, topic) that the whole topic feature rests on. The
+/// caller is told to say that rather than being given a worse answer.
+pub fn save_received(
+    conn: &Connection,
+    text: &str,
+    project: &str,
+    given_tags: Vec<String>,
+    from: &str,
+) -> Result<Saved> {
+    let from = from.trim();
+    if from.is_empty() {
+        bail!("a received memory needs to say who sent it");
+    }
+    let tags = if given_tags.is_empty() {
+        crate::tags::classify(text).map_err(|e| anyhow::anyhow!(e))?
+    } else {
+        given_tags
+    };
+    let m = NewMemory {
+        project: project.to_string(),
+        title: title_from(text),
+        body: text.to_string(),
+        created: chrono::Local::now().format("%Y-%m-%d").to_string(),
+        event_start: None,
+        event_end: None,
+        source: "explicit".into(),
+        ext_id: None,
+        tags: tags.clone(),
+        refs: crate::tags::extract_refs(text),
+    };
+    let tx = conn.unchecked_transaction()?;
+    let id = insert_row(&tx, &m, None)?;
+    // Marked after the insert rather than threading two more parameters
+    // through `insert_row`, whose other callers have nothing to do with
+    // this. Same transaction, so nothing can observe it active.
+    tx.execute(
+        "update memories set status = 'draft', received_from = ?2, received_at = ?3 where id = ?1",
+        params![id, from, now_with_time()],
+    )?;
+    tx.commit()?;
+    Ok(Saved {
+        id,
+        project: project.to_string(),
+        tags,
+        topic: None,
+        replaced: None,
+        key_is_new: false,
+        other_keys: Vec::new(),
+    })
+}
+
 /// Validates and normalizes a topic key: lowercase, trimmed at the edges
 /// and with inner whitespace collapsed to one space (a newline counts as a
 /// space). An empty key is rejected.
