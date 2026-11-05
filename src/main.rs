@@ -151,7 +151,14 @@ enum Cmd {
     /// agent wrote, and nothing injects it into a model's context before a
     /// person has read it. `mem show <id>` is how you read one.
     Accept {
-        id: i64,
+        /// The memory's id. Give this, or --all with --from
+        id: Option<i64>,
+        /// Accept every draft waiting from one sender
+        #[arg(long, conflicts_with = "id")]
+        all: bool,
+        /// Which sender, when using --all
+        #[arg(long = "from", value_name = "LABEL", requires = "all")]
+        from: Option<String>,
     },
     /// What was saved lately, newest first, and who saved it
     ///
@@ -171,6 +178,14 @@ enum Cmd {
         /// At most this many memories
         #[arg(long = "limit", alias = "limite", value_name = "LIMIT", default_value_t = 15)]
         limit: usize,
+        /// Only memories received from another agent, drafts included
+        ///
+        /// This is how you see what is waiting: a received memory is a
+        /// draft until `mem accept` lets it in, so the usual listing —
+        /// which shows active memories — hides exactly the ones you would
+        /// want to look at.
+        #[arg(long)]
+        external: bool,
     },
     /// Shows a memory's supersession chain, newest to oldest
     History {
@@ -481,6 +496,18 @@ fn run(cli: Cli) -> Result<()> {
                 return Ok(());
             }
             for (i, e) in hits.iter().enumerate() {
+                // A memory somebody else sent is marked here too, not only
+                // in what MCP injects: a person reading results deserves the
+                // same distinction an agent gets.
+                let from: String = conn
+                    .query_row(
+                        "select received_from from memories where id = ?1",
+                        [e.hit.memory_id],
+                        |r| r.get::<_, Option<String>>(0),
+                    )
+                    .unwrap_or(None)
+                    .map(|f| format!(" [from: {f}]"))
+                    .unwrap_or_default();
                 if explain {
                     // A result may have come in through bm25, through the
                     // vector, or through both: we show every signal there is,
@@ -492,9 +519,9 @@ fn run(cli: Cli) -> Result<()> {
                         (None, Some(c)) => format!("cosine={c:.3}, vector only"),
                         (None, None) => "no signal".to_string(),
                     };
-                    println!("{:2}. [{}] {}  ({signals})", i + 1, e.hit.project, e.hit.title);
+                    println!("{:2}. [{}]{} {}  ({signals})", i + 1, e.hit.project, from, e.hit.title);
                 } else {
-                    println!("{:2}. [{}] {}", i + 1, e.hit.project, e.hit.title);
+                    println!("{:2}. [{}]{} {}", i + 1, e.hit.project, from, e.hit.title);
                 }
                 println!("    {}", e.hit.snippet.chars().take(180).collect::<String>());
             }
@@ -673,11 +700,29 @@ fn run(cli: Cli) -> Result<()> {
                 }
             }
         }
-        Cmd::Accept { id } => {
+        Cmd::Accept { id, all, from } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
-            let from = anathem::maint::accept(&conn, id)?;
-            println!("accepted memory {id}, received from {from}; searches can see it now");
+            match (id, all) {
+                (Some(id), _) => {
+                    let from = anathem::maint::accept(&conn, id)?;
+                    println!("accepted memory {id}, received from {from}; searches can see it now");
+                }
+                (None, true) => {
+                    // No sender, no batch. "Everything waiting, from
+                    // wherever" is the decision this gate exists to make
+                    // someone take on purpose.
+                    let Some(from) = from else {
+                        anyhow::bail!("--all needs --from <label>: accepting everything waiting, \
+                                       whatever sent it, is the one decision this gate is for");
+                    };
+                    let n = anathem::maint::accept_all_from(&conn, &from)?;
+                    println!("accepted {n} memories received from {from}");
+                }
+                (None, false) => {
+                    anyhow::bail!("`mem accept` needs a memory id, or --all --from <label>");
+                }
+            }
             sync_after_write(&conn, &dir);
         }
         Cmd::Show { id: Some(id), .. } => {
@@ -768,7 +813,7 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Update => {
             anathem::update::check_for_update()?;
         }
-        Cmd::Recent { project, all_projects, since, limit } => {
+        Cmd::Recent { project, all_projects, since, limit, external } => {
             let conn = anathem::db::open(&path)?;
             // `all` es lo que anuncia la ayuda; `todo` era el centinela
             // original y se sigue aceptando, igual que los alias de las
@@ -787,8 +832,8 @@ fn run(cli: Cli) -> Result<()> {
             };
             let dir = path.parent().unwrap_or(Path::new("."));
             let cfg = anathem::config::load(dir)?;
-            let items = anathem::recent::list_recent(
-                &conn, project_.as_deref(), window, limit, cfg.excerpt)?;
+            let items = anathem::recent::list_recent_filtered(
+                &conn, project_.as_deref(), window, limit, cfg.excerpt, external)?;
             println!("{}", anathem::recent::format_items(&items, project_.is_none()));
         }
         Cmd::History { id } => {

@@ -70,6 +70,8 @@ struct Fila {
     event_start: Option<String>,
     event_end: Option<String>,
     topic: Option<String>,
+    received_from: Option<String>,
+    received_at: Option<String>,
 }
 
 /// Exports each memory to a markdown file with frontmatter. The format is
@@ -85,7 +87,8 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
     let rows: Vec<Fila> = conn
         .prepare(
             "select id, project, title, body, created, updated, status, source,
-                    pinned, ext_id, supersedes_id, event_start, event_end, topic
+                    pinned, ext_id, supersedes_id, event_start, event_end, topic,
+                    received_from, received_at
                from memories order by id",
         )?
         .query_map([], |r| {
@@ -104,6 +107,8 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
                 event_start: r.get(11)?,
                 event_end: r.get(12)?,
                 topic: r.get(13)?,
+                received_from: r.get(14)?,
+                received_at: r.get(15)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
@@ -191,6 +196,14 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
         }
         if let Some(t) = &f.topic {
             optional.push_str(&format!("topic: {}\n", yaml_dq(t)));
+        }
+        // Provenance travels, or an export of a received memory comes back
+        // looking like one this machine wrote.
+        if let Some(r) = &f.received_from {
+            optional.push_str(&format!("received_from: {}\n", yaml_dq(r)));
+        }
+        if let Some(r) = &f.received_at {
+            optional.push_str(&format!("received_at: {}\n", yaml_dq(r)));
         }
         if let Some(e) = &f.event_start {
             optional.push_str(&format!("event_start: {}\n", yaml_dq(e)));

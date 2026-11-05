@@ -12,6 +12,38 @@ live in the database, not in the binary.
 
 ### Added
 
+- **Memories received from another agent or another machine**, with
+  provenance. `mem save --external --from <label> --project <p>` records who
+  sent it, reads the body from stdin when the text is `-` so a note pipes
+  over SSH, and saves it as a **draft**: invisible to search until someone
+  runs `mem accept <id>`. `--all --from <label>` accepts a sender's batch.
+
+  The draft default is the point. A received memory is text another model
+  wrote, perhaps while summarising a page it read, and letting it into an
+  agent's context before a person has seen it would make the provenance
+  label decorative — it would record who sent it after the agent had already
+  read it. The lifecycle had the room: `status` has allowed `draft` since the
+  first schema and nothing ever wrote it.
+
+  Once accepted it carries `[from: sender]` in `mem search`, in what MCP
+  injects and in `mem recent`, so an agent can tell what this installation
+  was told from what it observed. `mem recent --external` lists what arrived,
+  drafts included; `mem doctor` says how many are waiting; `export` and
+  `import` carry the provenance across.
+
+  `--topic` together with `--external` is refused, and the message says why.
+  The transport is SSH and stays that way: no port, no daemon, no API key.
+- **`mem show <id>`**, which the CLI never had — it could print a topic and
+  not a memory. It shows any status on purpose, since the point is reading a
+  draft before deciding whether to accept it.
+- **Release signing, the half that does not need the key.**
+  `scripts/sign-release.sh` signs a published release with minisign after
+  checking every file against its own sha256, uploads the signatures and then
+  downloads each one back to verify it. `sh install.sh --verify-signature` is
+  the other end: opt-in, and with no public key compiled in it says so and
+  refuses rather than reporting a check it did not make. The key is the
+  maintainer's and not any CI system's — a pipeline key signs whatever the
+  pipeline produced, and this project builds on two of them.
 - **A deterministic outline for long memories**, off by default behind
   `outline` in `config.json`. With it on, a candidate whose memory is long
   *and has markdown headings* carries its first paragraph and its headings

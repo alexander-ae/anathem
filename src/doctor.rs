@@ -344,7 +344,38 @@ fn database_section(db: &Path) -> (Section, Option<Connection>) {
     permissions_section(db, &mut s);
     check_database(&conn, &mut s);
     search_log_size(&conn, &mut s);
+    received_waiting(&conn, &mut s);
     (s, Some(conn))
+}
+
+/// Memories received from elsewhere that nobody has accepted yet.
+///
+/// Information, never a problem: a draft waiting is the gate working. But a
+/// draft nobody knows about is a memory that will never be read, so the
+/// diagnostic is one of the places that says it is there.
+fn received_waiting(conn: &Connection, s: &mut Section) {
+    if !column_exists(conn, "memories", "received_from") {
+        return;
+    }
+    match crate::maint::waiting_to_be_accepted(conn) {
+        Ok((0, _)) => {}
+        Ok((n, senders)) => s.info(format!(
+            "{n} received memories from {senders} senders are waiting; nothing searches them \
+             until `mem accept <id>`. See them with `mem recent --external`"
+        )),
+        Err(e) => s.warning(format!("could not count the received memories: {e}")),
+    }
+}
+
+/// Whether a column is there, for a database written before it existed.
+fn column_exists(conn: &Connection, table: &str, name: &str) -> bool {
+    conn.query_row(
+        "select count(*) from pragma_table_info(?1) where name = ?2",
+        [table, name],
+        |r| r.get::<_, i64>(0),
+    )
+    .map(|n| n > 0)
+    .unwrap_or(false)
 }
 
 /// How much retrieval log there is.

@@ -154,6 +154,24 @@ filter.
   — an old database created as 0644 fixes itself. The same goes for the
   temporary file `mem edit` uses while you have the editor open, which lives
   in a private directory and disappears with it even if the editor fails.
+- **A memory received from another machine** (`mem save --external`) travels
+  over SSH, so it opens no new door: whoever can run `mem save` on a host can
+  already run anything there. What it does change is the chain of custody. A
+  received memory is text another model wrote, perhaps while summarising a
+  page it read, and you never saw the source.
+
+  So it arrives as a **draft**, which every search filters out, and stays
+  there until a person runs `mem accept <id>`. Nothing promotes one on its
+  own. `mem recent --external` shows what is waiting, `mem show <id>` reads
+  one before you decide, and `mem doctor` says how many there are. Once
+  accepted it carries `[from: sender]` wherever it appears, in `mem search`
+  and in what the MCP server injects, so an agent can tell what this
+  installation was told from what it observed.
+
+  anathem grows no port, no daemon and no API key for this. SSH already
+  solves authentication, encryption, key management and auditing, and a
+  listening process would replace "the access control is the filesystem"
+  with a surface that exists while you sleep.
 - **The search log** records what the MCP server was asked, what came back
   and whether the agent then opened one of the results. It is your own
   activity, it never leaves the machine — there is no outbound channel, see

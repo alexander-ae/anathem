@@ -58,6 +58,29 @@ pub fn accept(conn: &Connection, id: i64) -> Result<String> {
     Ok(from.unwrap_or_else(|| "an unrecorded sender".to_string()))
 }
 
+/// Promotes every draft received from one sender, and says how many.
+///
+/// It takes a sender rather than accepting everything waiting: "let in
+/// whatever arrived, from wherever" is precisely the decision this gate
+/// exists to make somebody take deliberately.
+pub fn accept_all_from(conn: &Connection, from: &str) -> Result<usize> {
+    Ok(conn.execute(
+        "update memories set status = 'active', updated = ?2
+          where status = 'draft' and received_from = ?1",
+        params![from.trim(), chrono::Local::now().format("%Y-%m-%d").to_string()],
+    )?)
+}
+
+/// How many received memories are waiting, and from how many senders.
+pub fn waiting_to_be_accepted(conn: &Connection) -> Result<(i64, i64)> {
+    Ok(conn.query_row(
+        "select count(*), count(distinct received_from) from memories
+          where status = 'draft' and received_from is not null",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?)
+}
+
 /// One memory, whole, as `mem show <id>` prints it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Memory {

@@ -173,3 +173,114 @@ fn show_by_id_on_a_memory_that_does_not_exist_says_so() {
     assert!(!ok);
     assert!(err.contains("42"), "{err}");
 }
+
+#[test]
+fn an_accepted_memory_still_says_where_it_came_from() {
+    // The mark is the point. An agent reading a result has to be able to
+    // tell what this memory was told from what it observed.
+    let d = tempfile::tempdir().unwrap();
+    mem_ok(d.path(), &["save", NOTA, "--external", "--from", REMITENTE, "--project", "dell"]);
+    mem_ok(d.path(), &["accept", "1"]);
+
+    let out = mem_ok(d.path(), &["search", "nginx", "--project", "dell"]);
+    assert!(out.contains(REMITENTE), "la búsqueda tiene que marcarla: {out}");
+}
+
+#[test]
+fn the_mcp_output_marks_a_received_memory_too() {
+    use anathem::{config::Config, db, ingest, mcp, search};
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&d.path().join("t.db")).unwrap();
+    let g = ingest::save_received(&conn, NOTA, "dell", Vec::new(), REMITENTE).unwrap();
+    anathem::maint::accept(&conn, g.id).unwrap();
+
+    let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+        "params":{"name":"search_memory","arguments":{"query":"nginx"}}});
+    let r = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req)
+        .unwrap()
+        .unwrap();
+    let text = r["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains(REMITENTE), "el modelo tiene que saber que se lo contaron: {text}");
+}
+
+#[test]
+fn export_and_import_keep_the_provenance() {
+    let d = tempfile::tempdir().unwrap();
+    mem_ok(d.path(), &["save", NOTA, "--external", "--from", REMITENTE, "--project", "dell"]);
+
+    let out = d.path().join("export");
+    mem_ok(d.path(), &["export", "--out", out.to_str().unwrap()]);
+    // `export` writes one directory per project, so this walks one level in.
+    let mut escrito = String::new();
+    for e in std::fs::read_dir(&out).unwrap() {
+        let p = e.unwrap().path();
+        if p.is_dir() {
+            for f in std::fs::read_dir(&p).unwrap() {
+                escrito.push_str(&std::fs::read_to_string(f.unwrap().path()).unwrap());
+            }
+        } else {
+            escrito.push_str(&std::fs::read_to_string(&p).unwrap());
+        }
+    }
+    assert!(escrito.contains(REMITENTE), "el frontmatter tiene que llevarlo: {escrito}");
+
+    let otro = tempfile::tempdir().unwrap();
+    mem_ok(otro.path(), &["import", "--from", out.to_str().unwrap()]);
+    let conn = rusqlite::Connection::open(otro.path().join("mem.db")).unwrap();
+    let (from, status): (Option<String>, String) = conn
+        .query_row("select received_from, status from memories where id = 1", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap();
+    assert_eq!(from.as_deref(), Some(REMITENTE), "la procedencia no puede perderse al migrar");
+    assert_eq!(status, "draft", "y tampoco el hecho de que estaba esperando");
+}
+
+#[test]
+fn recent_external_lists_only_what_arrived_including_drafts() {
+    let d = tempfile::tempdir().unwrap();
+    mem_ok(d.path(), &["save", "una nota propia sobre nginx", "--project", "dell"]);
+    mem_ok(d.path(), &["save", NOTA, "--external", "--from", REMITENTE, "--project", "dell"]);
+
+    let out = mem_ok(d.path(), &["recent", "--external", "--project", "dell"]);
+    assert!(out.contains(REMITENTE), "tiene que listar la recibida: {out}");
+    assert!(
+        !out.contains("una nota propia"),
+        "y solo las recibidas, que es para lo que sirve la bandera: {out}"
+    );
+}
+
+#[test]
+fn accept_all_from_one_sender_promotes_that_batch_and_nothing_else() {
+    let d = tempfile::tempdir().unwrap();
+    mem_ok(d.path(), &["save", NOTA, "--external", "--from", REMITENTE, "--project", "dell"]);
+    mem_ok(d.path(), &["save", "otra cosa", "--external", "--from", REMITENTE, "--project", "dell"]);
+    mem_ok(d.path(), &["save", "de otro lado", "--external", "--from", "otro@host", "--project", "dell"]);
+
+    let out = mem_ok(d.path(), &["accept", "--all", "--from", REMITENTE]);
+    assert!(out.contains('2'), "tiene que decir cuántas aceptó: {out}");
+    assert_eq!(status_of(d.path(), 1), "active");
+    assert_eq!(status_of(d.path(), 2), "active");
+    assert_eq!(status_of(d.path(), 3), "draft", "las de otro remitente no se tocan");
+}
+
+#[test]
+fn accept_all_without_a_sender_is_refused() {
+    // Accepting everything waiting, whatever its origin, is exactly the
+    // decision this gate exists to make someone take on purpose.
+    let d = tempfile::tempdir().unwrap();
+    let (ok, _out, err) = mem(d.path(), &["accept", "--all"]);
+    assert!(!ok);
+    assert!(err.contains("--from"), "{err}");
+}
+
+#[test]
+fn doctor_says_how_many_are_waiting_to_be_accepted() {
+    let d = tempfile::tempdir().unwrap();
+    mem_ok(d.path(), &["save", NOTA, "--external", "--from", REMITENTE, "--project", "dell"]);
+
+    let (ok, out, _) = mem(d.path(), &["doctor"]);
+    assert!(ok, "una memoria esperando no es un problema, es información");
+    assert!(out.contains("accept"), "tiene que mencionar que hay algo esperando: {out}");
+    assert!(out.contains('1'), "{out}");
+}

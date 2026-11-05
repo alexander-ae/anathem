@@ -31,6 +31,10 @@ pub struct ParsedMemory {
     pub supersedes: Option<i64>,
     pub event_start: Option<String>,
     pub event_end: Option<String>,
+    /// Where it came from, when it was not written here. See
+    /// `db::add_provenance_columns`.
+    pub received_from: Option<String>,
+    pub received_at: Option<String>,
     pub tags: Vec<String>,
     pub refs: Vec<(String, String)>,
 }
@@ -123,6 +127,8 @@ pub fn parse(text: &str) -> Option<ParsedMemory> {
             "supersedes" => m.supersedes = v.parse().ok(),
             "event_start" => m.event_start = Some(unquote(v)).filter(|s| !s.is_empty()),
             "event_end" => m.event_end = Some(unquote(v)).filter(|s| !s.is_empty()),
+            "received_from" => m.received_from = Some(unquote(v)).filter(|s| !s.is_empty()),
+            "received_at" => m.received_at = Some(unquote(v)).filter(|s| !s.is_empty()),
             "tags" => m.tags = inline_list(v),
             _ => {}
         }
@@ -198,11 +204,12 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
         tx.execute(
             "insert into memories
                (project, title, body, created, updated, event_start, event_end,
-                source, status, pinned, ext_id, topic)
-             values (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+                source, status, pinned, ext_id, topic, received_from, received_at)
+             values (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
             params![
                 m.project, m.title, m.body, m.created, m.updated, m.event_start,
-                m.event_end, m.source, m.status, m.pinned as i64, m.ext_id, m.topic
+                m.event_end, m.source, m.status, m.pinned as i64, m.ext_id, m.topic,
+                m.received_from, m.received_at
             ],
         )?;
         let new_id = tx.last_insert_rowid();
