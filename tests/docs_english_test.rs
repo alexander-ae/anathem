@@ -197,6 +197,62 @@ fn every_repo_path_a_doc_mentions_exists() {
     );
 }
 
+/// Every markdown link a document makes to a file in this repository
+/// resolves **from that document's own directory**, which is how a markdown
+/// reader follows it.
+///
+/// The one above checks paths against the repository root, which is right
+/// for a path written in prose and wrong for a link. The two disagree
+/// exactly when a document moves: text that said `](docs/security.md)` from
+/// the README still names a file that exists after it is moved into
+/// `docs/`, and the link is broken for every reader. Three of them got
+/// through that way when the README was split up.
+#[test]
+fn every_markdown_link_between_documents_resolves() {
+    let mut offenders = Vec::new();
+    for f in living_docs() {
+        let dir = f.parent().unwrap_or(Path::new("."));
+        for (n, line) in std::fs::read_to_string(&f).unwrap().lines().enumerate() {
+            for destino in links_in_line(line) {
+                if !dir.join(&destino).exists() {
+                    offenders.push(format!(
+                        "{}:{} links to {destino}, which does not exist from {}",
+                        f.display(),
+                        n + 1,
+                        dir.display()
+                    ));
+                }
+            }
+        }
+    }
+    assert!(offenders.is_empty(), "broken links between documents:\n{}", offenders.join("\n"));
+}
+
+/// The target of every `](...)` in a line that points at something in this
+/// repository: not a URL, not a bare anchor.
+fn links_in_line(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let bytes: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    while i + 1 < bytes.len() {
+        if bytes[i] == ']' && bytes[i + 1] == '(' {
+            let rest: String = bytes[i + 2..].iter().collect();
+            if let Some(end) = rest.find(')') {
+                let destino = rest[..end].split('#').next().unwrap_or("").trim().to_string();
+                let externo = destino.is_empty()
+                    || destino.starts_with("http")
+                    || destino.starts_with("mailto")
+                    || destino.contains("://");
+                if !externo {
+                    out.push(destino);
+                }
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
 /// Pulls repository paths out of a line without depending on `regex`: this
 /// test lives in the integration suite, and adding a dependency to recognise
 /// four directories is not worth it.

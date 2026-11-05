@@ -405,3 +405,26 @@ Session-level recall is also coarser than LongMemEval's turn-level recall. A
 session here becomes one memory, with both speakers' turns in it; the dataset
 marks the individual turns that carry the evidence, and that finer measure is
 not used.
+
+## Running it over your own corpus
+
+`mem eval` is not only for this benchmark. Pointed at an eval set of your
+own, it is a regression test for any future change to the ranking: the same
+queries, the same corpus, before and after.
+
+```bash
+mem --db ~/.anathem/mem.db eval --evalset my-evalset.json --label "before" \
+  --out before.json
+```
+
+The format is the one `tools/longmemeval_to_memories.py` writes, and
+`tools/validate_evalset.py` checks it before you spend an hour measuring
+against it — including, with `--db`, that every `expect_docs` entry really
+is in the corpus and really is `active`. A case whose evidence is not there
+can never be answered, so it drags the score down for a reason that has
+nothing to do with retrieval.
+
+The figures the README quoted for years came from the author's private
+corpus, which nobody else can reproduce. They are kept in
+[`comparison-with-supermemory.md`](comparison-with-supermemory.md) with
+that caveat attached, and everything in this document replaces them.

@@ -1,0 +1,185 @@
+# How search works, and how to tune it
+
+Search is BM25 over chunks, filtered to `status = 'active'`. If a vocabulary
+pack is installed, a vector ranking is merged with it. Everything below is
+about the two decisions that sit on top of that — how many candidates to
+return and how much of each one — and about the filters that narrow the pool
+before any of it runs.
+
+Nothing here needs configuring. The defaults were measured, and this
+document says what they were measured against.
+
+## Two stages: many candidates, short excerpts
+
+The MCP tool `search_memory` returns **20 candidates with an excerpt of ~120
+characters** each, not a handful with the whole chunk. The agent consuming it
+recognizes which one is useful and asks for its full body with `get_memory`.
+
+The reordering is done by the model that is already in the conversation, so it
+costs neither disk nor RAM — only the difference in tokens. Measured over a real
+corpus of 174 memories and 50 queries:
+
+| | tokens | candidates | the right memory is among those shown | same, paraphrastic queries |
+|---|---|---|---|---|
+| before | 1,173 | 7.6 | 72 % | 25 % |
+| now | 1,301 | 20 | **82 %** | **50 %** |
+
+Eleven percent more tokens for double the chances on the hard queries: the
+ones that describe the situation instead of naming it, which are exactly
+where lexical search falls short.
+
+The trimming happens **before** counting the token budget, not at print
+time. The other way round, the budget would cut the list down to eight
+candidates and the change would be worth nothing.
+
+Both values are tuned in `config.json`, next to the database:
+
+```json
+{ "candidates": 20, "excerpt": 120 }
+```
+
+On a corpus of short documents it pays to lower `candidates`: measured over
+mMARCO, with passages of ~250 characters, the ceiling saturates at 10 and
+asking for more is waste. With long memories, which is what anathem exists
+for, the jump from 10 to 20 is the one that doubles the ceiling.
+
+**The CLI did not change**: `mem search` still shows the full chunks.
+
+A third key, `outline`, is **off** by default:
+
+```json
+{ "candidates": 20, "excerpt": 120, "outline": true }
+```
+
+With it on, a candidate whose memory is long **and has markdown headings**
+carries a deterministic outline instead of the excerpt: its first paragraph
+and its headings, read off the body at search time. No model, nothing
+generated, nothing stored — the same body gives the same outline forever.
+
+It is off because what it buys is not something recall can see, and because
+it only has something to say about memories that are shaped like documents.
+Measured over LongMemEval-S: 98.3% of its 23,854 memories are long enough to
+carry an outline and 1.5% of those have a single heading. They are
+transcripts of conversations, so there is no structure to report, and a
+candidate with no headings keeps the chunk that matched — which is more
+useful than its opening lines at the same price.
+
+## The vector layer, and what it actually bought
+
+**A vector layer? It is here already, and it is optional.** Those numbers
+were the input to the question; these are the answer, measured over the same
+corpus with a vocabulary pack installed:
+
+```
+                lexical (n=34)                  paraphrastic (n=16)
+BM25 only       recall@5  88%  recall@50 100%   recall@5  19%  recall@50 62%
+with the layer  recall@5  88%  recall@50 100%   recall@5  12%  recall@50 75%
+```
+
+It did what was expected of it and only that. The lexical ones did not move
+—there was nothing to gain: they were already at 100% recall@50— and on the
+paraphrastic ones it **closed part of the retrieval problem**: recall@50
+goes from 62% to 75%, meaning documents that never used to show up now do.
+
+What it did **not** do was improve the ranking. The difference between 19%
+and 12% in recall@5 is a single case out of sixteen: noise, not a
+regression. But the fact that it does not go up confirms the original
+diagnosis — finding and ordering are different problems, and this change
+attacked only one of them. **The reranker is still pending, and it is now
+the binding constraint.**
+
+Where the layer does change things in a big way is across languages, which
+is what it was built for: querying in English a corpus written in Spanish,
+recall@5 goes from 34% to 58% (n=50). See
+[`docs/superpowers/medicion-corpus-real.md`](superpowers/medicion-corpus-real.md).
+
+### Caveats of this measurement
+
+- **The benchmark corpus is private and is not distributed with this
+  repository.** They are the original author's real working notes; sharing
+  them would violate the privacy of third parties mentioned in them. The
+  numbers above are reproducible in **method** (run `mem eval` against your
+  own corpus and your own eval set, with the same harness), but not in
+  **data**: there is no reference corpus or eval set included to reproduce
+  exactly these numbers.
+- The eval set's ground truth was generated and reviewed by an agent; a
+  human has not confirmed it yet.
+- "390 documents" is what supermemory's document listing exposed in that
+  measurement; its real search index was larger — sampling found at least
+  488, and every document missing from the export that was sampled turned
+  out to be a raw transcript (never a curated one). supermemory does not
+  lose by being compared against a smaller document space than the one it
+  was really searching.
+
+
+## Narrowing the pool
+
+`--scope key:value` narrows a search to a `project`, a `tag` or a `topic`,
+and several combine with AND:
+
+```bash
+mem search "branching" --scope topic:branching-policy --scope tag:decision
+```
+
+A key it does not recognise is an error rather than a filter quietly
+dropped: a dropped filter returns more than you asked for, which looks
+exactly like a search that worked. A scope that holds nothing says so, which
+is a different answer from "no results for this query".
+
+Measured over LongMemEval-S, narrowing is a retrieval improvement and not
+only a convenience — `multi-session` questions gain 8.9 points of recall@5
+on BM25 and 6.0 on hybrid when the distractors are cut to a quarter. The
+method, the rule fixed before the run and what the number does **not** prove
+are in [`benchmarks.md`](benchmarks.md).
+
+## Per-project isolation
+
+Every memory belongs to a project, and `search --project` filters by it. If
+`--project` is not passed when saving, it is derived from the repository you
+are standing in, in this order:
+
+1. **The name of the `origin` remote.** It comes first on purpose: a
+   repository usually lives in a folder that is not named after it
+   —`api-monolito` cloned into `API/Web`— and inside a worktree the folder
+   is named after the branch. The remote is the only name that is stable
+   across clones, worktrees and machines.
+2. The name of the repository's folder, if there is no remote.
+3. `sin-proyecto`, outside any repository.
+
+An explicit `--project` always wins. The project used is reported when
+saving, with the `(detected)` mark when it was not chosen by hand: an
+implicit value nobody can see is the one nobody later understands why it
+came out wrong.
+
+`git` is not read as a program, the `.git` file is read directly. That way it
+works even if git is not installed, and it does not cost a subprocess per save.
+
+**Search does NOT filter by project on its own.** You pass `--project` when
+you want to narrow it down. Filtering by default would hide memories without
+warning, which is worse than bringing back one too many.
+
+## Tag taxonomy
+
+`save_memory` (via MCP) and `migrate` assign tags automatically by
+classifying the body of the memory against a small set of `{tag, pattern}`
+rules. The default taxonomy is deliberately small and generic — meant for
+anyone keeping engineering notes, with no vocabulary tied to a particular
+stack or team: `decision`, `bug`, `convention`, `performance`, `testing`,
+`docs`, `code-review`.
+
+To replace it, put a `tags.json` file next to the database (in the same
+directory as `mem.db`). Its rules **replace the default ones entirely**,
+they are not added to them. Format: a list of `{tag, pattern}` objects,
+where `pattern` is a regex (syntax of Rust's `regex` crate):
+
+```json
+[
+  { "tag": "urgent",   "pattern": "(?i)\\burgent\\b|\\bASAP\\b" },
+  { "tag": "customer", "pattern": "(?i)\\bcustomer\\b" }
+]
+```
+
+A malformed file (invalid JSON, no rules, or with a `pattern` that does not
+compile as a regex) makes the binary fail with a message naming the file and
+the offending rule — it never falls back silently to the default rules.
+
