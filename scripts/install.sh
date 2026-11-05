@@ -28,9 +28,9 @@ ETIQUETA="latest"
 # README and in the project's description on GitLab, so a repository that was
 # tampered with on its own cannot swap it without the other two disagreeing.
 #
-# Empty while no release has been signed yet. `--verify-signature` says so
-# rather than pretending to check.
-CLAVE_PUBLICA=""
+# It is also at anathem.pub in the repository, so `--verify-signature` and
+# `minisign -V -p anathem.pub` check against the same key.
+CLAVE_PUBLICA="RWSWmH6T7DiU70G5GQAS2vwI5/3YwCf0LlwSgJFQ/mlm3oh2CyVD0XdT"
 
 uso() {
   cat <<'FIN'

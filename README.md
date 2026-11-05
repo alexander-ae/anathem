@@ -153,6 +153,31 @@ and each file carries its `.sha256` next to it:
 | `mem-windows-x86_64.zip` | Windows x86_64 |
 | `en-es.anathem-pack` | English/Spanish vocabulary pack, 22 MB |
 
+### Checking that a release is really ours
+
+Each file carries its `.sha256`, which catches a corrupt download. It cannot
+catch a tampered release: it comes from the same place as the file it
+describes, so whoever could replace one could replace the other.
+
+Releases are signed with [minisign](https://jedisct1.github.io/minisign/).
+The public key is this, and it is also [`anathem.pub`](anathem.pub) in this
+repository and in the project's description on GitLab — three places, so a
+repository that was tampered with on its own cannot swap it without the
+others disagreeing:
+
+```
+RWSWmH6T7DiU70G5GQAS2vwI5/3YwCf0LlwSgJFQ/mlm3oh2CyVD0XdT
+```
+
+```bash
+sh install.sh --verify-signature          # the installer checks it for you
+minisign -Vm mem-linux-x86_64.tar.gz -p anathem.pub   # or do it by hand
+```
+
+It needs `minisign` on the `PATH` and is opt-in: without the flag the
+installer checks the sha256 and says so, and never claims more than it
+verified.
+
 The vocabulary pack is the vector layer, and it is optional: without it
 search is lexical only. The installer downloads it on its own; by hand it is
 installed with `mem model install <file>`, which needs the pack's `.sha256`
