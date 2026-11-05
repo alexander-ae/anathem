@@ -530,7 +530,7 @@ largo de verdad y la prueba mida lo que dice medir, no un caso de borde. El umbr
 
 #[test]
 fn a_long_memory_shows_its_headings_in_the_outline() {
-    let o = anathem::search::outline(LARGA, 120);
+    let o = anathem::search::outline(LARGA, 120).expect("esta memoria sí tiene qué indexar");
     assert!(o.contains("Síntomas") && o.contains("Remedio"), "{o}");
     assert!(
         o.contains("runbook"),
@@ -543,19 +543,20 @@ fn a_long_memory_shows_its_headings_in_the_outline() {
 }
 
 #[test]
-fn a_memory_without_headings_is_no_longer_than_the_excerpt() {
-    // The acceptance criterion: a 200-character note needs no outline, and
-    // the outline must not spend tokens saying what the excerpt already says.
-    let plana = "Una sola idea, sin títulos ni secciones, escrita de corrido y \
-                 sin nada que indexar porque no hay partes que distinguir.";
-    let o = anathem::search::outline(plana, 120);
-    assert!(o.chars().count() <= 120, "midió {}: {o}", o.chars().count());
+fn a_memory_with_no_headings_gets_no_outline_and_keeps_its_excerpt() {
+    // Measured over LongMemEval-S: 98.3% of memories clear the threshold and
+    // 1.5% of those carry a heading. Handing back the first paragraph for
+    // the rest would have replaced the text that matched the query with the
+    // memory's opening lines — same tokens, less to go on.
+    let plana = "Una sola idea larga y sin títulos. ".repeat(40);
+    assert!(plana.chars().count() > anathem::search::OUTLINE_THRESHOLD);
+    assert_eq!(anathem::search::outline(&plana, 120), None);
 }
 
 #[test]
-fn a_memory_below_the_threshold_comes_back_exactly_as_today() {
+fn a_memory_below_the_threshold_gets_no_outline_either() {
     let corta = "La caché del breakdown no se justifica.";
-    assert_eq!(anathem::search::outline(corta, 120), corta);
+    assert_eq!(anathem::search::outline(corta, 120), None);
 }
 
 #[test]
