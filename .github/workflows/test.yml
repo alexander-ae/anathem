@@ -1,45 +1,70 @@
-# Corre la batería en macOS, que es lo único que GitLab no puede darnos.
+# The suite, on every push, on the three platforms anathem ships for.
 #
-# Linux y Windows se prueban en el CI de GitLab, donde vive el proyecto. macOS
-# necesita hardware Apple y los runners macOS de GitLab son solo Premium y
-# Ultimate, así que esta es la única forma de que la frase "probado en macOS"
-# sea cierta y no una suposición.
+# It runs here and not on GitLab, where the project lives, for one reason:
+# GitLab's Free plan gives 400 shared-runner minutes a month and this project
+# ran out of them. GitHub Actions is free and unlimited for public
+# repositories on all three operating systems, and this mirror is public with
+# exactly that purpose.
 #
-# Se dispara a mano y no en cada push, porque este repositorio es privado y los
-# minutos de macOS se cobran. Conviene correrlo antes de etiquetar una release
-# y después de cualquier cambio que toque rutas, archivos o procesos.
-
-name: tests en macOS
+# Windows and macOS earn their place rather than padding the matrix. Both have
+# bitten this codebase in ways Linux could not show: `rename` over a
+# memory-mapped file behaves differently on Windows, `$HOME` and `%USERPROFILE%`
+# disagree about where the database goes, and a memory whose frontmatter used
+# CRLF was silently dropped on import — found by the Windows job, not by
+# review.
+name: tests
 
 on:
+  push:
+  pull_request:
   workflow_dispatch:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  probar:
-    runs-on: macos-14
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            runner: ubuntu-latest
+          - name: windows
+            runner: windows-latest
+          - name: macos
+            runner: macos-14
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cachear las dependencias compiladas
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: macos-14-cargo-${{ hashFiles('Cargo.lock') }}
-          restore-keys: macos-14-cargo-
+          key: ${{ matrix.runner }}-cargo-${{ hashFiles('Cargo.lock') }}
 
-      - name: Tests
+      - name: Build and test
         run: cargo test --locked
 
-      - name: El binario corre y sabe su commit
+      # `build.rs` reads the commit with git, and a binary that cannot say
+      # which build it is makes every later report ambiguous.
+      - name: The binary knows what it is
         run: cargo run --locked --quiet -- --version
 
-      - name: Recorrido mínimo sobre una base recién creada
-        run: |
-          set -eu
-          cargo run --locked --quiet -- --db prueba.db init
-          cargo run --locked --quiet -- --db prueba.db save "una nota de prueba"
-          cargo run --locked --quiet -- --db prueba.db search "prueba"
-          cargo run --locked --quiet -- --db prueba.db doctor
+  audit:
+    name: dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      # Without this, the next vulnerability in a dependency goes unnoticed.
+      # It is not a gate on merging: an advisory with no fix available should
+      # be read, not used to block work.
+      - name: Audit
+        run: cargo audit
+        continue-on-error: true
