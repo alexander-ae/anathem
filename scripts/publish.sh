@@ -1,10 +1,10 @@
 #!/bin/sh
 # Publishes a release from this machine, without the CI.
 #
-# The pipeline in `.gitlab-ci.yml` does this on every tag and does it better:
-# it builds Linux and Windows on clean runners. This script exists for when
-# that is not available — the shared-runner compute quota runs out, GitLab is
-# down, or you want to cut a release while offline from CI.
+# `scripts/publish-binaries.sh` does this properly: it builds all four
+# platforms on GitHub Actions, on clean runners, and uploads them here. This
+# script exists for when that is not available — GitHub is down, the mirror is
+# out of reach, or you want to cut a release with nothing but this machine.
 #
 # It is deliberately NOT a full replacement. It builds for THIS machine only,
 # so a release made here carries one platform's binary. What is missing is
@@ -201,7 +201,7 @@ else
   malo "the installer's URL does NOT resolve: $URL_PRUEBA"
   echo "    The assets are uploaded but the download path does not reach them." >&2
   echo "    Whoever runs the installer will get a 404. Add \`filepath\` to the" >&2
-  echo "    asset links, or publish through the pipeline." >&2
+  echo "    asset links, or publish with scripts/publish-binaries.sh." >&2
   exit 1
 fi
 
@@ -226,7 +226,7 @@ for p in linux-x86_64 macos-arm64 macos-x86_64; do
 done
 aviso "this release has no binary for:$FALTAN, and none for Windows"
 echo "      todas:   sh scripts/publish-binaries.sh $ETIQUETA"
-echo "      Windows: it needs a Windows machine, or the pipeline"
+echo "      Windows: it needs a Windows machine, or publish-binaries.sh"
 echo "      On a platform with no binary the installer compiles from source,"
 echo "      which works but asks for Rust and a C compiler."
 
