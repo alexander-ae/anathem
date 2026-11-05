@@ -1,115 +1,164 @@
 #!/usr/bin/env python3
-"""Valida eval/evalset.json contra el corpus congelado."""
-import json, pathlib, sys, collections
+"""Checks an eval set before you spend an hour measuring against it.
 
-ES = json.loads(pathlib.Path("eval/evalset.json").read_text(encoding="utf-8"))
+The format is the one `mem eval --evalset` reads and
+`tools/longmemeval_to_memories.py` writes:
 
-# El corpus completo (390 documentos) y, aparte, el subconjunto CURADO.
-# anathem solo va a indexar los curados, asi que el ground truth no puede
-# apuntar a un session_turn ni a un batch de conversation: seria un caso
-# que anathem nunca podria acertar, y estariamos midiendo una decision de
-# diseno en vez de una falla de recuperacion.
-CURATED_TYPES = {"project-knowledge", "project-config", "manual", "learned-pattern"}
-corpus, curated, doc_type = set(), set(), {}
-for line in pathlib.Path(ES["corpus"]).open(encoding="utf-8"):
-    row = json.loads(line)
-    did = row["id"]
-    kind = (row.get("metadata") or {}).get("type")
-    corpus.add(did)
-    doc_type[did] = kind
-    if kind in CURATED_TYPES:
-        curated.add(did)
+    {"corpus": "...", "cases": [
+       {"id": "q1", "query": "...", "project": "p", "expect_docs": ["<ext_id>"],
+        "kind": "multi-session"}]}
 
-errors, cases = [], ES["cases"]
-seen_ids, seen_queries = set(), set()
-KINDS = {"factual", "procedural", "conventional", "temporal"}
-TOPICS = {"perf", "code-review", "testing", "migraciones", "ux-design",
-          "tooling-memoria", "infra", "cruzado"}
+Structure is checked always. Pass `--db` as well and every `expect_docs`
+entry is looked up in that database, which is the check worth having: a case
+whose evidence is not in the corpus can never be answered, so it drags the
+score down for a reason that has nothing to do with retrieval. That failure
+is silent — the run completes, the number is simply wrong — and it is the one
+a converter bug produces.
 
-if not ES.get("ground_truth_scope"):
-    errors.append("falta el campo ground_truth_scope de nivel superior")
-if not ES.get("normalizacion"):
-    errors.append("falta el campo normalizacion de nivel superior")
+    python3 tools/validate_evalset.py bench/evalset.json
+    python3 tools/validate_evalset.py bench/evalset.json --db bench.db
 
-for c in cases:
-    cid = c.get("id", "<sin id>")
-    if cid in seen_ids:
-        errors.append(f"{cid}: id duplicado")
-    seen_ids.add(cid)
-    q = (c.get("query") or "").strip().lower()
-    if not q:
-        errors.append(f"{cid}: query vacia")
-    if q in seen_queries:
-        errors.append(f"{cid}: query duplicada")
-    seen_queries.add(q)
-    # 'palabras' existe para que Task 3 y Task 9 puedan estratificar las metricas
-    # por largo de consulta ademas de por 'parafrastica': si las parafrasticas
-    # fueran sistematicamente mas largas, un efecto de largo se leeria como
-    # efecto semantico y torceria D7. Tiene que quedar auditable, no solo mitigado.
-    palabras = len((c.get("query") or "").split())
-    if c.get("palabras") != palabras:
-        errors.append(f"{cid}: palabras={c.get('palabras')!r} pero la query tiene {palabras}")
-    exp = c.get("expect_docs") or []
-    if not exp:
-        errors.append(f"{cid}: expect_docs vacio")
-    if len(exp) > 8:
-        errors.append(f"{cid}: {len(exp)} expect_docs, maximo 8")
-    if len(set(exp)) != len(exp):
-        errors.append(f"{cid}: expect_docs con repetidos")
-    for d in exp:
-        if d not in corpus:
-            errors.append(f"{cid}: doc {d} no esta en el corpus")
-        elif d not in curated:
-            errors.append(
-                f"{cid}: doc {d} es de tipo {doc_type[d]!r}, fuera del ground_truth_scope "
-                f"(anathem solo indexa los curados)")
-    if c.get("kind") not in KINDS:
-        errors.append(f"{cid}: kind invalido {c.get('kind')!r}")
-    if c.get("topic") not in TOPICS:
-        errors.append(f"{cid}: topic invalido {c.get('topic')!r}")
-    for flag in ("parafrastica", "usa_identificador"):
-        if not isinstance(c.get(flag), bool):
-            errors.append(f"{cid}: {flag} tiene que ser booleano")
+Exits 0 when the set is usable, 1 when it is not, 2 on a usage error.
+"""
+import collections
+import json
+import pathlib
+import sqlite3
+import sys
 
-if len(cases) < 45:
-    errors.append(f"solo {len(cases)} casos, se esperaban ~50")
 
-parafrasticas = sum(1 for c in cases if c.get("parafrastica") is True)
-identificadores = sum(1 for c in cases if c.get("usa_identificador") is True)
-if parafrasticas < 15:
-    errors.append(f"solo {parafrasticas} casos parafrasticos, se exigen 15")
-if identificadores < 5:
-    errors.append(f"solo {identificadores} casos con identificador exacto, se exigen 5")
+def load(path):
+    try:
+        data = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        print(f"no such file: {path}", file=sys.stderr)
+        raise SystemExit(2)
+    except json.JSONDecodeError as e:
+        print(f"{path} is not valid JSON: {e}", file=sys.stderr)
+        raise SystemExit(2)
+    if not isinstance(data, dict) or not isinstance(data.get("cases"), list):
+        print(f"{path} has no `cases` array", file=sys.stderr)
+        raise SystemExit(2)
+    return data
 
-def mediana(xs):
-    xs = sorted(xs)
-    m = len(xs) // 2
-    return xs[m] if len(xs) % 2 else (xs[m - 1] + xs[m]) / 2
 
-# .get con fallback: un caso al que le falte 'palabras' ya sumo su error arriba,
-# y el resumen no tiene que reventar antes de imprimirlo.
-def pal(c):
-    return c.get("palabras") if isinstance(c.get("palabras"), int) else len((c.get("query") or "").split())
+def check_structure(cases):
+    errors = []
+    seen_ids, seen_queries = set(), {}
+    for n, c in enumerate(cases):
+        cid = c.get("id") or f"<case {n}, no id>"
+        if not c.get("id"):
+            errors.append(f"{cid}: no id")
+        elif c["id"] in seen_ids:
+            errors.append(f"{cid}: duplicate id")
+        seen_ids.add(c.get("id"))
 
-pal_par = [pal(c) for c in cases if c.get("parafrastica")]
-pal_res = [pal(c) for c in cases if not c.get("parafrastica")]
+        q = (c.get("query") or "").strip()
+        if not q:
+            errors.append(f"{cid}: empty query")
+        else:
+            # Two cases with the same query are two chances to be counted
+            # for the same retrieval, which quietly weights it twice.
+            key = " ".join(q.lower().split())
+            if key in seen_queries:
+                errors.append(f"{cid}: same query as {seen_queries[key]}")
+            else:
+                seen_queries[key] = cid
 
-longitudes = sorted(len(c.get("expect_docs") or []) for c in cases)
-print(f"casos: {len(cases)}")
-print("por kind:", dict(collections.Counter(c.get("kind") for c in cases)))
-print("por topic:", dict(collections.Counter(c.get("topic") for c in cases)))
-print(f"parafrasticas: {parafrasticas}")
-print(f"con identificador exacto: {identificadores}")
-if pal_par and pal_res:
-    print(f"mediana de palabras: parafrasticas {mediana(pal_par)} / resto {mediana(pal_res)}"
-          f" (rango {min(pal_par + pal_res)}-{max(pal_par + pal_res)})")
-print("mediana expect_docs:", longitudes[len(cases) // 2])
-print("max expect_docs:", longitudes[-1])
-print(f"documentos distintos referenciados: {len({d for c in cases for d in c['expect_docs']})}"
-      f" de {len(curated)} curados ({len(corpus)} en el corpus)")
-if errors:
-    print("\nERRORES:", file=sys.stderr)
-    for e in errors:
-        print("  " + e, file=sys.stderr)
-    sys.exit(1)
-print("\nOK")
+        exp = c.get("expect_docs")
+        if not isinstance(exp, list) or not exp:
+            errors.append(f"{cid}: expect_docs is empty, so nothing can score")
+        elif len(set(exp)) != len(exp):
+            errors.append(f"{cid}: expect_docs repeats an ext_id")
+    return errors
+
+
+def check_against_db(cases, db):
+    """Every expected ext_id has to exist, and has to be searchable."""
+    try:
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    except sqlite3.Error as e:
+        print(f"could not open {db}: {e}", file=sys.stderr)
+        raise SystemExit(2)
+    try:
+        rows = dict(
+            conn.execute(
+                "select ext_id, status from memories where ext_id is not null"
+            ).fetchall()
+        )
+    except sqlite3.Error as e:
+        print(f"{db} does not look like an anathem database: {e}", file=sys.stderr)
+        raise SystemExit(2)
+    finally:
+        conn.close()
+
+    errors = []
+    for c in cases:
+        for d in c.get("expect_docs") or []:
+            status = rows.get(d)
+            if status is None:
+                errors.append(f"{c.get('id')}: {d} is not in the database")
+            elif status != "active":
+                # Search filters `status = 'active'`, so one that is not
+                # cannot come back however good the ranking is.
+                errors.append(f"{c.get('id')}: {d} is {status}, so search will never return it")
+    return errors, len(rows)
+
+
+def main(argv):
+    args = [a for a in argv[1:] if not a.startswith("--")]
+    db = None
+    rest = argv[1:]
+    while rest:
+        a = rest.pop(0)
+        if a == "--db":
+            if not rest:
+                print("--db needs a path", file=sys.stderr)
+                return 2
+            db = rest.pop(0)
+            if db in args:
+                args.remove(db)
+    if len(args) != 1:
+        print(__doc__.split("\n\n")[0], file=sys.stderr)
+        print(f"\nusage: {argv[0]} <evalset.json> [--db <mem.db>]", file=sys.stderr)
+        return 2
+
+    data = load(args[0])
+    cases = data["cases"]
+    errors = check_structure(cases)
+
+    in_db = None
+    if db:
+        more, in_db = check_against_db(cases, db)
+        errors += more
+
+    print(f"cases: {len(cases)}")
+    kinds = collections.Counter(c.get("kind") or "no kind" for c in cases)
+    width = max(len(k) for k in kinds)
+    for k, n in sorted(kinds.items()):
+        print(f"  {k:<{width}}  {n:>5}  ({n / len(cases) * 100:.1f} %)")
+    lengths = sorted(len(c.get("expect_docs") or []) for c in cases)
+    if lengths:
+        print(f"expect_docs: median {lengths[len(lengths) // 2]}, max {lengths[-1]}")
+    referenced = {d for c in cases for d in (c.get("expect_docs") or [])}
+    print(f"distinct ext_ids referenced: {len(referenced)}")
+    if in_db is not None:
+        print(f"memories with an ext_id in the database: {in_db}")
+    if data.get("corpus"):
+        print(f"corpus: {data['corpus']}")
+    if not db:
+        print("\nStructure only. Pass --db to check the evidence is really there.")
+
+    if errors:
+        print(f"\n{len(errors)} problems:", file=sys.stderr)
+        for e in errors[:40]:
+            print("  " + e, file=sys.stderr)
+        if len(errors) > 40:
+            print(f"  ... and {len(errors) - 40} more", file=sys.stderr)
+        return 1
+    print("\nOK")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

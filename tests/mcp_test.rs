@@ -25,15 +25,24 @@ fn initialize_devuelve_capabilities() {
 }
 
 #[test]
-fn tools_list_exposes_all_four() {
+fn tools_list_exposes_every_tool() {
     let (_d, conn) = conn_with_data();
     let req = serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/list"});
     let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
     let names: Vec<String> = res["result"]["tools"].as_array().unwrap().iter()
         .map(|t| t["name"].as_str().unwrap().to_string()).collect();
-    for n in ["search_memory", "save_memory", "get_memory", "list_tags"] {
+    // The five the documentation promises. `recent_memories` was missing
+    // from this list, which is what the old name — "all four" — was quietly
+    // describing: a tool nothing checked was exposed.
+    let expected = ["search_memory", "save_memory", "get_memory", "list_tags", "recent_memories"];
+    for n in expected {
         assert!(names.contains(&n.to_string()), "falta {n} en {names:?}");
     }
+    assert_eq!(
+        names.len(),
+        expected.len(),
+        "hay una herramienta que este test no cubre: {names:?}"
+    );
 }
 
 #[test]
