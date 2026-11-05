@@ -126,8 +126,19 @@ filter.
 
   What the sha256 does **not** give is authenticity: it comes from the same
   release as the pack, so it detects a corrupt download and not a tampered
-  release. That would need a signature, which does not exist yet. What did
-  change is that nothing carries on when it cannot verify. The installer
+  release. Whoever could replace one could replace the other.
+
+  Closing that needs a signature checked against a key published somewhere
+  else, and the plumbing for it is here: `scripts/sign-release.sh` signs a
+  published release with minisign and `sh install.sh --verify-signature`
+  checks it. The key is held by the maintainer and not by any CI system — a
+  key in a pipeline signs whatever that pipeline produced, which is what the
+  `.sha256` already attests, and this project builds on two systems, so such
+  a key would have to exist in both places to cover everything. Until a
+  release is actually signed, `--verify-signature` says so and refuses rather
+  than pretending to check.
+
+  What did change already is that nothing carries on when it cannot verify. The installer
   stops if the `.sha256` is missing or the machine has nothing to compute it
   with, and `mem model install` refuses a pack that arrives without its
   sidecar — every pack the builder writes and every pack a release publishes

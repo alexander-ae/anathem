@@ -20,7 +20,17 @@ CONFIGURAR_PATH=0
 CONECTAR=0
 COMPILAR=0
 SIN_VERIFICAR=0
+VERIFICAR_FIRMA=0
 ETIQUETA="latest"
+
+# The public key releases are signed with, as minisign writes it: one line,
+# base64, and safe to publish — that is the point of it. It also lives in the
+# README and in the project's description on GitLab, so a repository that was
+# tampered with on its own cannot swap it without the other two disagreeing.
+#
+# Empty while no release has been signed yet. `--verify-signature` says so
+# rather than pretending to check.
+CLAVE_PUBLICA=""
 
 uso() {
   cat <<'FIN'
@@ -31,6 +41,7 @@ Usage: scripts/install.sh [options]
   --pack <file>         use an already downloaded vocabulary pack
   --no-pack             install no pack (lexical search only)
   --no-verify           carry on even if the sha256 cannot be checked
+  --verify-signature    also check the release's minisign signature (needs minisign)
   --setup-path          add the install directory to your shell
   --connect             register anathem as an MCP server in Claude Code
   --prefix <dir>        where to install the binary (default ~/.local/bin)
@@ -51,6 +62,7 @@ while [ $# -gt 0 ]; do
     --pack|--paquete) PAQUETE="${2:?--pack needs a file}"; shift 2 ;;
     --no-pack|--sin-paquete) SIN_PAQUETE=1; shift ;;
     --no-verify|--sin-verificar) SIN_VERIFICAR=1; shift ;;
+    --verify-signature) VERIFICAR_FIRMA=1; shift ;;
     --setup-path|--configurar-path) CONFIGURAR_PATH=1; shift ;;
     --connect|--conectar) CONECTAR=1; shift ;;
     --prefix|--prefijo) PREFIJO="${2:?--prefix needs a directory}"; shift 2 ;;
@@ -142,6 +154,43 @@ sin_sha_disponible() {
   return 1
 }
 
+# Checks the minisign signature of a downloaded file.
+#
+# This is the half the sha256 cannot do. A `.sha256` comes from the same
+# release as the file it describes, so it catches a corrupt download and not
+# a tampered release: whoever could replace one could replace the other. A
+# signature is checked against a key published somewhere else, so replacing
+# the release is not enough.
+#
+# It is opt-in, and it says exactly what it did. An installer that claims to
+# have verified something it skipped is worse than one that never offered.
+verificar_firma() {
+  archivo="$1"
+  firma="$2"
+  if [ -z "$CLAVE_PUBLICA" ]; then
+    malo "this build of the installer carries no public key, so there is nothing"
+    echo "    to check the signature against. Releases are not signed yet." >&2
+    return 1
+  fi
+  if ! command -v minisign >/dev/null 2>&1; then
+    malo "--verify-signature needs minisign, which is not on the PATH."
+    echo "    Install it (brew install minisign, apt install minisign) or drop the flag." >&2
+    return 1
+  fi
+  if [ ! -f "$firma" ]; then
+    malo "this release does not publish a signature for $(basename "$archivo")."
+    echo "    Check https://gitlab.com/$REPO/-/releases, or drop --verify-signature." >&2
+    return 1
+  fi
+  if minisign -V -P "$CLAVE_PUBLICA" -m "$archivo" -x "$firma" >/dev/null 2>&1; then
+    ok "signature verified for $(basename "$archivo")"
+    return 0
+  fi
+  malo "the signature of $(basename "$archivo") does not verify against the published key."
+  echo "    Do not install this file." >&2
+  return 1
+}
+
 # GitLab resolves `permalink/latest` to the newest release and redirects to the
 # file in the package registry. It works without a token on public projects.
 url_release() {
@@ -210,6 +259,10 @@ else
   else
     sin_sha_disponible "$ARCHIVO" || exit 1
   fi
+  if [ "$VERIFICAR_FIRMA" -eq 1 ]; then
+    bajar "$(url_release "$ARCHIVO.minisig")" "$TEMPORAL/$ARCHIVO.minisig" 2>/dev/null || true
+    verificar_firma "$TEMPORAL/$ARCHIVO" "$TEMPORAL/$ARCHIVO.minisig" || exit 1
+  fi
   # Only the member we care about, and without dragging along the owner
   # recorded in the tar: another machine built that archive and has no business
   # deciding anything about this one.
@@ -274,6 +327,12 @@ else
         verificar_sha "$TEMPORAL/en-es.anathem-pack" "$TEMPORAL/en-es.anathem-pack.sha256" || exit 1
       else
         sin_sha_disponible "en-es.anathem-pack" || exit 1
+      fi
+      if [ "$VERIFICAR_FIRMA" -eq 1 ]; then
+        bajar "$(url_release "en-es.anathem-pack.minisig")" \
+              "$TEMPORAL/en-es.anathem-pack.minisig" 2>/dev/null || true
+        verificar_firma "$TEMPORAL/en-es.anathem-pack" \
+                        "$TEMPORAL/en-es.anathem-pack.minisig" || exit 1
       fi
       PAQUETE="$TEMPORAL/en-es.anathem-pack"
     else
