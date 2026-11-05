@@ -23,10 +23,15 @@
 #
 #     minisign -G -p anathem.pub -s ~/.minisign/anathem.key
 #
-# The private half stays on this machine and nowhere else. The public half is
-# one line; it goes into CLAVE_PUBLICA in scripts/install.sh, into the README
-# and into the project's description on GitLab, so a tampered repository on
-# its own cannot swap it without the other two disagreeing.
+# The private half stays on this machine and nowhere else, and minisign will
+# ask for a password to protect it: use one. The file alone should not be
+# enough to sign a release.
+#
+# The public half is one line. It goes into CLAVE_PUBLICA in
+# scripts/install.sh, into the README, into the project's description on
+# GitLab and into anathem.pub at the root of the repository — four places, so
+# a tampered repository on its own cannot swap it without the others
+# disagreeing.
 set -eu
 
 ETIQUETA="${1:-}"
@@ -111,8 +116,18 @@ paso "5. Check that each signature comes back, and that it verifies"
 
 # The same lesson as `verificar:release` in the CI: registering a link is not
 # publishing a file, and the difference only shows when somebody downloads.
-PUB="$TEMPORAL/anathem.pub"
-minisign -R -s "$CLAVE" -p "$PUB" >/dev/null 2>&1 || true
+#
+# The public key comes from the repository when it is there, and only as a
+# last resort from the private one: recovering it with `minisign -R` asks for
+# the key's password a second time, and verifying against the file everyone
+# else verifies against is the better check anyway — if the committed key
+# were wrong, this would catch it.
+PUB="$(dirname "$0")/../anathem.pub"
+if [ ! -f "$PUB" ]; then
+  aviso "no anathem.pub in the repository; recovering it from the private key"
+  PUB="$TEMPORAL/anathem.pub"
+  minisign -R -s "$CLAVE" -p "$PUB" >/dev/null 2>&1 || true
+fi
 ROTOS=0
 for f in $PRESENTES; do
   URL="https://gitlab.com/$REPO/-/releases/$ETIQUETA/downloads/$f.minisig"
