@@ -125,6 +125,15 @@ documents — the mean fraction of them inside the top k — and it is the one t
 quote next to anybody else's number. The other two bound it: the first is
 generous, the last is what answering the question actually needs.
 
+`mem eval` prints only the first. The other two are computed from the
+`per_case` block that `mem eval --out` writes, by
+`tools/eval_metrics.py`, so every table here can be recomputed rather than
+taken on trust:
+
+```bash
+python3 tools/eval_metrics.py bench/evalset.json bench/bm25.json bench/hybrid.json
+```
+
 The headline says nothing: on the loose measure the two are identical. The
 whole difference is in the questions that need several sessions, which is
 where a second ranking has something to add.
