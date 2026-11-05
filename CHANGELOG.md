@@ -12,6 +12,18 @@ live in the database, not in the binary.
 
 ### Added
 
+- **A deterministic outline for long memories**, off by default behind
+  `outline` in `config.json`. With it on, a candidate whose memory is long
+  *and has markdown headings* carries its first paragraph and its headings
+  instead of the excerpt — read off the body at search time, with no model,
+  nothing generated and nothing stored, so the same body gives the same
+  outline forever.
+
+  It is off because of what measuring it showed. Over LongMemEval-S, 98.3% of
+  its 23,854 memories are long enough to carry an outline and 1.5% of those
+  have a single heading: they are transcripts, not documents. A memory with
+  no headings now gets no outline at all and keeps the chunk that matched the
+  query, which is worth more than its opening lines at the same price.
 - **`--scope key:value` in `mem search`, and a `scope` argument in
   `search_memory`**: narrows the pool to a `project`, a `tag` or a `topic`,
   repeatable and combined with AND. The SQL was already there — `filters_for`
@@ -23,9 +35,14 @@ live in the database, not in the binary.
   nothing says so, which is a different answer from "no results for this
   query" and the only one of the two where rephrasing will not help.
 
-  **It narrows the pool; it is not known to improve recall.** Whether
-  removing distractors moves `recall@5` at all is being measured
-  separately, and until that number exists this is a convenience.
+  **And it is a retrieval improvement, measured.** Narrowing a question's
+  pool to a quarter of its distractors, with every evidence session kept,
+  moves `recall@5` on `multi-session` questions from 83.9% to 92.8% on bm25
+  and from 92.0% to 98.0% on hybrid, and takes the median query from 375 ms
+  to 106 ms. That is a ceiling and not a promise — a scope naming the wrong
+  tag drops evidence rather than distractors — and the method, the rule
+  fixed before the run and what the number does not prove are all in
+  [`docs/benchmarks.md`](docs/benchmarks.md).
 - **`mem log` and `mem why <id>`**: the retrieval trajectory the MCP server
   has been writing since it existed, which nothing read back. `mem log`
   prints one line per search — when, which project, the query, how many

@@ -234,6 +234,25 @@ for, the jump from 10 to 20 is the one that doubles the ceiling.
 
 **The CLI did not change**: `mem search` still shows the full chunks.
 
+A third key, `outline`, is **off** by default:
+
+```json
+{ "candidates": 20, "excerpt": 120, "outline": true }
+```
+
+With it on, a candidate whose memory is long **and has markdown headings**
+carries a deterministic outline instead of the excerpt: its first paragraph
+and its headings, read off the body at search time. No model, nothing
+generated, nothing stored — the same body gives the same outline forever.
+
+It is off because what it buys is not something recall can see, and because
+it only has something to say about memories that are shaped like documents.
+Measured over LongMemEval-S: 98.3% of its 23,854 memories are long enough to
+carry an outline and 1.5% of those have a single heading. They are
+transcripts of conversations, so there is no structure to report, and a
+candidate with no headings keeps the chunk that matched — which is more
+useful than its opening lines at the same price.
+
 ## Per-project isolation
 
 Every memory belongs to a project, and `search --project` filters by it. If
@@ -468,6 +487,10 @@ eval set for any future change to the ranking — the format of
   and how to install them: [`docs/vocabulary-packs.md`](docs/vocabulary-packs.md)
 - What changed in each version: [`CHANGELOG.md`](CHANGELOG.md)
 - Measuring retrieval against a public dataset: [`docs/benchmarks.md`](docs/benchmarks.md)
+- How it compares with the nearest neighbour, measured head to head:
+  [`docs/comparison-with-engram.md`](docs/comparison-with-engram.md)
+- How it compares with the loudest one, and the non-goals:
+  [`docs/comparison-with-openviking.md`](docs/comparison-with-openviking.md)
 
 ## Installing as a Claude Code plugin
 

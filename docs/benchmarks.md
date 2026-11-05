@@ -63,6 +63,13 @@ of the full set on every question type.
 The selection is deterministic, so there is no seed to record and the same N
 gives everyone the same corpus.
 
+`--distractors FRACTION` is the other knob, and it exists for one
+measurement: it keeps every evidence session and an evenly spaced share of
+the rest. That is the shape of a corpus a perfect scope would leave behind,
+which is what "Does narrowing the pool help?" below uses to bound what
+scoping could buy. It is a bound and not a product — nothing in anathem
+builds a corpus this way for a user.
+
 ## Two decisions the conversion makes
 
 **Every question searches only its own history.** Each memory is namespaced
@@ -204,6 +211,102 @@ the same shape repeats here.
 The preference row is the one not to quote. Six questions: a 95% interval of
 roughly -0.05 to 0.71, and it moves +0.17 here while -S says +0.00 at n=30.
 That is noise with a plausible-looking face on it.
+
+## Does narrowing the pool help?
+
+`--scope` narrows a search to a project, a tag or a topic. It removes
+distractors; it cannot move a document from position 30 to position 3. Those
+are different halves of the same gap, and before spending a week on either it
+was worth knowing which one the numbers care about.
+
+So this was measured with its rule written down first, which is the only way
+a measurement is allowed to say "no".
+
+**The rule, fixed in advance:** if removing three distractors in four — while
+keeping every evidence session — does not improve `recall@5 (fraction)` on
+`multi-session` questions by at least **2 percentage points**, then narrowing
+the pool is not a retrieval improvement. `--scope` stands as a convenience and
+the effort goes to ranking instead.
+
+**Why that models a scope.** The most a perfect scope could ever do is drop
+distractors while keeping all the evidence. A corpus built that way bounds
+what any scoping could buy, and bounds it generously: a real scope sometimes
+drops evidence too.
+
+```bash
+# the same 500 instances, with every evidence session and a quarter of the rest
+python3 tools/longmemeval_to_memories.py longmemeval_s_cleaned.json scoped/ --distractors 0.25
+```
+
+`--distractors` keeps the evidence and spreads its sample of the rest evenly,
+with no seed to write down: two people running that command get the same
+corpus. Here it took the 23,854 memories down to 6,481.
+
+### The numbers
+
+`recall@5` as the mean fraction of a question's evidence inside the top 5 —
+the row to quote, as "Reading the numbers" explains.
+
+| question type              |   n |  bm25 | bm25 scoped |      Δ | hybrid | hybrid scoped |      Δ |
+|----------------------------|----:|------:|------------:|-------:|-------:|--------------:|-------:|
+| multi-session              | 121 | 83.9% |       92.8% | **+8.9** |  92.0% |         98.0% | **+6.0** |
+| temporal-reasoning         | 127 | 88.3% |       94.1% |   +5.8 |  90.4% |         96.5% |   +6.1 |
+| single-session-preference  |  30 | 70.0% |       86.7% |  +16.7 |  70.0% |         93.3% |  +23.3 |
+| knowledge-update           |  72 | 97.9% |       99.3% |   +1.4 |  99.3% |         99.3% |   +0.0 |
+| single-session-assistant   |  56 |100.0% |      100.0% |   +0.0 |  96.4% |        100.0% |   +3.6 |
+| single-session-user        |  64 |100.0% |      100.0% |   +0.0 | 100.0% |        100.0% |   +0.0 |
+| **all**                    | 470 | 90.5% |       95.6% |   +5.1 |  92.9% |         98.0% |   +5.1 |
+
+| | bm25 | bm25 scoped | hybrid | hybrid scoped |
+|---|---:|---:|---:|---:|
+| MRR         | 0.910 | 0.951 | 0.920 | 0.960 |
+| p50 per query | 375ms |  106ms |  369ms |  109ms |
+
+### The verdict
+
+**The rule is met, and not narrowly.** `multi-session` gains 8.9 points on
+bm25 and 6.0 on hybrid, against a threshold of 2. Narrowing the pool is a
+retrieval improvement, not only a convenience, and `--scope` earns the work
+that follows it. The deterministic outline waits behind it.
+
+Three things that table is saying beyond the verdict.
+
+**The effect is largest exactly where the gap was.** `multi-session` and
+`temporal-reasoning` are the two types that need several evidence sessions
+and that the README names as the weak ones; they are the two that move most.
+Where the baseline already sat at 100% there is nothing to win, which is what
+makes the first column worth reading.
+
+**Latency falls by more than a third of what it was** — 375 ms to 106 ms.
+That is not a bound and not an estimate: a smaller pool really is faster to
+search, and a scope a user types gets that part in full.
+
+**`single-session-preference` is the odd one**, +16.7 and +23.3 from a
+baseline of 70%. Thirty questions is a small stratum and this is the one
+figure here not to lean on.
+
+### What this does not prove
+
+**It is a bound, not a product.** Nothing was scoped: a corpus was built the
+way a perfect scope would have left it. A real `--scope` is written by
+someone who may name the wrong tag, and then it drops evidence instead of
+distractors and recall falls rather than rises. This measures the ceiling.
+
+**It changes two things at once.** The simulation rebuilds the index over a
+smaller corpus, so both the candidate pool *and* the BM25 term statistics
+change. A real `--scope` filters in the `WHERE` clause of one index, leaving
+the statistics of the whole corpus in place. The ceiling is therefore not a
+clean isolation of "fewer distractors": part of the gain comes from an IDF
+computed over 6,481 memories instead of 23,854.
+
+**Project scoping was already on.** Every question's haystack is its own
+project here, in both runs, so what was measured is the gain from narrowing
+*further inside* a project — which is what `--scope tag:` and `--scope
+topic:` offer, and not what `--project` already did.
+
+**It says nothing about ranking.** Removing distractors is not reordering.
+The README's binding constraint — paraphrastic queries found at rank 30 —
+is untouched by any of this, and remains the other half of the week.
 
 ## Against published numbers
 
