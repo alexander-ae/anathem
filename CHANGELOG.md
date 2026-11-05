@@ -10,6 +10,19 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Changed
+
+- `mem model install` **refuses a pack that arrives with no `.sha256` beside
+  it**, instead of installing it without a word. Every pack
+  `tools/build_pack.py` builds carries one and so does every pack a release
+  publishes, so its absence means the file travelled without it and nothing
+  can check it. `--no-verify` installs anyway, for whoever knows where the
+  pack came from. The installer script already refused in that situation; the
+  two halves of the same decision now agree.
+- The pack that lands in `~/.anathem/paquetes/` now keeps a `.sha256` of its
+  own, so reinstalling from there — which is how an index gets rebuilt — can
+  still be verified. `mem model remove` takes it away with the pack.
+
 ### Fixed
 
 - The installation guide an agent reads, [`AGENTS.md`](AGENTS.md), assumed the

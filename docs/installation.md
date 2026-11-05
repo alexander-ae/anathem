@@ -197,9 +197,11 @@ has not been decided. Today there are two ways to get it:
 - **Generate it yourself**, with `tools/build_pack.py`. That requires
   downloading the 512 MB base model and a text sample in the languages you
   want to cover. The full procedure is in
-  [`paquetes-de-vocabulario.md`](paquetes-de-vocabulario.md).
+  [`vocabulary-packs.md`](vocabulary-packs.md).
 
-With the file in hand:
+With the file in hand — and with its `.sha256` beside it, which is how both
+the release and `build_pack.py` hand it over; `model install` refuses a pack
+it cannot check, unless you pass `--no-verify`:
 
 ```bash
 mem --db ~/.anathem/mem.db model install en-es.anathem-pack

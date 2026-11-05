@@ -450,10 +450,10 @@ eval set for any future change to the ranking — the format of
 
 ## Documentation
 
-- Spec and plan for phase 1 (historical documents, written against the
-  original author's private corpus — see the note at the top of each one):
-  [`docs/historia/2026-09-21-memoria-local-design.md`](docs/historia/2026-09-21-memoria-local-design.md),
-  [`docs/historia/2026-09-21-anathem-fase1.md`](docs/historia/2026-09-21-anathem-fase1.md)
+- Spec for phase 1 (a historical document, written against the original
+  author's private corpus — see the note at the top):
+  [`docs/historia/2026-09-21-memoria-local-design.md`](docs/historia/2026-09-21-memoria-local-design.md).
+  The implementation plan that went with it is not in the repository.
 - Technical inputs for a phase 2 (reranker / vector layer, deferred
   findings): [`docs/superpowers/fase-2-insumos.md`](docs/superpowers/fase-2-insumos.md)
 - Installation and connecting the agents: [`docs/installation.md`](docs/installation.md)

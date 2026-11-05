@@ -127,6 +127,7 @@ fn write_pack_wide(pack_path: &std::path::Path, name: &str) {
         std::fs::set_permissions(pack_path, std::fs::Permissions::from_mode(0o600)).unwrap();
     }
     std::fs::write(pack_path, b).unwrap();
+    support::write_sidecar(pack_path);
 }
 
 #[test]
@@ -259,11 +260,12 @@ fn reinstalling_from_the_installed_path_does_not_destroy_the_pack() {
     let err = String::from_utf8_lossy(&b.stderr).to_string();
     assert!(!err.contains("warning"), "no puede quedar avisando para siempre: {err}");
 
-    // And the install leaves no temporaries lying around in `packs/`.
+    // And the install leaves no temporaries lying around in `packs/` — the
+    // pack and the sidecar it writes beside it are the whole contents.
     let extras: Vec<String> = std::fs::read_dir(d.path().join("paquetes"))
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
-        .filter(|n| n != "mini-es.anathem-pack")
+        .filter(|n| n != "mini-es.anathem-pack" && n != "mini-es.anathem-pack.sha256")
         .collect();
     assert!(extras.is_empty(), "quedaron archivos a medio instalar: {extras:?}");
 }
@@ -459,4 +461,62 @@ fn an_install_failing_before_touching_the_file_leaves_no_mark() {
         .filter(|n| n != "mini-es.anathem-pack")
         .collect();
     assert!(extras.is_empty(), "quedaron archivos a medio instalar: {extras:?}");
+}
+
+/// The sidecar is what `tools/build_pack.py` writes beside every pack it
+/// builds, and what the release carries beside the one it publishes. A pack
+/// arriving without it is a pack nothing can check, and until now that was
+/// waved through without a word — the installer script refuses in the same
+/// situation, so the two halves of the same decision disagreed.
+#[test]
+fn install_refuses_a_pack_with_no_sha256_beside_it() {
+    let d = tempfile::tempdir().unwrap();
+    let r = d.path().join("mini.anathem-pack");
+    support::write_pack_mini(&r, "mini-es");
+    std::fs::remove_file(d.path().join("mini.anathem-pack.sha256")).unwrap();
+    mem(d.path(), &["save", "hola mundo"]);
+
+    let o = mem(d.path(), &["model", "install", r.to_str().unwrap()]);
+    assert!(!o.status.success(), "sin sha256 al lado no se puede verificar nada");
+    let err = String::from_utf8_lossy(&o.stderr).to_string();
+    assert!(err.contains("sha256"), "tiene que decir qué falta: {err}");
+    assert!(err.contains("--no-verify"), "y cómo seguir igual a propósito: {err}");
+}
+
+#[test]
+fn no_verify_installs_a_pack_that_has_no_sha256() {
+    let d = tempfile::tempdir().unwrap();
+    let r = d.path().join("mini.anathem-pack");
+    support::write_pack_mini(&r, "mini-es");
+    std::fs::remove_file(d.path().join("mini.anathem-pack.sha256")).unwrap();
+    mem(d.path(), &["save", "hola mundo"]);
+
+    let o = mem(d.path(), &["model", "install", "--no-verify", r.to_str().unwrap()]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let s = mem(d.path(), &["model", "status"]);
+    assert!(String::from_utf8_lossy(&s.stdout).contains("mini-es"));
+}
+
+/// Reinstalling from `packs/` is a real flow — it is how an index gets
+/// rebuilt — and it would break the moment the sidecar became mandatory,
+/// because the install copied the pack and left its sidecar behind. So the
+/// install writes one next to the pack it puts in place.
+#[test]
+fn the_installed_pack_carries_its_sha256_so_reinstalling_still_verifies() {
+    let d = tempfile::tempdir().unwrap();
+    let r = d.path().join("mini.anathem-pack");
+    support::write_pack_mini(&r, "mini-es");
+    mem(d.path(), &["save", "hola mundo"]);
+    assert!(mem(d.path(), &["model", "install", r.to_str().unwrap()]).status.success());
+
+    let instalado = d.path().join("paquetes").join("mini-es.anathem-pack");
+    let firma = d.path().join("paquetes").join("mini-es.anathem-pack.sha256");
+    assert!(firma.exists(), "el paquete instalado tiene que quedar verificable");
+    assert!(
+        std::fs::read_to_string(&firma).unwrap().contains(&anathem::pack::sha256(&instalado).unwrap()),
+        "y el sha que dice tiene que ser el del archivo que está"
+    );
+
+    let o = mem(d.path(), &["model", "install", instalado.to_str().unwrap()]);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
 }

@@ -288,7 +288,17 @@ else
     fi
     # `model install` copies the pack to ~/.anathem/paquetes, so it does not
     # matter that the source sits in a temporary directory erased on exit.
-    "$PREFIJO/mem" --db "$BASE" model install "$PAQUETE"
+    #
+    # `--no-verify` travels with it: `model install` refuses a pack with no
+    # .sha256 beside it, and someone who passed --no-verify here — or whose
+    # --pack file came without its sidecar — already said that is what they
+    # want. Without forwarding it, the script would accept the risk and then
+    # fail on the next line for the same reason.
+    if [ "$SIN_VERIFICAR" -eq 1 ]; then
+      "$PREFIJO/mem" --db "$BASE" model install --no-verify "$PAQUETE"
+    else
+      "$PREFIJO/mem" --db "$BASE" model install "$PAQUETE"
+    fi
     "$PREFIJO/mem" --db "$BASE" model status | sed 's/^/  /'
   fi
 fi

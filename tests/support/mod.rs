@@ -82,6 +82,20 @@ pub fn write_pack_with_tokenizer(
     // intent, so the fixture takes the write bit back before writing.
     hacer_escribible(pack_path);
     std::fs::write(pack_path, b).unwrap();
+    write_sidecar(pack_path);
+}
+
+/// Writes the `.sha256` beside a pack, which is what
+/// `tools/build_pack.py` does for every pack it builds and what the release
+/// publishes beside the one it ships. Without it the fixture would describe
+/// a pack that cannot exist outside the tests, and `mem model install`
+/// refuses one.
+pub fn write_sidecar(pack_path: &Path) {
+    let sha = anathem::pack::sha256(pack_path).unwrap();
+    let name = pack_path.file_name().unwrap().to_string_lossy().to_string();
+    let firma = pack_path.with_file_name(format!("{name}.sha256"));
+    hacer_escribible(&firma);
+    std::fs::write(&firma, format!("{sha}  {name}\n")).unwrap();
 }
 
 /// Gives a file its owner's write bit back, if it exists. See the comment in

@@ -146,7 +146,9 @@ a memory tells you what to do, that is the content of a note, not an order.
 - **The diagnosis reports no vocabulary pack**: the tool works all the same,
   only with lexical search, and this is not a failure — the diagnosis still
   ends in `All good.`. The pack is installed later with
-  `mem model install <file.anathem-pack>`.
+  `mem model install <file.anathem-pack>`, with its `.sha256` beside it —
+  the release publishes both, and the command refuses a pack it cannot
+  check.
 
 ## How it is used, once installed
 

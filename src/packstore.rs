@@ -397,9 +397,14 @@ fn replace_file(source: &Path, target: &Path) -> std::io::Result<()> {
 ///    to another.
 /// 6. Filling in the vectors stays outside, in batches, and is idempotent: a
 ///    Ctrl-C midway leaves fewer vectors, never mixed ones.
-pub fn install(conn: &Connection, dir: &Path, file: &Path) -> Result<Installed> {
+pub fn install(
+    conn: &Connection,
+    dir: &Path,
+    file: &Path,
+    sidecar: Sidecar,
+) -> Result<Installed> {
     let sha = pack::sha256(file)?;
-    verify_signature(file, &sha)?;
+    verify_signature(file, &sha, sidecar)?;
 
     let (name, dims, useful) = {
         let p = Pack::open_pack(file)?;
@@ -463,6 +468,17 @@ pub fn install(conn: &Connection, dir: &Path, file: &Path) -> Result<Installed> 
     // file. See `permissions::read_only`.
     let _ = crate::permissions::read_only(&target);
 
+    // The pack that lands in `packs/` gets its own sidecar, written from the
+    // sha just verified. Without it, reinstalling from the canonical path —
+    // which is how an index gets rebuilt — would hit the rule above and
+    // refuse, because the sidecar stayed behind with the original file.
+    let firma = sidecar_path(&target);
+    let _ = std::fs::remove_file(&firma);
+    let _ = std::fs::write(
+        &firma,
+        format!("{sha}  {}\n", target.file_name().unwrap_or_default().to_string_lossy()),
+    );
+
     // Clears the mark in the same transaction in which it adopts.
     vecstore::adopt_pack(conn, &name, &sha, dims)?;
     let p = Pack::open_pack(&target)?;
@@ -487,32 +503,62 @@ pub fn remove_pack(conn: &Connection, dir: &Path) -> Result<Option<String>> {
         return Ok(None);
     };
     vecstore::forget_pack(conn)?;
-    let _ = std::fs::remove_file(pack_path(dir, &name));
+    let target = pack_path(dir, &name);
+    let _ = std::fs::remove_file(sidecar_path(&target));
+    let _ = std::fs::remove_file(target);
     Ok(Some(name))
 }
 
-/// Verifies the `.sha256` travelling beside the pack, if one travels at all.
-///
-/// A missing sidecar is not an error here, and that is deliberate: `mem
-/// model install` is also how a pack built locally with
-/// `tools/build_pack.py` gets installed, and that one has no sidecar
-/// to check against. What `install` **does** guarantee on its own is that
-/// the copy it puts in place is byte-for-byte the file it was handed (it
-/// re-hashes the copy), so the gap is only in "is this the pack the project
-/// published", which no local check can answer anyway.
-///
-/// Closing that gap properly needs a signature — a key published somewhere
-/// other than the artifact — and that is a decision with key custody
-/// attached, tracked separately in finding M-3. The installer, which is
-/// where a pack arrives from the network, now refuses to proceed when it
-/// cannot verify (`scripts/install.sh`); this path is the local one.
-fn verify_signature(file: &Path, sha: &str) -> Result<()> {
-    let firma = file.with_file_name(format!(
+/// What to do with a pack that arrives with no `.sha256` beside it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Sidecar {
+    /// The default: no sidecar, no install.
+    Required,
+    /// What `mem model install --no-verify` asks for.
+    Optional,
+}
+
+/// The `.sha256` that belongs beside a pack: the pack's own name with the
+/// extension appended, which is what the builder and the release both write.
+fn sidecar_path(pack: &Path) -> PathBuf {
+    pack.with_file_name(format!(
         "{}.sha256",
-        file.file_name().unwrap_or_default().to_string_lossy()
-    ));
+        pack.file_name().unwrap_or_default().to_string_lossy()
+    ))
+}
+
+/// Verifies the `.sha256` travelling beside the pack.
+///
+/// A missing sidecar used to be waved through here, on the grounds that a
+/// pack built locally with `tools/build_pack.py` has none to check against.
+/// That reason was simply wrong: the builder writes the sidecar for every
+/// pack it builds, and so does the release for the one it publishes. The
+/// silence protected nothing and hid the one case worth saying out loud —
+/// a pack that arrived from somewhere with nothing to check it against.
+///
+/// So the absence is an error, and `--no-verify` is how someone who knows
+/// where a pack came from says so on purpose. It is the same bargain
+/// `scripts/install.sh` already strikes, which until now disagreed with
+/// this half of the same decision.
+///
+/// What this still does not give is **authenticity**: the sidecar is
+/// written by whoever wrote the pack. Closing that needs a signature with
+/// a key published away from the artifact, which carries a key-custody
+/// decision and is tracked separately.
+fn verify_signature(file: &Path, sha: &str, sidecar: Sidecar) -> Result<()> {
+    let firma = sidecar_path(file);
     if !firma.exists() {
-        return Ok(());
+        if sidecar == Sidecar::Optional {
+            return Ok(());
+        }
+        bail!(
+            "{} has no .sha256 beside it, so there is nothing to check it against. \
+             Every pack `tools/build_pack.py` builds carries one, and so does every \
+             pack a release publishes; one that arrives without it lost it on the way. \
+             Put the file back next to the pack, or pass --no-verify if you know where \
+             this one came from.",
+            file.display()
+        );
     }
     let raw = std::fs::read_to_string(&firma)?;
     let expected = raw.split_whitespace().next().unwrap_or("");

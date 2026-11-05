@@ -173,6 +173,13 @@ enum ModelCmd {
         /// Path to the .anathem-pack file
         #[arg(value_name = "FILE")]
         file: PathBuf,
+        /// Installs a pack that has no .sha256 beside it
+        ///
+        /// Every pack the builder writes and every pack a release publishes
+        /// carries one, so its absence means the file travelled without it.
+        /// This says you know where the pack came from and want it anyway.
+        #[arg(long)]
+        no_verify: bool,
     },
     /// Shows the active pack and the vector coverage
     Status,
@@ -579,8 +586,13 @@ fn run(cli: Cli) -> Result<()> {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
             match action {
-                ModelCmd::Install { file } => {
-                    let i = anathem::packstore::install(&conn, &dir, &file)?;
+                ModelCmd::Install { file, no_verify } => {
+                    let sidecar = if no_verify {
+                        anathem::packstore::Sidecar::Optional
+                    } else {
+                        anathem::packstore::Sidecar::Required
+                    };
+                    let i = anathem::packstore::install(&conn, &dir, &file, sidecar)?;
                     println!(
                         "pack {} installed ({} dimensions), {} chunks indexed",
                         i.name, i.dims, i.chunks

@@ -84,5 +84,11 @@ A single file, all little endian:
 To recover a vector: `value = byte * scale[d] + minimum[d]`. The embedding of
 a text is the average of the rows of its tokens, normalized.
 
-The `.sha256` covers the whole file. `mem model install` verifies it and
-rejects the pack if it does not match.
+The `.sha256` covers the whole file, and it has to travel beside the pack:
+`mem model install` verifies it, rejects the pack if it does not match, and
+refuses to install one that arrives without it. Moving a pack somewhere else
+means moving two files, not one. `--no-verify` installs anyway, for the case
+where you know where the pack came from and the sidecar was lost on the way.
+
+What this gives is integrity, not authenticity: whoever wrote the pack wrote
+the sidecar. It catches a truncated copy, not a substituted one.
