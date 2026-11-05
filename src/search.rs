@@ -38,6 +38,9 @@ pub struct Query {
     pub text: String,
     pub project: Option<String>,
     pub tags: Vec<String>,
+    /// Narrows to one topic key. Like `project` and `tags`, it is a filter
+    /// over `memories` and not a change to the ranking.
+    pub topic: Option<String>,
     pub limit: usize,
     pub budget_tokens: usize,
     /// When `Some(n)`, each result's snippet is trimmed to `n` characters
@@ -54,6 +57,7 @@ impl Default for Query {
             text: String::new(),
             project: None,
             tags: Vec::new(),
+            topic: None,
             limit: 10,
             budget_tokens: DEFAULT_BUDGET_TOKENS,
             excerpt: None,
@@ -217,7 +221,129 @@ pub(crate) fn filters_for(q: &Query, params: &mut Vec<Value>) -> String {
             params.len()
         ));
     }
+    if let Some(t) = &q.topic {
+        params.push(Value::Text(t.clone()));
+        sql.push_str(&format!(" and m.topic = ?{}", params.len()));
+    }
     sql
+}
+
+/// A narrowing written as `key:value`, which is what `--scope` and the MCP
+/// `scope` argument both speak.
+///
+/// It adds no filter the database did not already support: `filters_for`
+/// has built the project and tag `WHERE` since the vector side appeared,
+/// and `topic` is one more column on the same table. What was missing was a
+/// way to say it, and a way to compose several.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Scopes {
+    pub project: Option<String>,
+    pub tags: Vec<String>,
+    pub topic: Option<String>,
+}
+
+/// The keys a scope may name. Listed in every error, because a key that is
+/// almost right is the likely mistake.
+const SCOPE_KEYS: &str = "project, tag, topic";
+
+/// Parses `key:value` scopes, the same way for the CLI and for MCP.
+///
+/// Nothing here is lenient. A scope that cannot be understood is a usage
+/// error and never a filter quietly dropped: a dropped filter returns more
+/// than was asked for, which looks like a working search, and whoever wrote
+/// it never finds out. The same goes for two `project:` scopes — no memory
+/// can be in two projects, so an AND of both matches nothing, and failing is
+/// more useful than an empty answer whose reason is invisible.
+pub fn parse_scopes(raw: &[String]) -> anyhow::Result<Scopes> {
+    let mut out = Scopes::default();
+    for one in raw {
+        let one = one.trim();
+        let Some((key, value)) = one.split_once(':') else {
+            anyhow::bail!("scope \"{one}\" has no `:`; it is written key:value, with key one of {SCOPE_KEYS}");
+        };
+        let (key, value) = (key.trim(), value.trim());
+        if value.is_empty() {
+            anyhow::bail!("scope \"{one}\" has no value after the `:`");
+        }
+        match key {
+            "project" => {
+                if out.project.as_deref().is_some_and(|p| p != value) {
+                    anyhow::bail!(
+                        "two project scopes cannot both be satisfied: a memory belongs to one project"
+                    );
+                }
+                out.project = Some(value.to_string());
+            }
+            "topic" => {
+                if out.topic.as_deref().is_some_and(|t| t != value) {
+                    anyhow::bail!(
+                        "two topic scopes cannot both be satisfied: a memory carries one topic key"
+                    );
+                }
+                out.topic = Some(value.to_string());
+            }
+            "tag" => out.tags.push(value.to_string()),
+            other => anyhow::bail!("unknown scope key \"{other}\"; it is one of {SCOPE_KEYS}"),
+        }
+    }
+    Ok(out)
+}
+
+impl Scopes {
+    /// Lays the scopes over a query, keeping the filters it already carries.
+    ///
+    /// A `project` or `topic` already set another way — `--project`, the MCP
+    /// `project` argument — and a scope naming a different one cannot both
+    /// hold. Choosing one of them silently would make a flag do nothing, so
+    /// it fails and says which two disagree.
+    pub fn onto(self, q: Query) -> anyhow::Result<Query> {
+        let project = match (q.project, self.project) {
+            (Some(a), Some(b)) if a != b => anyhow::bail!(
+                "the search asks for project \"{a}\" and the scope for \"{b}\"; a memory belongs to one project"
+            ),
+            (a, b) => b.or(a),
+        };
+        let topic = match (q.topic, self.topic) {
+            (Some(a), Some(b)) if a != b => anyhow::bail!(
+                "the search asks for topic \"{a}\" and the scope for \"{b}\"; a memory carries one topic key"
+            ),
+            (a, b) => b.or(a),
+        };
+        let mut tags = q.tags;
+        tags.extend(self.tags);
+        Ok(Query { project, topic, tags, ..q })
+    }
+}
+
+/// The query's filters written back in scope syntax, for a message that has
+/// to name what came out empty.
+pub fn describe_scope(q: &Query) -> String {
+    let mut parts = Vec::new();
+    if let Some(p) = &q.project {
+        parts.push(format!("project:{p}"));
+    }
+    for t in &q.tags {
+        parts.push(format!("tag:{t}"));
+    }
+    if let Some(t) = &q.topic {
+        parts.push(format!("topic:{t}"));
+    }
+    parts.join(", ")
+}
+
+/// Whether the filters alone, with no query text, match any active memory.
+///
+/// "No results for this query" and "that scope is empty" are different
+/// answers, and only one of them means rephrasing would help.
+pub fn scope_is_empty(conn: &Connection, q: &Query) -> Result<bool> {
+    if describe_scope(q).is_empty() {
+        return Ok(false);
+    }
+    let mut params: Vec<Value> = Vec::new();
+    let filters = filters_for(q, &mut params);
+    let sql = format!("select count(*) from memories m where m.status = 'active'{filters}");
+    let n: i64 = conn.query_row(&sql, rusqlite::params_from_iter(params), |r| r.get(0))?;
+    Ok(n == 0)
 }
 
 /// Builds a `SearchHit` around one specific chunk. The merge uses it for

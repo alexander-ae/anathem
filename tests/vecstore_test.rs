@@ -380,6 +380,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         text: "nota".into(),
         project: Some("uno".into()),
         tags: vec![],
+        topic: None,
         limit: 10,
         budget_tokens: 10_000,
         excerpt: None,
@@ -391,6 +392,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         text: "nota".into(),
         project: None,
         tags: vec!["beta".into()],
+        topic: None,
         limit: 10,
         budget_tokens: 10_000,
         excerpt: None,
@@ -403,10 +405,25 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         text: "nota".into(),
         project: None,
         tags: vec![],
+        topic: None,
         limit: 10,
         budget_tokens: 10_000,
         excerpt: None,
     };
     let r = anathem::vecstore::search_vectors(&conn, &query_, &sin, 50).unwrap();
     assert_eq!(r.len(), 2, "sin filtros tienen que venir las dos: {r:?}");
+
+    // And the topic filter, which `--scope topic:` added to `filters_for`.
+    conn.execute("update memories set topic = 'clave' where project = 'uno'", []).unwrap();
+    let with_topic = anathem::search::Query {
+        text: "nota".into(),
+        project: None,
+        tags: vec![],
+        topic: Some("clave".into()),
+        limit: 10,
+        budget_tokens: 10_000,
+        excerpt: None,
+    };
+    let r = anathem::vecstore::search_vectors(&conn, &query_, &with_topic, 50).unwrap();
+    assert_eq!(r.len(), 1, "el filtro de topic tiene que valer también acá: {r:?}");
 }

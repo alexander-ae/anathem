@@ -164,6 +164,7 @@ installed with `mem model install <file>`.
 | `init` | Creates the database if it does not exist | `mem --db ~/.anathem/mem.db init` |
 | `migrate --from <jsonl>` | Imports a frozen supermemory export | `mem migrate --from my-export.jsonl` |
 | `search <query>` | Searches the memory (BM25, filters by `status=active`; if a vocabulary pack is installed, it merges the ranking with vector similarity) | `mem search "cache breakdown" --project my-project` |
+| `search <query> --scope <key:value>` | Narrows the search to a `project`, a `tag` or a `topic`. Repeatable, and the scopes combine with AND. A key it does not know is an error, never a filter quietly ignored. It removes distractors from the pool; it does not change the ranking | `mem search "branching" --scope topic:branching-policy --scope tag:decision` |
 | `save <text>` | Saves a new memory; without `--project` it derives it from the repository you are standing in | `mem save "The /api/x endpoint now pages by 50"` |
 | `save <text> --topic <key>` | With a topic key, the new memory replaces the active one holding the same key in the same project (the old one is left `superseded`, not edited and not deleted). It says which one it replaced. Without `--topic`, nothing changes | `mem save "The payment provider is Adyen" --topic payment-provider` |
 | `topics` | Lists the topic keys: project, how many memories each one has had and the id of the current one | `mem topics` |

@@ -346,3 +346,169 @@ fn excerpt_none_leaves_the_whole_chunk_as_before() {
         "sin extracto el fragmento debe seguir siendo el completo"
     );
 }
+
+// ---------------------------------------------------------------------------
+// `--scope key:value`: narrowing the pool to a project, a tag or a topic.
+// The SQL for project and tags was already in `filters_for`; what was
+// missing was a way to say it, and a way to compose it.
+// ---------------------------------------------------------------------------
+
+fn mem(dir: &std::path::Path, args: &[&str]) -> (bool, String, String) {
+    let o = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
+        .arg("--db")
+        .arg(dir.join("t.db"))
+        .args(args)
+        .output()
+        .unwrap();
+    (
+        o.status.success(),
+        String::from_utf8_lossy(&o.stdout).to_string(),
+        String::from_utf8_lossy(&o.stderr).to_string(),
+    )
+}
+
+fn scoped(raw: &[&str]) -> anathem::search::Scopes {
+    anathem::search::parse_scopes(&raw.iter().map(|s| s.to_string()).collect::<Vec<_>>()).unwrap()
+}
+
+#[test]
+fn scopes_parse_into_the_filters_that_already_existed() {
+    let s = scoped(&["project:acme-billing", "tag:decision", "tag:perf"]);
+    assert_eq!(s.project.as_deref(), Some("acme-billing"));
+    assert_eq!(s.tags, vec!["decision".to_string(), "perf".to_string()]);
+    assert_eq!(s.topic, None);
+}
+
+#[test]
+fn an_unknown_scope_key_is_an_error_and_not_a_filter_dropped_in_silence() {
+    // A filter dropped quietly returns too much, and whoever wrote it never
+    // finds out.
+    let e = anathem::search::parse_scopes(&["autor:alexander".to_string()]).unwrap_err();
+    let msg = e.to_string();
+    assert!(msg.contains("autor"), "tiene que nombrar la clave que no entiende: {msg}");
+    assert!(msg.contains("project") && msg.contains("tag") && msg.contains("topic"),
+        "y cuáles acepta: {msg}");
+}
+
+#[test]
+fn a_scope_without_a_colon_or_without_a_value_is_an_error() {
+    for malo in ["project", "project:", ":decision", "   "] {
+        assert!(
+            anathem::search::parse_scopes(&[malo.to_string()]).is_err(),
+            "«{malo}» no es un scope y no puede pasar en silencio"
+        );
+    }
+}
+
+#[test]
+fn two_project_scopes_cannot_both_be_satisfied_so_they_are_an_error() {
+    let e = anathem::search::parse_scopes(&[
+        "project:a".to_string(),
+        "project:b".to_string(),
+    ])
+    .unwrap_err();
+    assert!(e.to_string().contains("project"), "{e}");
+}
+
+#[test]
+fn two_scopes_narrow_with_and() {
+    let (_d, conn) = fixture();
+    let con_tag = seed(&conn, "d", "acme-billing", "Decidimos cachear el breakdown igual, con TTL corto.");
+    conn.execute("insert into memory_tags (memory_id, tag) values (?1, 'decision')", [con_tag])
+        .unwrap();
+
+    let s = scoped(&["project:acme-billing", "tag:decision"]);
+    let q = search::Query { text: "cache breakdown".into(), ..s.onto(search::Query::default()).unwrap() };
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
+    assert_eq!(hits.len(), 1, "solo la que cumple las dos: {hits:?}");
+    assert_eq!(hits[0].ext_id.as_deref(), Some("d"));
+}
+
+#[test]
+fn a_topic_scope_narrows_to_that_subject() {
+    let (_d, conn) = fixture();
+    let con_topic =
+        seed(&conn, "e", "acme-billing", "El proveedor de pagos es Adyen desde octubre.");
+    conn.execute("update memories set topic = 'payment-provider' where id = ?1", [con_topic])
+        .unwrap();
+    seed(&conn, "f", "acme-billing", "El proveedor de correo es Postmark.");
+
+    let s = scoped(&["topic:payment-provider"]);
+    let q = search::Query { text: "proveedor".into(), ..s.onto(search::Query::default()).unwrap() };
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
+    assert_eq!(hits.len(), 1, "{hits:?}");
+    assert_eq!(hits[0].ext_id.as_deref(), Some("e"));
+}
+
+#[test]
+fn a_scope_that_matches_nothing_says_so_instead_of_no_results() {
+    // "No results for this query" and "that scope holds nothing" are
+    // different answers, and only one of them means rephrasing would help.
+    let (d, _conn) = fixture();
+    let (ok, out, _) = mem(d.path(), &["search", "cache", "--scope", "tag:no-existe"]);
+    assert!(ok);
+    assert!(
+        out.contains("tag:no-existe"),
+        "tiene que decir qué scope quedó vacío, no «sin resultados»: {out}"
+    );
+}
+
+#[test]
+fn project_given_twice_and_differently_is_refused() {
+    let (d, _conn) = fixture();
+    let (ok, _out, err) =
+        mem(d.path(), &["search", "cache", "--project", "a", "--scope", "project:b"]);
+    assert!(!ok, "dos proyectos distintos no pueden cumplirse a la vez");
+    assert!(err.contains("project"), "{err}");
+}
+
+#[test]
+fn the_cli_and_the_mcp_filter_identically_through_the_same_parser() {
+    use anathem::{config::Config, mcp};
+    let (_d, conn) = fixture();
+    let con_tag = seed(&conn, "d", "acme-billing", "Decidimos cachear el breakdown igual.");
+    conn.execute("insert into memory_tags (memory_id, tag) values (?1, 'decision')", [con_tag])
+        .unwrap();
+
+    let s = scoped(&["project:acme-billing", "tag:decision"]);
+    let q = search::Query {
+        text: "cache breakdown".into(),
+        limit: 20,
+        ..s.onto(search::Query::default()).unwrap()
+    };
+    let por_biblioteca: Vec<i64> = search::run(&conn, &q, &search::SearchContext::bm25_only())
+        .unwrap()
+        .iter()
+        .map(|h| h.memory_id)
+        .collect();
+
+    let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+        "params":{"name":"search_memory","arguments":{
+            "query":"cache breakdown",
+            "scope":["project:acme-billing","tag:decision"]}}});
+    let r = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req)
+        .unwrap()
+        .unwrap();
+    let texto = r["result"]["content"][0]["text"].as_str().unwrap().to_string();
+    let por_mcp: Vec<i64> = texto
+        .lines()
+        .filter_map(|l| l.strip_prefix("[id:"))
+        .filter_map(|l| l.split(']').next())
+        .filter_map(|n| n.parse().ok())
+        .collect();
+
+    assert_eq!(por_biblioteca, por_mcp, "las dos superficies tienen que filtrar igual: {texto}");
+}
+
+#[test]
+fn an_invalid_scope_over_mcp_is_an_explained_error_and_not_a_crash() {
+    use anathem::{config::Config, mcp};
+    let (_d, conn) = fixture();
+    let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+        "params":{"name":"search_memory","arguments":{"query":"cache","scope":["autor:x"]}}});
+    let r = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req)
+        .unwrap()
+        .unwrap();
+    let texto = serde_json::to_string(&r).unwrap();
+    assert!(texto.contains("autor"), "el modelo tiene que poder corregirlo: {texto}");
+}

@@ -12,6 +12,20 @@ live in the database, not in the binary.
 
 ### Added
 
+- **`--scope key:value` in `mem search`, and a `scope` argument in
+  `search_memory`**: narrows the pool to a `project`, a `tag` or a `topic`,
+  repeatable and combined with AND. The SQL was already there — `filters_for`
+  has built the project and tag `WHERE` since the vector side appeared, and
+  `topic` is one more column on the same table — so what this adds is a way
+  to say it and a way to compose it. A key it does not recognise is an error
+  rather than a filter quietly dropped: a dropped filter returns more than
+  was asked for and looks like a search that worked. A scope that holds
+  nothing says so, which is a different answer from "no results for this
+  query" and the only one of the two where rephrasing will not help.
+
+  **It narrows the pool; it is not known to improve recall.** Whether
+  removing distractors moves `recall@5` at all is being measured
+  separately, and until that number exists this is a convenience.
 - **`mem log` and `mem why <id>`**: the retrieval trajectory the MCP server
   has been writing since it existed, which nothing read back. `mem log`
   prints one line per search — when, which project, the query, how many

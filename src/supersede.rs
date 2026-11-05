@@ -31,6 +31,7 @@ pub fn candidates(conn: &Connection, body: &str, project: &str, k: usize) -> Res
         text: body.chars().take(400).collect(),
         project: Some(project.to_string()),
         tags: Vec::new(),
+        topic: None,
         limit: k + 1,
         budget_tokens: usize::MAX,
         // This compares bodies to spot possible duplicates, it is not

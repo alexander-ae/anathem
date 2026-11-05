@@ -31,6 +31,7 @@ pub fn tool_defs() -> Value {
           "query": {"type": "string"},
           "project": {"type": "string"},
           "tags": {"type": "array", "items": {"type": "string"}},
+          "scope": {"type": "array", "items": {"type": "string"}, "description": "Narrows the search, as `key:value` strings combined with AND. The keys are `project`, `tag` and `topic`, e.g. [\"project:api\", \"tag:decision\"] or [\"topic:branching-policy\"]. An unrecognised key is an error rather than a filter ignored, so a scope that comes back explained can be corrected and retried. Use it when you already know where the answer lives; leave it out to search the whole memory."},
           "budget": {"type": "integer", "description": "Token budget; 1200 by default"},
           "limit": {"type": "integer", "description": "How many candidates at most; 20 by default. Each one carries only a short excerpt: for the full body of one, use get_memory with its id."}}}},
       {"name": "save_memory",
@@ -92,9 +93,22 @@ fn call_tool(
                 .unwrap_or(search::DEFAULT_BUDGET_TOKENS)
                 .min(search::MAX_BUDGET_TOKENS);
 
+            let scope_raw: Vec<String> = args["scope"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+                .unwrap_or_default();
+            // An unusable scope comes back explained instead of as a
+            // protocol error: the model can read it, fix the key and ask
+            // again, which is exactly what a dropped filter would have
+            // denied it.
+            let scopes = match search::parse_scopes(&scope_raw) {
+                Ok(s) => s,
+                Err(e) => return Ok(text_result(format!("Invalid scope: {e}"))),
+            };
             let q = search::Query {
                 text: text.clone(), project: project.clone(),
                 tags: tags_arg,
+                topic: None,
                 // `limit` can still override `cfg.candidates` (20) per
                 // call, just as it used to override the fixed 10.
                 limit: args["limit"].as_u64().map(|l| l as usize)
@@ -106,6 +120,10 @@ fn call_tool(
                 // few full snippets.
                 excerpt: Some(cfg.excerpt),
             };
+            let q = match scopes.onto(q) {
+                Ok(q) => q,
+                Err(e) => return Ok(text_result(format!("Invalid scope: {e}"))),
+            };
             let hits = search::run(conn, &q, ctx)?;
             let ids: Vec<String> = hits.iter().map(|h| h.memory_id.to_string()).collect();
             let used: usize = hits.iter()
@@ -113,6 +131,14 @@ fn call_tool(
             logsearch::record(conn, &text, project.as_deref(), &ids, used)?;
 
             if hits.is_empty() {
+                // An empty scope and an empty answer are different things,
+                // and only one of them is worth rephrasing the query for.
+                if search::scope_is_empty(conn, &q)? {
+                    return Ok(text_result(format!(
+                        "No memories match scope {}. Nothing is filed under it, so rephrasing the query will not help.",
+                        search::describe_scope(&q)
+                    )));
+                }
                 return Ok(text_result("No results.".into()));
             }
             let body = hits.iter()

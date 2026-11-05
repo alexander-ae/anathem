@@ -35,6 +35,13 @@ enum Cmd {
         project: Option<String>,
         #[arg(long)]
         tag: Vec<String>,
+        /// Narrows the search, as key:value. Repeatable, and they combine with AND
+        ///
+        /// The keys are `project`, `tag` and `topic`:
+        /// `--scope project:api --scope tag:decision`. A key it does not
+        /// know is an error, never a filter quietly ignored.
+        #[arg(long = "scope", value_name = "KEY:VALUE")]
+        scope: Vec<String>,
         #[arg(long, default_value_t = 10)]
         limit: usize,
         /// Shows the raw bm25 score next to each result
@@ -403,21 +410,33 @@ fn run(cli: Cli) -> Result<()> {
             }
             sync_after_write(&conn, &dir);
         }
-        Cmd::Search { query, project, tag, limit, explain, budget } => {
+        Cmd::Search { query, project, tag, scope, limit, explain, budget } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new("."));
             let cfg = anathem::config::load(dir)?;
             let p = anathem::packstore::resolve_and_warn(&conn, dir);
             let ctx = anathem::search::SearchContext::for_reading(p.as_ref(), cfg.bm25_weight);
+            let scopes = anathem::search::parse_scopes(&scope)?;
             let q = anathem::search::Query {
-                text: query, project, tags: tag, limit,
+                text: query, project, tags: tag, topic: None, limit,
                 budget_tokens: budget.unwrap_or(anathem::search::DEFAULT_BUDGET_TOKENS),
                 // The CLI does not trim: `mem search` still shows the whole
                 // chunk, as it always has.
                 excerpt: None,
             };
+            let q = scopes.onto(q)?;
             let hits = anathem::search::run_explained(&conn, &q, &ctx)?;
             if hits.is_empty() {
+                // An empty scope is its own answer. "No results among 300
+                // memories" would send someone rephrasing a query that was
+                // never the problem: nothing is filed under that scope.
+                if anathem::search::scope_is_empty(&conn, &q)? {
+                    println!(
+                        "No memories match scope {}. Nothing is filed under it, so other terms will not help.",
+                        anathem::search::describe_scope(&q)
+                    );
+                    return Ok(());
+                }
                 // Without this an empty search prints nothing and the user
                 // cannot tell "there is nothing" from "the binary is broken".
                 let total: i64 = conn.query_row(
