@@ -63,7 +63,9 @@ is, not anathem's code.
    precedence is wrong and you are going to end up with two databases.
 3. **`mem model install` over an already installed pack.** This is the case
    that failed on Windows with the original `rename`. It has to reinstall
-   without an error and leave the pack file intact and complete.
+   without an error and leave the pack file intact and complete — along with
+   the `.sha256` the install now writes beside it, which is what lets a
+   reinstall from `paquetes/` be verified at all.
 4. **The unresolved critical scenario, below.**
 5. **`mem edit` with no `$EDITOR` defined.** It should open `notepad`.
 

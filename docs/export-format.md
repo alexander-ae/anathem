@@ -40,7 +40,7 @@ Always present:
 | `tags` | list of text | assigned tags, in alphabetical order |
 | `created` | date | when it was saved |
 | `updated` | date | last edit |
-| `status` | text | `active`, `superseded`, `draft` or `forgotten` |
+| `status` | text | `active`, `superseded`, `draft` or `forgotten`. A `draft` is a memory received from elsewhere that nobody has accepted yet: it is exported and imported like any other, and stays invisible to search on the other side too |
 | `source` | text | `explicit` (the user asked for it), `suggested` or `migrated` |
 | `pinned` | boolean | whether it survives the candidate trimming in search |
 
@@ -55,6 +55,8 @@ does not invite confusing "has none" with "has null":
 | `topic` | text | the topic key it was saved with; the current one for each key is the only `active` memory among those sharing it in a project |
 | `event_start` | date | start of the period it refers to |
 | `event_end` | date | end of that period |
+| `received_from` | text | who sent this memory, when it was not written here (`mem save --external`). Absent for a local one |
+| `received_at` | timestamp | when it arrived |
 | `refs` | list of `{kind, value}` | tickets, PRs and commits extracted from the body; `kind` is `ticket`, `pr` or `sha` |
 
 The body of the memory goes after the frontmatter, as is, untransformed.

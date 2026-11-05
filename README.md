@@ -155,7 +155,21 @@ and each file carries its `.sha256` next to it:
 
 The vocabulary pack is the vector layer, and it is optional: without it
 search is lexical only. The installer downloads it on its own; by hand it is
-installed with `mem model install <file>`.
+installed with `mem model install <file>`, which needs the pack's `.sha256`
+beside it.
+
+How much the lexical ranking weighs against the vector one when the two are
+merged is `bm25_weight` in `config.json`, 1.0 by default:
+
+```json
+{ "bm25_weight": 1.0 }
+```
+
+At 1.0 they weigh the same; below it the vector side wins. The default was
+measured rather than chosen: lowering it to 0.25, which the original design
+proposed, costs 10 points of recall@5 on same-language searches in exchange
+for 4 across languages. At 1.0 monolingual search ties with pure BM25 and
+cross-lingual gains 24 points.
 
 ## Subcommands
 
