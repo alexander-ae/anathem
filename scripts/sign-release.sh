@@ -100,8 +100,21 @@ done
 
 paso "3. Sign"
 
+# All of them in one call. `minisign -S` takes several `-m` files and asks
+# for the key's password once; one call per file asked five times for the
+# same password, which is the kind of friction that gets worked around with
+# an unprotected key.
+#
+# No `-t`: minisign's own trusted comment already carries the timestamp and
+# the file name, which is more than a hand-written one would say.
+RUTAS=""
 for f in $PRESENTES; do
-  minisign -S -s "$CLAVE" -m "$TEMPORAL/$f" -t "anathem $ETIQUETA $f"
+  RUTAS="$RUTAS $TEMPORAL/$f"
+done
+# shellcheck disable=SC2086
+minisign -S -s "$CLAVE" -m $RUTAS
+for f in $PRESENTES; do
+  [ -f "$TEMPORAL/$f.minisig" ] || { malo "$f was not signed"; exit 1; }
   ok "$f.minisig"
 done
 

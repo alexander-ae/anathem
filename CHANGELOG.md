@@ -8,6 +8,38 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 what you would be getting. Memories are never touched by an upgrade: they
 live in the database, not in the binary.
 
+## [Unreleased]
+
+### Added
+
+- The **minisign public key** releases are signed with. It lives in
+  `scripts/install.sh`, in `anathem.pub` at the root and in the project's
+  description on GitLab — three places, so a repository tampered with on its
+  own cannot swap it without the others disagreeing. v0.3.0 is the first
+  signed release; `sh install.sh --verify-signature` checks it.
+
+### Changed
+
+- **The binaries are built on GitHub Actions**, in a public mirror that
+  exists for that and nothing else, and `scripts/publish-binaries.sh`
+  uploads them here. Actions is free and unlimited for public repositories
+  on all three operating systems; GitLab's 400 monthly minutes were going
+  28 at a time on Windows alone, and its macOS runners are Premium and
+  Ultimate only. GitLab keeps the Linux suite and the dependency audit on
+  every push, and no longer builds.
+
+### Fixed
+
+- **The macOS binaries published as v0.2.1 and v0.2.2 were built from
+  v0.2.0's code.** Both carry `commit b0586db`. The workflow checked out
+  with no `ref`, so it built whatever sat on the mirror's default branch
+  while the tag it was handed went unused, and nothing ever synced that
+  mirror. It could not be noticed from the machine that published it,
+  because a macOS binary does not run on Linux. The checkout now takes the
+  tag, every job refuses to upload a binary whose checkout is not that tag,
+  and the publish script pushes the tag to the mirror before dispatching
+  anything.
+
 ## [0.3.0] - 2026-11-05
 
 ### Added
