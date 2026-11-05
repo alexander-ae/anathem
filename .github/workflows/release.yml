@@ -70,9 +70,8 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
           # `build.rs` reads the commit with `git rev-parse HEAD`, and a
-          # shallow checkout is enough for that; what it is not enough for is
-          # being sure the tag is the one asked for, which the step below
-          # checks against the ref instead.
+          # shallow checkout is enough for that. The step below needs the tag
+          # object as well, which it fetches itself.
           fetch-depth: 1
 
       - name: Add the Rust target
@@ -81,7 +80,26 @@ jobs:
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }}
 
-      - name: Check the binary is the version that was asked for
+      # Two checks, and the first is the one that matters. Reading a version
+      # out of a binary only works when the binary can be run or its strings
+      # can be found, and neither is guaranteed; comparing the checkout
+      # against the tag is exact on every platform and is the thing that
+      # actually went wrong before.
+      - name: Check the checkout really is the tag
+        shell: bash
+        run: |
+          set -eu
+          git fetch --depth 1 origin "refs/tags/${{ inputs.tag }}:refs/tags/${{ inputs.tag }}" 2>/dev/null || true
+          esperado="$(git rev-list -n 1 "${{ inputs.tag }}")"
+          obtenido="$(git rev-parse HEAD)"
+          echo "tag ${{ inputs.tag }} is $esperado, checkout is $obtenido"
+          if [ "$esperado" != "$obtenido" ]; then
+            echo "::error::checked out $obtenido while publishing ${{ inputs.tag }} ($esperado)" >&2
+            exit 1
+          fi
+
+      - name: Check the binary says the version that was asked for
+        if: '!matrix.cross'
         shell: bash
         run: |
           set -eu
@@ -89,16 +107,10 @@ jobs:
           [ -f "$bin" ] || bin="$bin.exe"
           esperado="${{ inputs.tag }}"
           esperado="${esperado#v}"
-          # A binary that can run says it; one that cannot is read with
-          # `strings`, which finds the same constant compiled into it.
-          if [ "${{ matrix.cross }}" = "true" ]; then
-            obtenido="$(strings "$bin" | grep -oE '^0\.[0-9]+\.[0-9]+$' | head -1 || true)"
-          else
-            obtenido="$("$bin" --version | awk '{print $2}')"
-          fi
+          obtenido="$("$bin" --version | awk '{print $2}')"
           echo "asked for $esperado, built $obtenido"
           if [ "$esperado" != "$obtenido" ]; then
-            echo "::error::built $obtenido while publishing $esperado — the checkout is not the tag" >&2
+            echo "::error::built $obtenido while publishing $esperado" >&2
             exit 1
           fi
 
