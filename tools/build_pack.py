@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
-"""Construye un paquete de vocabulario para la capa vectorial de anathem.
+"""Builds a vocabulary pack for anathem's vector layer.
 
-Un paquete es el modelo estático recortado a los idiomas que te interesan:
-el tokenizador sin las piezas que no vas a usar y la tabla de embeddings
-cuantizada a int8. Ver docs/vocabulary-packs.md.
+A pack is the static model trimmed to the languages you care about: the
+tokenizer without the pieces you will not use, and the embedding table
+quantized to int8. See docs/vocabulary-packs.md for what that buys and what
+it costs.
 
-    python3 tools/build_pack.py --nombre en-es \
-        --muestra textos_en.txt textos_es.txt --salida en-es.anathem-pack
+    pip install model2vec numpy
+    python3 tools/build_pack.py --name en-es \
+        --sample texts_en.txt texts_es.txt --out en-es.anathem-pack
+
+The first run downloads the base model — `minishlab/potion-multilingual-128M`
+by default, about 512 MB — from Hugging Face. The pack it writes is a small
+fraction of that: `en-es` comes out at 22 MB.
+
+It writes the pack and its `.sha256` beside it. Keep them together: `mem
+model install` refuses a pack it cannot check.
 """
 import argparse, hashlib, json, struct, sys
 from pathlib import Path
@@ -33,7 +42,7 @@ def construir(modelo, nombre, muestras, salida, lote=2000):
     n_total, dims = tabla.shape
     tok_json = json.loads(m.tokenizer.to_str())
     if tok_json["model"]["type"] != "Unigram":
-        sys.exit(f"solo se soporta Unigram; este modelo usa {tok_json['model']['type']}")
+        sys.exit(f"only Unigram is supported; this model uses {tok_json['model']['type']}")
     vocab = tok_json["model"]["vocab"]
 
     # Siempre se conservan: los especiales, los de byte fallback (garantizan
@@ -96,10 +105,17 @@ def construir(modelo, nombre, muestras, salida, lote=2000):
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--modelo", default="minishlab/potion-multilingual-128M")
-    p.add_argument("--nombre", required=True, help="identificador del paquete, p.ej. en-es")
-    p.add_argument("--muestra", required=True, nargs="+",
-                   help="archivos de texto, una línea por pasaje, en los idiomas del paquete")
-    p.add_argument("--salida", required=True)
+    # The Spanish spellings stay accepted alongside the English ones, the
+    # same way the CLI kept its own: a note or a script that already has
+    # them written down keeps working.
+    p.add_argument("--model", "--modelo", dest="model",
+                   default="minishlab/potion-multilingual-128M",
+                   help="base model to trim; it is downloaded on first use (~512 MB)")
+    p.add_argument("--name", "--nombre", dest="name", required=True,
+                   help="the pack's identifier, e.g. en-es. It decides the installed file's name")
+    p.add_argument("--sample", "--muestra", dest="sample", required=True, nargs="+",
+                   help="text files, one passage per line, in the pack's languages")
+    p.add_argument("--out", "--salida", dest="out", required=True,
+                   help="where to write the .anathem-pack; its .sha256 goes beside it")
     a = p.parse_args()
-    construir(a.modelo, a.nombre, a.muestra, a.salida)
+    construir(a.model, a.name, a.sample, a.out)

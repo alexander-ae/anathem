@@ -37,24 +37,57 @@ tokens and do not admit per-word trimming.
 
 ## Generating a pack for other languages
 
-You need a sample of generic text in the languages you want to cover: one
-plain text file per language, one line per passage. Any public corpus will do
-— Wikipedia, mMARCO, MIRACL — with tens of thousands of lines. The sample only
-determines which vocabulary pieces are kept, so it is worth making it varied
-and **not the corpus you are going to index afterwards**.
+Nothing here is reserved for the project. The published `en-es` pack was
+built with the same script, and a pack for your languages is one command
+away.
 
-    python3 tools/build_pack.py \
-        --nombre en-es-pt \
-        --muestra textos_en.txt textos_es.txt textos_pt.txt \
-        --salida en-es-pt.anathem-pack
+**What you need first.** Python with two packages, and room for the base
+model:
 
-It writes the pack and a `.sha256` next to it. The size grows much less than
+```bash
+pip install model2vec numpy
+```
+
+The first run downloads `minishlab/potion-multilingual-128M` from Hugging
+Face — about 512 MB — and trims it. That download happens once; the pack it
+writes is a small fraction of it.
+
+**And a sample of text** in the languages you want to cover: one plain file
+per language, one line per passage. Any public corpus will do — Wikipedia,
+mMARCO, MIRACL — with tens of thousands of lines. The sample only decides
+which vocabulary pieces are kept, so it is worth making it varied and
+**not the corpus you are going to index afterwards**: a sample drawn from
+your own notes keeps the pieces your notes already use and drops the ones
+the next note will need.
+
+```bash
+python3 tools/build_pack.py \
+    --name en-es-pt \
+    --sample texts_en.txt texts_es.txt texts_pt.txt \
+    --out en-es-pt.anathem-pack
+```
+
+Then install it, which reindexes every chunk:
+
+```bash
+mem --db ~/.anathem/mem.db model install en-es-pt.anathem-pack
+mem --db ~/.anathem/mem.db model status
+```
+
+It writes the pack and a `.sha256` next to it. Keep the two together —
+`mem model install` refuses a pack it cannot check, and `--no-verify` is the
+deliberate way round that. The size grows much less than
 linearly with the number of languages, because they share pieces: going from
 `en-es` to the full Latin script (which also covers Portuguese, French,
 Italian and German) takes the table from 19.5 MB to 70.7 MB.
 
-After generating one, measure it before publishing it. A pack with a badly
-chosen sample does not fail: it performs worse, and silently.
+**Measure it before trusting it.** A pack with a badly chosen sample does
+not fail: it performs worse, and silently. `mem eval` over an eval set of
+your own, before and after installing it, is what tells you whether it
+helped — see [`benchmarks.md`](benchmarks.md), where the same comparison is
+done over a public dataset. On LongMemEval-S the `en-es` pack earns its
+22 MB almost entirely on `multi-session` questions, +17 points, and costs
+4 on one other type. A pack is a trade, not an upgrade.
 
 ## Changing packs forces a reindex
 
