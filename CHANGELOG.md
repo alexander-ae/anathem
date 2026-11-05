@@ -12,6 +12,20 @@ live in the database, not in the binary.
 
 ### Added
 
+- **`mem log` and `mem why <id>`**: the retrieval trajectory the MCP server
+  has been writing since it existed, which nothing read back. `mem log`
+  prints one line per search — when, which project, the query, how many
+  memories came back, what they cost in tokens and whether the agent went on
+  to open one of them. `mem why <id>` answers it from the other side: which
+  searches returned that memory, in what position, and whether it was the one
+  opened. A memory that never came back says so, which is the interesting
+  case an empty answer would hide. CLI only: no new MCP tool, and the five
+  that exist are untouched.
+- `mem doctor` reports how large the search log has got. Nothing trimmed that
+  table and no command had ever mentioned it existed. `mem log --prune
+  <window>` removes entries older than a window you give it, and there is no
+  default and nothing that trims on write: retrieval history goes when a
+  person says so.
 - **`mem show --topic <key>`**: what a subject says right now, without
   reading every version of it. It prints the body of the memory that answers
   for the key, who saved it and when, and below it every version the key has

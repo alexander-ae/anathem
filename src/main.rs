@@ -150,6 +150,38 @@ enum Cmd {
     History {
         id: i64,
     },
+    /// What the MCP server searched for, newest first
+    ///
+    /// Every search through the server records what was asked, what came
+    /// back, what it cost and whether the agent then opened one of the
+    /// results. Searches run from this CLI are not recorded.
+    ///
+    /// It looks across every project by default, unlike `recent`: the
+    /// server's searches often carry no project at all, and narrowing to
+    /// the one of the repository you are standing in would hide most of
+    /// them.
+    Log {
+        /// Only this project's searches
+        #[arg(long)]
+        project: Option<String>,
+        /// How far back: 6h, 90m, 2d. 24h by default; `--since all` does not bound it
+        #[arg(long = "since", value_name = "SINCE", default_value = "24h")]
+        since: String,
+        /// At most this many entries
+        #[arg(long = "limit", value_name = "LIMIT", default_value_t = 20)]
+        limit: usize,
+        /// Deletes entries older than this window and says how many went
+        ///
+        /// There is no default and nothing trims the log on its own:
+        /// retrieval history goes because someone asked for it with a
+        /// number.
+        #[arg(long = "prune", value_name = "WINDOW")]
+        prune: Option<String>,
+    },
+    /// Which searches returned a memory, where in the ranking, and whether it was opened
+    Why {
+        id: i64,
+    },
     /// Imports what `mem export` wrote: restoring a backup, moving to
     /// another machine, or syncing two computers by hand
     Import {
@@ -199,6 +231,11 @@ enum ModelCmd {
     /// Removes the pack and its vectors; search goes back to bm25 only
     Remove,
 }
+
+/// Why a log can be empty, or a memory missing from it. Said wherever the
+/// answer is "nothing", which is the one case where the reason matters.
+const ONLY_MCP_IS_LOGGED: &str =
+    "Only searches through the MCP server are logged; the ones run from this CLI are not.";
 
 /// Shortens a stored instant to what a listing can read.
 ///
@@ -648,6 +685,63 @@ fn run(cli: Cli) -> Result<()> {
             let chain = anathem::maint::history(&conn, id)?;
             for (i, title, status) in chain {
                 println!("{i:5}  [{status:10}]  {title}");
+            }
+        }
+        Cmd::Log { project, since, limit, prune } => {
+            let conn = anathem::db::open(&path)?;
+            if let Some(window) = prune {
+                let seconds = anathem::recent::duration_in_seconds(&window)?;
+                let n = anathem::logsearch::prune(&conn, project.as_deref(), seconds)?;
+                println!("removed {n} log entries older than {window}");
+            } else {
+                let unbounded = ["all", "todo"];
+                let window = if unbounded.iter().any(|k| since.trim().eq_ignore_ascii_case(k)) {
+                    None
+                } else {
+                    Some(anathem::recent::duration_in_seconds(&since)?)
+                };
+                let entries =
+                    anathem::logsearch::list(&conn, project.as_deref(), window, limit)?;
+                if entries.is_empty() {
+                    println!("no searches logged in this window. {ONLY_MCP_IS_LOGGED}");
+                }
+                for e in entries {
+                    let opened = match e.followed {
+                        None => "none".to_string(),
+                        Some(anathem::logsearch::Followed::Memory(i)) => i.to_string(),
+                        // An older row knows one was opened and not which.
+                        Some(anathem::logsearch::Followed::Unrecorded) => "yes".to_string(),
+                    };
+                    println!(
+                        "{}  project={}  returned={}  tokens={}  opened={opened}  query=\"{}\"",
+                        short_when(&e.ts),
+                        e.project.as_deref().unwrap_or("-"),
+                        e.returned.len(),
+                        e.budget_used,
+                        e.query,
+                    );
+                }
+            }
+        }
+        Cmd::Why { id } => {
+            let conn = anathem::db::open(&path)?;
+            let appearances = anathem::logsearch::why(&conn, id, 50)?;
+            if appearances.is_empty() {
+                println!("id:{id} never came back from a logged search.");
+                println!("{ONLY_MCP_IS_LOGGED}");
+            } else {
+                println!("id:{id} came back from {} logged searches, newest first:", appearances.len());
+                for a in appearances {
+                    println!(
+                        "{}  position {} of {}  project={}  opened={}  query=\"{}\"",
+                        short_when(&a.ts),
+                        a.position,
+                        a.of,
+                        a.project.as_deref().unwrap_or("-"),
+                        if a.opened { "yes" } else { "no" },
+                        a.query,
+                    );
+                }
             }
         }
         Cmd::Doctor => {

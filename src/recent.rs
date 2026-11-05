@@ -53,7 +53,12 @@ pub fn duration_in_seconds(text: &str) -> Result<i64> {
 }
 
 /// The instant to look back to, in the same format as `created_ts`.
-fn since(seconds: i64) -> String {
+/// The instant `seconds` ago, in the format the stored timestamps use.
+///
+/// Shared with `logsearch`: both commands bound their answer by the same
+/// kind of window, and two copies of this would be two chances to format it
+/// differently.
+pub(crate) fn since(seconds: i64) -> String {
     (chrono::Local::now() - chrono::Duration::seconds(seconds)).to_rfc3339()
 }
 

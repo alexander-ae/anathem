@@ -70,7 +70,10 @@ create table if not exists search_log (
   project      text,
   returned_ids text not null,
   budget_used  integer not null,
-  followed_up  integer not null default 0
+  followed_up  integer not null default 0,
+  -- Which memory was opened, when it is known. Null in rows written before
+  -- the column existed, where `followed_up` says that one was and not which.
+  followed_up_id integer
 );
 
 create index if not exists idx_mem_project_status on memories(project, status);
@@ -110,6 +113,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     conn.execute_batch(SCHEMA)?;
     add_topic_column(&conn)?;
     add_handoff_columns(&conn)?;
+    add_follow_up_column(&conn)?;
     restringir(path);
     Ok(conn)
 }
@@ -153,17 +157,17 @@ fn restringir(path: &Path) {
     }
 }
 
-fn has_column(conn: &Connection, name: &str) -> Result<bool> {
+fn has_column(conn: &Connection, table: &str, name: &str) -> Result<bool> {
     let n: i64 = conn.query_row(
-        "select count(*) from pragma_table_info('memories') where name = ?1",
-        [name],
+        "select count(*) from pragma_table_info(?1) where name = ?2",
+        [table, name],
         |r| r.get(0),
     )?;
     Ok(n > 0)
 }
 
 fn has_topic_column(conn: &Connection) -> Result<bool> {
-    has_column(conn, "topic")
+    has_column(conn, "memories", "topic")
 }
 
 /// Adds a column that may be missing from an older database, tolerating
@@ -172,13 +176,13 @@ fn has_topic_column(conn: &Connection) -> Result<bool> {
 /// the column missing, and the second `alter` fails with "duplicate column
 /// name". If the column is there after the failure, the result is the one
 /// we wanted.
-fn add_column(conn: &Connection, name: &str, tipo: &str) -> Result<()> {
-    if has_column(conn, name)? {
+fn add_column(conn: &Connection, table: &str, name: &str, tipo: &str) -> Result<()> {
+    if has_column(conn, table, name)? {
         return Ok(());
     }
-    let sql = format!("alter table memories add column {name} {tipo}");
+    let sql = format!("alter table {table} add column {name} {tipo}");
     if let Err(e) = conn.execute(&sql, []) {
-        if !has_column(conn, name)? {
+        if !has_column(conn, table, name)? {
             return Err(e.into());
         }
     }
@@ -240,10 +244,21 @@ fn rename_columns_to_english(conn: &Connection) -> Result<()> {
 /// `agent` is filled by the MCP server with the name the client sends in
 /// `initialize`; anything saved from the CLI is left without an agent, which
 /// is the truth.
+/// Which memory was opened after a search, and not only that one was.
+///
+/// `followed_up` has been a flag since the log existed, and a flag cannot
+/// answer the question `mem why <id>` asks — "was *this* memory the one the
+/// agent opened" — when a search returned twenty candidates. Rows written
+/// before this column keep their flag and leave the id null, which reads as
+/// "yes, and which one was not recorded": the truth about them.
+fn add_follow_up_column(conn: &Connection) -> Result<()> {
+    add_column(conn, "search_log", "followed_up_id", "integer")
+}
+
 fn add_handoff_columns(conn: &Connection) -> Result<()> {
     rename_columns_to_english(conn)?;
-    add_column(conn, "agent", "text")?;
-    add_column(conn, "created_ts", "text")?;
+    add_column(conn, "memories", "agent", "text")?;
+    add_column(conn, "memories", "created_ts", "text")?;
     // Serves `mem recent`'s query, which filters by project and orders by
     // date descending.
     conn.execute(

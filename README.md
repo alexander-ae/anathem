@@ -169,6 +169,8 @@ installed with `mem model install <file>`.
 | `topics` | Lists the topic keys: project, how many memories each one has had and the id of the current one | `mem topics` |
 | `show --topic <key>` | What that topic says today — the body of the version that answers for the key — and below it every version it has had, with ids, dates and states. `topics` is the index; this is the content | `mem show --topic payment-provider` |
 | `edit <id>` | Edits the body of a memory in `$EDITOR` | `mem edit 42` |
+| `log` | What the MCP server searched for, newest first: query, how many memories came back, what it cost and whether the agent then opened one. Searches run from this CLI are not logged. `--prune <window>` removes old entries, and nothing else ever does | `mem log --since 24h` |
+| `why <id>` | Which logged searches returned that memory, in what position, and whether it was the one opened | `mem why 42` |
 | `export --out <dir>` | Exports everything to markdown with frontmatter, one file per memory, losing nothing ([format](docs/export-format.md)) | `mem export --out export/` |
 | `import --from <dir>` | Reads what `export` wrote: restoring a backup, moving the memory to another machine, or syncing two computers by hand with git. It demands an empty database unless you pass `--merge`, which adds only what is missing | `mem import --from export/` |
 | `reindex` | Rebuilds the chunks and the FTS5 index from `memories.body` | `mem reindex` |

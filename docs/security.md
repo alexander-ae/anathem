@@ -127,9 +127,12 @@ filter.
   What the sha256 does **not** give is authenticity: it comes from the same
   release as the pack, so it detects a corrupt download and not a tampered
   release. That would need a signature, which does not exist yet. What did
-  change is that the installer no longer carries on when it cannot verify: if
-  the `.sha256` is missing, or the machine has nothing to compute it with, it
-  stops. To skip that you have to ask for it with `--no-verify`.
+  change is that nothing carries on when it cannot verify. The installer
+  stops if the `.sha256` is missing or the machine has nothing to compute it
+  with, and `mem model install` refuses a pack that arrives without its
+  sidecar — every pack the builder writes and every pack a release publishes
+  carries one, so its absence means the file travelled without it. To skip
+  either you have to ask, with `--no-verify`.
 - **`config.json` and `tags.json`** are yours and local; if they are broken,
   anathem fails loudly instead of carrying on with values you did not ask for.
 - **The database** is an unencrypted SQLite file. Whoever can read your disk
@@ -140,6 +143,15 @@ filter.
   — an old database created as 0644 fixes itself. The same goes for the
   temporary file `mem edit` uses while you have the editor open, which lives
   in a private directory and disappears with it even if the editor fails.
+- **The search log** records what the MCP server was asked, what came back
+  and whether the agent then opened one of the results. It is your own
+  activity, it never leaves the machine — there is no outbound channel, see
+  the first section — and it lives in the same database, with the same
+  permissions. Nothing trims it: it grows for as long as you use the server,
+  `mem doctor` says how large it has got, and `mem log --prune <window>`
+  removes what is older than a window you give it. There is no default
+  window and nothing deletes rows on its own, because retrieval history is
+  the kind of thing that should go when a person says so.
 - **The binary** does not update itself and does not execute anything that
   comes from the database.
 

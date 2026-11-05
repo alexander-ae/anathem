@@ -343,7 +343,34 @@ fn database_section(db: &Path) -> (Section, Option<Connection>) {
     }
     permissions_section(db, &mut s);
     check_database(&conn, &mut s);
+    search_log_size(&conn, &mut s);
     (s, Some(conn))
+}
+
+/// How much retrieval log there is.
+///
+/// Nothing bounds `search_log`: every MCP search appends a row and no code
+/// path ever removes one. That is on purpose — deleting retrieval history is
+/// something a person asks for, with `mem log --prune <window>` — but a
+/// table that only grows and that no command ever mentioned is a table
+/// nobody knows is there. So it is reported, as information and never as a
+/// problem: a long log is what using the server looks like.
+fn search_log_size(conn: &Connection, s: &mut Section) {
+    if !has_table(conn, "search_log").unwrap_or(false) {
+        return;
+    }
+    match crate::logsearch::size(conn) {
+        Ok(Some(t)) => s.info(format!(
+            "search log: {} entries, {} to {}. Nothing trims it; `mem log --prune <window>`              does, when you ask",
+            t.rows,
+            &t.oldest.chars().take(10).collect::<String>(),
+            &t.newest.chars().take(10).collect::<String>(),
+        )),
+        // Empty is the normal state of a database nobody has searched
+        // through the MCP server, and saying so would be noise.
+        Ok(None) => {}
+        Err(e) => s.warning(format!("could not read the search log: {e}")),
+    }
 }
 
 /// Whether the database is readable by anyone but its owner.
