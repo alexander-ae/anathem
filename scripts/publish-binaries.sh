@@ -134,10 +134,25 @@ glab release view "$ETIQUETA" --repo "$REPO_GL" >/dev/null 2>&1 || {
   aviso "there is no release $ETIQUETA on GitLab yet; creating it"
   glab release create "$ETIQUETA" --repo "$REPO_GL" --notes "See CHANGELOG.md."
 }
+# An asset that is already there is left alone rather than retried: GitLab
+# answers a duplicate link with a 400 that aborts the whole upload, so one
+# file already published used to take the other three down with it. That
+# happens whenever a release was started another way — v0.3.0 had its Linux
+# and Windows halves published by the pipeline before the builds moved here —
+# and it has to be survivable, because a publish script that cannot be run
+# twice is one you cannot resume when the network drops halfway.
+YA="$(glab release view "$ETIQUETA" --repo "$REPO_GL" 2>/dev/null | awk '/^[a-zA-Z0-9._-]+\t/ {print $1}')"
+SUBIDOS=0
 for f in $PRESENTES; do
+  if printf '%s\n' "$YA" | grep -qx "$f"; then
+    aviso "$f is already in the release; leaving it as it is"
+    continue
+  fi
   glab release upload "$ETIQUETA" "$TEMPORAL/$f" "$TEMPORAL/$f.sha256" --repo "$REPO_GL"
   ok "uploaded $f and its sha256"
+  SUBIDOS=$((SUBIDOS + 1))
 done
+[ "$SUBIDOS" -gt 0 ] || aviso "nothing new to upload; checking what is published anyway"
 
 paso "5. Download every link back"
 
