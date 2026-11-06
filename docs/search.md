@@ -131,7 +131,11 @@ everybody — this is measured, on two corpora, with the same code:
 (LongMemEval-S: 142 answerable questions of a 150-question sample, 7,168
 memories, `en-es` pack installed. The notes: 48 hand-written questions over
 682 memories. `recall@5` is saturated at 97% on the benchmark, so MRR is the
-only column there that discriminates.)
+only column there that discriminates — and that saturation is a property of
+the benchmark, not of the tool. Over the real notes the same measure is
+**52%**, and the gap is the subject of the "How it measures up" section of
+the README. Nothing below should be read as a figure anyone will see on
+their own corpus.)
 
 **The two want opposite settings, and both are right.** LongMemEval's
 sessions are conversation in prose: there is meaning for a vector ranking to

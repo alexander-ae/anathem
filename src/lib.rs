@@ -2,6 +2,7 @@ pub mod update;
 pub mod chunk;
 pub mod config;
 pub mod db;
+pub mod dupes;
 pub mod doctor;
 pub mod edit;
 pub mod evalrun;
