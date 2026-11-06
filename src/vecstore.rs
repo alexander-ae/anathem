@@ -46,10 +46,6 @@ fn a_blob(v: &[f32]) -> Vec<u8> {
     b
 }
 
-fn from_blob(b: &[u8]) -> Vec<f32> {
-    b.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect()
-}
-
 fn record_identity(
     conn: &Connection,
     name: &str,
@@ -361,18 +357,31 @@ pub fn search_vectors(
     // bm25 discards and the merge would mix them in with nothing noticing.
     sql.push_str(&crate::search::filters_for(q, &mut ps));
     let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(rusqlite::params_from_iter(ps.iter()), |r| {
-        Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, Vec<u8>>(2)?))
-    })?;
+    // This query has no LIMIT: every active vector is scanned on every
+    // search, so what it costs per row is multiplied by the whole corpus.
+    // `query_map` would hand back owned values, which meant copying the blob
+    // and then allocating a `Vec<f32>` for it — two allocations a row, 1.25
+    // million of them over a 623,648-chunk corpus. Reading the row by
+    // reference borrows the bytes and the dot product runs over them in
+    // place, so the scan allocates nothing.
+    let mut rows = stmt.query(rusqlite::params_from_iter(ps.iter()))?;
 
     let mut mejor: HashMap<i64, (i64, f32)> = HashMap::new();
-    for row in rows {
-        let (mid, cid, blob) = row?;
-        let v = from_blob(&blob);
-        if v.len() != query_.len() {
+    let ancho = query_.len() * std::mem::size_of::<f32>();
+    while let Some(row) = rows.next()? {
+        let mid: i64 = row.get(0)?;
+        let cid: i64 = row.get(1)?;
+        let blob = row.get_ref(2)?.as_blob()?;
+        // Compared in bytes, because that is what there is to compare now.
+        if blob.len() != ancho {
             continue; // dimensiones distintas: vector de otro paquete
         }
-        let cos: f32 = v.iter().zip(query_).map(|(a, b)| a * b).sum();
+        let cos: f32 = blob
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .zip(query_)
+            .map(|(a, b)| a * b)
+            .sum();
         let e = mejor.entry(mid).or_insert((cid, f32::NEG_INFINITY));
         if cos > e.1 {
             *e = (cid, cos);
