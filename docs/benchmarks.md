@@ -221,6 +221,74 @@ The preference row is the one not to quote. Six questions: a 95% interval of
 roughly -0.05 to 0.71, and it moves +0.17 here while -S says +0.00 at n=30.
 That is noise with a plausible-looking face on it.
 
+## What happens as the corpus grows
+
+The question a memory is finally judged on, and the one this document could
+not answer until it was asked directly: does it still work in year three.
+
+Measuring it needs care, because the obvious way is wrong. Raising
+`--questions` does **not** grow the haystack — the converter gives every
+question its own project and the eval case names it, so each question keeps
+searching some fifty sessions however many questions exist. Growing that way
+measures the same problem more times.
+
+So the corpus is **pooled**: the `project` is stripped from every case and a
+fixed hundred questions search the whole database. Sizes come from
+`--distractors`, which keeps every evidence session and an evenly spaced
+share of the rest. LongMemEval-S, bm25 only.
+
+| memories | recall@5 | recall@50 | MRR | p50 | peak RSS |
+|---:|--:|--:|--:|--:|--:|
+| 1,024 | 72 % | 92 % | 0.560 | 38 ms | 17.4 MB |
+| 2,520 | 68 % | 88 % | 0.528 | 78 ms | 17.4 MB |
+| 6,481 | 57 % | 84 % | 0.427 | 179 ms | 17.8 MB |
+| 12,267 | 48 % | 77 % | 0.392 | 333 ms | 18.2 MB |
+| 23,854 | 42 % | 70 % | 0.330 | 646 ms | 18.9 MB |
+
+Three things, and they do not all point the same way.
+
+**Quality falls, and it is not subtle.** recall@5 goes from 72 % to 42 %
+across a twenty-three-fold corpus. Whatever else is true, an undifferentiated
+pile of twenty thousand memories is not something this searches well.
+
+**Latency grows about linearly with the pool** — twenty-three times the
+corpus, seventeen times the time. At a hundred thousand that extrapolates to
+some 2.7 seconds, which is the point where it stops being a tool you reach
+for without thinking.
+
+**Memory does not grow.** 17.4 MB at a thousand memories and 18.9 MB at
+twenty-four thousand, against a 774 MB database. SQLite stays on disk and
+pages in what it needs. It is the one row of this table that can be quoted
+without a caveat.
+
+### And scoping recovers all of it
+
+The same 23,854 memories, the same hundred questions, each confined to its
+own project — which is what anathem does by itself, since every memory takes
+the project of the repository it was saved from:
+
+| | recall@5 | recall@50 | MRR | p50 |
+|---|--:|--:|--:|--:|
+| pooled | 42 % | 70 % | 0.330 | 646 ms |
+| **scoped by project** | **95 %** | **100 %** | **0.886** | 1,184 ms |
+
+So the degradation is a fact about the **searched pool** and not about the
+database. Twenty-four thousand memories spread over twenty projects is the
+top row of the first table, not the bottom one.
+
+That reframes `--project` from bookkeeping into the scaling mechanism, and
+it is the reason the default — derive the project from the repository and
+never make anyone type it — matters more than it looks. It also sets the
+price: scoping buys recall and spends time, 1,184 ms against 646.
+
+### What it does not cover
+
+bm25 only, nothing past 23,854, and LongMemEval sessions are prose while a
+working memory is technical notes — a difference this document has already
+measured to matter elsewhere. And `recall@50` of 70 % on the pooled run says
+the answer is usually *there* and ranked too low, which is a ranking problem
+rather than a retrieval one, and a different piece of work from this.
+
 ## Does narrowing the pool help?
 
 `--scope` narrows a search to a project, a tag or a topic. It removes
