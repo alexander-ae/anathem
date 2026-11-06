@@ -10,6 +10,23 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The widening that makes project scoping safe now works with a pack
+  installed.** It watched for an empty result, and with a vector layer the
+  search is never empty: the ranking returns its nearest neighbours whatever
+  the query. So in the configuration anathem ships — a pack, installed by
+  default — a memory in another project stayed hidden behind whatever the
+  local project's vectors happened to answer. The net that justified
+  narrowing by default was switched off by the feature that ships enabled.
+
+  What is watched now is whether the project held any **lexical** evidence.
+  None, and its vector hits are the nearest average of a corpus that knows
+  nothing about the question, which is exactly the case worth looking past
+  the project for. Found by running the installer end to end and searching
+  for something that only existed elsewhere; v0.5.0 has the defect.
+
+
 ## [0.5.0] - 2026-11-06
 
 ### Fixed
