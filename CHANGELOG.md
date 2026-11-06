@@ -10,6 +10,8 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-06
+
 ### Added
 
 - The **minisign public key** releases are signed with. It lives in
@@ -20,7 +22,6 @@ live in the database, not in the binary.
   it was published, and is the first release for which
   `sh install.sh --verify-signature` has anything to check.
 
-### Added
 
 - **`budget` is a setting**, next to `candidates` and `excerpt` in
   `config.json`. It was a compile-time constant, and it silently governed the
@@ -131,7 +132,6 @@ live in the database, not in the binary.
   depend on its agent and is a property of the API: it returns at most four
   documents per query, and nothing at all for 19 of 46 questions.
 
-### Changed
 
 - **`docs/superpowers/` is gone, and what was load-bearing in it is not.**
   It held 3,200 lines of plans and specs for work that shipped months ago,
@@ -477,7 +477,9 @@ First release with prebuilt binaries.
 - The project lives on GitLab. GitHub remains only as the macOS builder, since
   GitLab's macOS runners are Premium and Ultimate only.
 
-[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v0.2.2...main
+[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v0.4.0...main
+[0.4.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.3.0...v0.4.0
+[0.3.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.2.2...v0.3.0
 [0.2.2]: https://gitlab.com/__alexander__/anathem/-/compare/v0.2.1...v0.2.2
 [0.2.1]: https://gitlab.com/__alexander__/anathem/-/compare/v0.2.0...v0.2.1
 [0.2.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.1.0...v0.2.0
