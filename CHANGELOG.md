@@ -10,6 +10,24 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Changed
+
+- **`search_memory` now searches the project the session is in.** It was the
+  only tool that did not: `save_memory` and `recent_memories` have always
+  worked the project out from the working directory, so memories were filed
+  by project and then searched as if they were not — the whole corpus on
+  every query. That is the regime where the ranking is measurably worst:
+  over a pooled corpus of 23,788 memories the right one is in the top five
+  47 % of the time, against 90 % for the same corpus and the same questions
+  searched within a project.
+
+  Three ways out, all of which win over the implicit project: `all_projects:
+  true` searches everything, `project` names another, and a `project:` scope
+  is an explicit choice. And the narrowing is not a wall — when the implicit
+  project comes back empty the search widens by itself and says so, with
+  every hit printing the project it came from. The command line is
+  unchanged: `mem search` still searches everything until `--project`.
+
 ## [0.4.0] - 2026-11-06
 
 ### Added

@@ -226,9 +226,32 @@ came out wrong.
 `git` is not read as a program, the `.git` file is read directly. That way it
 works even if git is not installed, and it does not cost a subprocess per save.
 
-**Search does NOT filter by project on its own.** You pass `--project` when
-you want to narrow it down. Filtering by default would hide memories without
-warning, which is worse than bringing back one too many.
+### What searches by project, and what does not
+
+`search_memory`, over MCP, **searches the project the session is in**, worked
+out from the working directory exactly as saving does. The agent can look
+past it with `all_projects: true`, name another with `project`, or pass a
+`project:` scope; all three win over the implicit one.
+
+`mem search`, on the command line, does **not**: it searches everything
+until you pass `--project`. The asymmetry is deliberate. A server runs for a
+session with one working directory and one project, and the model never sees
+that it could have narrowed; a person typing a command sees the answer and
+narrows in the next line.
+
+This used to be true of both, with the reasoning that *filtering by default
+would hide memories without warning, which is worse than bringing back one
+too many*. The second half of that was measured and is wrong. Over a pooled
+corpus the right memory is in the top five 47 % of the time at 23,788
+memories, against 90 % for the same corpus and the same questions searched
+within a project — bringing back one too many is not free, it is most of the
+ranking.
+
+The first half was right, and it is why the narrowing is not a wall: **when
+the implicit project comes back empty, the search widens to every project on
+its own and says so in the answer.** Every hit prints the project it came
+from, so a widened answer is legible rather than silent. Nothing becomes
+unreachable; what changes is the order things are tried in.
 
 ## Tag taxonomy
 
