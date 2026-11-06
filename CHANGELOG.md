@@ -10,6 +10,8 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-06
+
 ### Fixed
 
 - **A release published with `publish-binaries.sh` carries the vocabulary
