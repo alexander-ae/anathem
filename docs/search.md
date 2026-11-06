@@ -91,7 +91,7 @@ the binding constraint.**
 Where the layer does change things in a big way is across languages, which
 is what it was built for: querying in English a corpus written in Spanish,
 recall@5 goes from 34% to 58% (n=50). See
-[`docs/superpowers/medicion-corpus-real.md`](superpowers/medicion-corpus-real.md).
+[`choosing-the-defaults.md`](choosing-the-defaults.md).
 
 ### Caveats of this measurement
 

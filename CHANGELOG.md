@@ -133,6 +133,30 @@ live in the database, not in the binary.
 
 ### Changed
 
+- **`docs/superpowers/` is gone, and what was load-bearing in it is not.**
+  It held 3,200 lines of plans and specs for work that shipped months ago,
+  and — mixed in with them — the two measurements the code cites for why
+  `bm25_weight` is 1.0 and why the fusion is weighted the way it is. One of
+  those was linked from an English document, so a reader following
+  `search.md` landed in Spanish.
+
+  Those two are now one English document,
+  [`docs/choosing-the-defaults.md`](docs/choosing-the-defaults.md), which
+  `config.rs`, `fusion.rs` and `search.md` point at. It keeps the part worth
+  keeping: that the default used to be 0.25, that it was corrected against a
+  stronger BM25, and the lesson underneath — a component replaced by a
+  weaker approximation moves the optimum of everything calibrated against
+  it. It also keeps a hypothesis that was tested and discarded in September,
+  which turns out to be the same wall a different attempt hit in November.
+
+  The live engineering debt that was buried in `capa-vectorial-pendientes.md`
+  became an issue instead of disappearing: two allocations per row per
+  query, up to 200 single-row queries per search, and 1 KB per chunk — which
+  is exactly what the latency curve measured since then is made of.
+
+  `docs/historia/` stays. It is one file, the README links it as the
+  historical document it is, and it costs nothing.
+
 - **The last two Spanish names are gone from disk**: `~/.anathem/paquetes/`
   is `packs/`, and the project a memory gets when nothing else applies is
   `no-project` rather than `sin-proyecto`. Every other surface a person sees

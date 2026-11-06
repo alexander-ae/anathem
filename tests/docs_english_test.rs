@@ -37,7 +37,7 @@ const GONE: &[(&str, &str)] = &[
 /// Spanish.
 fn is_exempt(p: &Path) -> bool {
     let s = p.to_string_lossy().replace('\\', "/");
-    s.contains("docs/historia/") || s.contains("docs/superpowers/")
+    s.contains("docs/historia/")
 }
 
 fn living_docs() -> Vec<PathBuf> {
@@ -273,7 +273,6 @@ fn repo_paths_in_line() -> impl Fn(&str) -> Vec<String> {
                 if path.contains('.')
                     && !path.ends_with('/')
                     && !path.contains("historia/")
-                    && !path.contains("superpowers/")
                 {
                     out.push(path);
                 }
