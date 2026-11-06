@@ -16,7 +16,7 @@ pub const K: f64 = 60.0;
 /// contribution: at 1.0 both count the same, below 1.0 the vector side wins.
 ///
 /// On why the default is 1.0, and why no single value wins in both
-/// directions, see `docs/superpowers/medicion-corpus-real.md`.
+/// directions, see `docs/choosing-the-defaults.md`.
 pub fn rrf(bm25: &[i64], vector: &[i64], bm25_weight: f64) -> Vec<i64> {
     let mut score: HashMap<i64, f64> = HashMap::new();
     for (i, id) in bm25.iter().enumerate() {

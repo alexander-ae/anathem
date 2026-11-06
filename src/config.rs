@@ -15,7 +15,7 @@ pub struct Config {
     /// the design proposed — costs 10 points of recall@5 on same-language
     /// searches (66% to 56%) in exchange for 4 points across languages. At
     /// 1.0 monolingual search ties with pure bm25 and cross-lingual gains 24
-    /// points. See `docs/superpowers/medicion-corpus-real.md`.
+    /// points. See `docs/choosing-the-defaults.md`.
     #[serde(default = "default_bm25_weight")]
     pub bm25_weight: f64,
 
