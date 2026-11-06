@@ -157,8 +157,10 @@ the pack format and how to generate one.
   measured improvement and not only a convenience.
   → [`docs/search.md`](docs/search.md)
 - **Every memory belongs to a project**, derived from the repository you are
-  standing in unless you say otherwise. Search does not filter by it on its
-  own. → [`docs/search.md`](docs/search.md)
+  standing in unless you say otherwise. `search_memory` searches that project
+  and widens by itself when it finds nothing there; `mem search` on the
+  command line searches everything until you pass `--project`.
+  → [`docs/search.md`](docs/search.md)
 - **Agents hand work over** through `mem recent` and a short summary anathem
   sends in the MCP greeting, so the next session starts knowing what the
   last one left. A memory can also arrive from another machine, marked with
