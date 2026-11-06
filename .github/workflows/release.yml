@@ -46,19 +46,27 @@ jobs:
             runner: windows-latest
             target: x86_64-pc-windows-msvc
             archive: zip
+          # `macos-latest`, not a pinned image. Pinning has now broken this
+          # twice: `macos-13` was retired in December 2025, and `macos-14`
+          # went the same way — v0.4.0's first attempt died on "the
+          # configuration 'macos-14-arm64-us-default' is not supported", with
+          # Linux and Windows green beside it. A retired label does not warn;
+          # it fails the release at the only moment anybody runs this, and it
+          # fails the two platforms that cannot be built anywhere else. The
+          # floating label can move the image underneath us, which is the
+          # smaller problem for a build whose dependencies are Rust and
+          # Apple's SDK.
           - name: macos-arm64
-            runner: macos-14
+            runner: macos-latest
             target: aarch64-apple-darwin
             archive: tar
-          # The Intel Mac is cross-compiled from Apple Silicon: `macos-13` was
-          # retired in December 2025 and a job asking for it queues forever.
-          # Apple's SDK targets both architectures from either one. What is
-          # lost is running the binary to check it, because the runner cannot
-          # execute x86_64 — so the architecture is checked with `file`
-          # instead, and the version is read out of the binary rather than
-          # asked for.
+          # The Intel Mac is cross-compiled from Apple Silicon: Apple's SDK
+          # targets both architectures from either one. What is lost is
+          # running the binary to check it, because the runner cannot execute
+          # x86_64 — so the architecture is checked with `file` instead, and
+          # the version is read out of the binary rather than asked for.
           - name: macos-x86_64
-            runner: macos-14
+            runner: macos-latest
             target: x86_64-apple-darwin
             archive: tar
             cross: true
