@@ -75,9 +75,33 @@ pub fn run(
              \n\
              {{\"cases\": [{{\"id\": \"q1\", \"query\": \"...\", \"expect_docs\": [\"<ext_id>\"], \"kind\": \"factual\"}}]}}\n\
              \n\
-             The `expect_docs` are `memories.ext_id` values. See the README for the detail.",
+             An `expect_docs` entry is a `memories.ext_id`, or `id:<number>`\n\
+             for a `memories.id` — which is how you name a memory anathem\n\
+             saved itself, since those have no ext_id. See the README.",
             evalset.display()))?;
     let set: EvalSet = serde_json::from_str(&raw).context("eval set with invalid JSON")?;
+
+/// How an `expect_docs` entry is compared with a hit.
+///
+/// A bare entry is an `ext_id`. `id:<number>` is a `memories.id`, which is
+/// the only way to name a memory that `save_memory` wrote, since those carry
+/// no ext_id. Keeping the prefix means a bare "42" still means the ext_id
+/// "42" and an existing eval set measures exactly what it measured before.
+fn matches(expected: &str, h: &crate::model::SearchHit) -> bool {
+    match expected.strip_prefix("id:") {
+        Some(n) => n.trim().parse::<i64>().is_ok_and(|n| n == h.memory_id),
+        None => h.ext_id.as_deref() == Some(expected),
+    }
+}
+
+/// What a hit is called in `per_case[].returned`, in the same spelling an
+/// `expect_docs` entry would use for it.
+fn name_of(h: &crate::model::SearchHit) -> String {
+    match &h.ext_id {
+        Some(e) => e.clone(),
+        None => format!("id:{}", h.memory_id),
+    }
+}
 
     let (mut h5, mut h50) = (0usize, 0usize);
     let (mut rr, mut lat, mut per_case) = (Vec::new(), Vec::new(), Vec::new());
@@ -99,15 +123,16 @@ pub fn run(
         let hits = search::run(conn, &q, ctx)?;
         lat.push(t0.elapsed().as_secs_f64() * 1000.0);
 
-        // The rank is computed over the whole `hits` list (including
-        // memories with no ext_id, e.g. created by MCP's save_memory) so a
-        // hit without an ext_id occupies its position while never being able
-        // to match, instead of being removed from the list and pulling up
-        // the rank of everything that follows (I1).
-        let rank = hits.iter().position(|h| {
-            h.ext_id.as_deref().is_some_and(|e| c.expect_docs.iter().any(|d| d == e))
-        });
-        let got: Vec<String> = hits.iter().filter_map(|h| h.ext_id.clone()).collect();
+        // The rank is computed over the whole `hits` list, so a hit that
+        // cannot match still occupies its position instead of being removed
+        // and pulling up the rank of everything that follows (I1).
+        //
+        // An expectation names either an `ext_id` or, with the `id:` prefix,
+        // a `memories.id`. The prefix is what keeps the two namespaces
+        // apart: a bare "42" is the ext_id "42" and always was, so adding
+        // this cannot change what an existing eval set measures.
+        let rank = hits.iter().position(|h| c.expect_docs.iter().any(|d| matches(d, h)));
+        let got: Vec<String> = hits.iter().map(name_of).collect();
         let hit5 = rank.map_or(false, |r| r < 5);
         if hit5 {
             h5 += 1;

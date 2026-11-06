@@ -32,6 +32,17 @@ live in the database, not in the binary.
   per call, and zero is refused the way `candidates` and `excerpt` already
   refuse it.
 
+- **An eval case can name a memory by id.** `expect_docs` matched
+  `memories.ext_id` and nothing else, and only `migrate` and `import` assign
+  one — so every memory `save_memory` wrote was unmatchable, and `mem eval`
+  could measure an imported corpus but not the corpus a person actually
+  accumulated. `id:<number>` names a `memories.id`; a bare entry still means
+  an ext_id, so no existing eval set changes meaning. `per_case[].returned`
+  now lists those hits too, under the same spelling, because the block
+  `benchmarks.md` tells you to compute the strict metrics from was silently
+  dropping them and its positions no longer lined up with the ranks beside
+  it.
+
 ### Changed
 
 - **The binaries are built on GitHub Actions**, in a public mirror that

@@ -414,6 +414,13 @@ mem --db ~/.anathem/mem.db eval --evalset my-evalset.json --label "before" \
   --out before.json
 ```
 
+An `expect_docs` entry names a `memories.ext_id`, or a `memories.id` with
+the `id:` prefix — `"expect_docs": ["id:42"]`. The prefix is not decoration:
+only memories that arrived through `migrate` or `import` carry an ext_id, so
+`id:` is the only way to write a case about something anathem saved itself,
+which on a corpus you grew rather than imported is all of it. `mem topics`
+and `mem recent` both print the ids.
+
 The format is the one `tools/longmemeval_to_memories.py` writes, and
 `tools/validate_evalset.py` checks it before you spend an hour measuring
 against it — including, with `--db`, that every `expect_docs` entry really

@@ -5,7 +5,7 @@ The format is the one `mem eval --evalset` reads and
 `tools/longmemeval_to_memories.py` writes:
 
     {"corpus": "...", "cases": [
-       {"id": "q1", "query": "...", "project": "p", "expect_docs": ["<ext_id>"],
+       {"id": "q1", "query": "...", "project": "p", "expect_docs": ["<ext_id or id:N>"],
         "kind": "multi-session"}]}
 
 Structure is checked always. Pass `--db` as well and every `expect_docs`
@@ -74,7 +74,12 @@ def check_structure(cases):
 
 
 def check_against_db(cases, db):
-    """Every expected ext_id has to exist, and has to be searchable."""
+    """Every expectation has to exist, and has to be searchable.
+
+    An entry is an ext_id, or `id:<number>` for a memories.id — the only way
+    to name a memory anathem saved itself, since save_memory assigns no
+    ext_id.
+    """
     try:
         conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     except sqlite3.Error as e:
@@ -85,6 +90,10 @@ def check_against_db(cases, db):
             conn.execute(
                 "select ext_id, status from memories where ext_id is not null"
             ).fetchall()
+        )
+        rows.update(
+            (f"id:{i}", s)
+            for i, s in conn.execute("select id, status from memories").fetchall()
         )
     except sqlite3.Error as e:
         print(f"{db} does not look like an anathem database: {e}", file=sys.stderr)
@@ -141,9 +150,11 @@ def main(argv):
     if lengths:
         print(f"expect_docs: median {lengths[len(lengths) // 2]}, max {lengths[-1]}")
     referenced = {d for c in cases for d in (c.get("expect_docs") or [])}
-    print(f"distinct ext_ids referenced: {len(referenced)}")
+    by_id = {d for d in referenced if d.startswith("id:")}
+    print(f"distinct memories referenced: {len(referenced)}"
+          + (f" ({len(by_id)} of them by id)" if by_id else ""))
     if in_db is not None:
-        print(f"memories with an ext_id in the database: {in_db}")
+        print(f"memories the database can match: {in_db}")
     if data.get("corpus"):
         print(f"corpus: {data['corpus']}")
     if not db:
