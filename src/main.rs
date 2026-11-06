@@ -93,6 +93,9 @@ enum Cmd {
     },
     /// Rebuilds chunks and the FTS5 index from memories.body
     Reindex,
+    /// Looks for a better `bm25_weight` for this corpus, using the topic
+    /// keys as its eval set. It recommends and changes nothing.
+    Tune {},
     /// Runs the evaluation harness
     Eval {
         /// `evalset.json` next to the database, by default. Relative to
@@ -637,6 +640,63 @@ fn run(cli: Cli) -> Result<()> {
             let n = anathem::edit::reindex(&conn)?;
             println!("reindexed {n} memories");
             sync_after_write(&conn, &dir);
+        }
+        Cmd::Tune {} => {
+            let conn = anathem::db::open(&path)?;
+            let dir = path.parent().unwrap_or(Path::new("."));
+            let cfg = anathem::config::load(dir)?;
+            let cases = anathem::tune::cases_from_topics(&conn)?;
+            anathem::tune::check_enough(cases.len())?;
+            let Some(pack) = anathem::packstore::resolve_and_warn(&conn, dir) else {
+                anyhow::bail!(
+                    "there is no vocabulary pack installed, and `bm25_weight` only \
+                     balances the\nlexical ranking against the vector one. With no \
+                     vector layer every weight\ngives the same answer, so there is \
+                     nothing here to tune."
+                );
+            };
+
+            println!(
+                "Reading {} topic keys as the eval set.\n\n\
+                 A topic key names its subject in keywords, so these questions are \
+                 the\nkind bm25 already answers well. That makes the table below \
+                 good for\nCHOOSING a weight — the bias falls on every row equally — \
+                 and wrong to\nquote as a quality figure for anathem.\n",
+                cases.len()
+            );
+
+            let scored = anathem::tune::sweep(&conn, &cases, &pack)?;
+            println!("{:>8}  {:>7}  {:>9}", "weight", "MRR", "recall@5");
+            for (w, mrr, r5) in &scored {
+                let here = if (*w - cfg.bm25_weight).abs() < f64::EPSILON { "  <- yours" } else { "" };
+                println!("{w:>8}  {mrr:>7.3}  {:>8.0}%{here}", r5 * 100.0);
+            }
+
+            let pairs: Vec<(f64, f64)> = scored.iter().map(|(w, m, _)| (*w, *m)).collect();
+            let best = anathem::tune::best_weight(&pairs);
+            let now = pairs.iter().find(|(w, _)| (*w - cfg.bm25_weight).abs() < f64::EPSILON)
+                .map(|(_, m)| *m);
+            let best_mrr = pairs.iter().find(|(w, _)| *w == best).map(|(_, m)| *m).unwrap_or(0.0);
+            println!();
+            match now {
+                Some(n) if (best - cfg.bm25_weight).abs() < f64::EPSILON =>
+                    println!("Your `bm25_weight` of {} is already the best of these ({n:.3}).", cfg.bm25_weight),
+                Some(n) => println!(
+                    "`bm25_weight: {best}` scores {best_mrr:.3} against your {}'s {n:.3}.\n\
+                     Put it in {}/config.json if you want it; nothing here changed it.",
+                    cfg.bm25_weight, dir.display()),
+                None => println!(
+                    "`bm25_weight: {best}` is the best of these ({best_mrr:.3}). Your {} was \
+                     not on the\ngrid, so there is no row to compare it against.",
+                    cfg.bm25_weight),
+            }
+            if best == *anathem::tune::WEIGHTS.last().unwrap()
+                || best == anathem::tune::WEIGHTS[0] {
+                println!(
+                    "\nIt landed on the edge of the grid, so the real optimum may be \
+                     further out."
+                );
+            }
         }
         Cmd::Eval { evalset, label, out } => {
             let evalset = evalset.unwrap_or_else(|| {

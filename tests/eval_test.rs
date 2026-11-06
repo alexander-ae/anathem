@@ -130,3 +130,90 @@ fn a_case_scoped_to_a_project_does_not_see_the_other_projects() {
         "the case names project q1, so q2's session must not be in the results");
     assert_eq!(r.per_case[0].first_rank, Some(1));
 }
+
+#[test]
+fn an_expectation_can_name_a_memory_by_id_when_it_has_no_ext_id() {
+    // `expect_docs` matched `memories.ext_id` and nothing else, and only
+    // memories that came through `migrate` or `import` have one. Everything
+    // `save_memory` wrote — which is everything anathem saved by itself —
+    // could never be the answer to an eval case, so `mem eval` could measure
+    // an imported corpus and not the corpus a person actually accumulated.
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    let id = ingest::insert(&conn, &NewMemory {
+        project: "p".into(),
+        title: "branching policy".into(),
+        body: "Las ramas salen de main y vuelven por merge request".into(),
+        created: "2026-09-01".into(), event_start: None, event_end: None,
+        source: "explicit".into(), ext_id: None,
+        tags: vec![], refs: vec![],
+    }).unwrap();
+
+    let evalset = dir.path().join("evalset.json");
+    let mut f = std::fs::File::create(&evalset).unwrap();
+    write!(f, r#"{{"cases": [
+        {{"id":"q1","query":"ramas main merge request","expect_docs":["id:{id}"],"kind":"conventional"}}
+      ]}}"#).unwrap();
+
+    let r = evalrun::run(&conn, &evalset, "bm25", &search::SearchContext::bm25_only()).unwrap();
+    assert_eq!(r.per_case[0].first_rank, Some(1), "per_case: {:?}", r.per_case);
+}
+
+#[test]
+fn an_ext_id_that_looks_like_a_number_is_still_an_ext_id() {
+    // The `id:` prefix is what makes the two namespaces distinguishable. A
+    // bare "42" has to keep meaning the ext_id "42", or adding the feature
+    // would silently change what existing eval sets measure.
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    ingest::insert(&conn, &NewMemory {
+        project: "p".into(), title: "uno".into(),
+        body: "El cache del breakdown no se justifica".into(),
+        created: "2026-09-01".into(), event_start: None, event_end: None,
+        source: "migrated".into(), ext_id: Some("42".into()),
+        tags: vec![], refs: vec![],
+    }).unwrap();
+
+    let evalset = dir.path().join("evalset.json");
+    let mut f = std::fs::File::create(&evalset).unwrap();
+    write!(f, r#"{{"cases": [
+        {{"id":"q1","query":"cache breakdown","expect_docs":["42"],"kind":"factual"}}
+      ]}}"#).unwrap();
+
+    let r = evalrun::run(&conn, &evalset, "bm25", &search::SearchContext::bm25_only()).unwrap();
+    assert_eq!(r.per_case[0].first_rank, Some(1), "per_case: {:?}", r.per_case);
+}
+
+#[test]
+fn returned_names_every_hit_including_the_ones_without_an_ext_id() {
+    // `per_case[].returned` is what `docs/benchmarks.md` tells you to compute
+    // the strict metrics from, and it listed only the memories that have an
+    // ext_id. A list that silently omits entries cannot be used to work out
+    // what fraction of a case's evidence landed in the top k — the positions
+    // do not line up with the ranks the same block reports.
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    let sin_ext = ingest::insert(&conn, &NewMemory {
+        project: "p".into(), title: "gato".into(),
+        body: "gato gato gato gato gato".into(),
+        created: "2026-09-01".into(), event_start: None, event_end: None,
+        source: "explicit".into(), ext_id: None,
+        tags: vec![], refs: vec![],
+    }).unwrap();
+    ingest::insert(&conn, &NewMemory {
+        project: "p".into(), title: "gato".into(),
+        body: "gato relleno relleno relleno relleno relleno relleno relleno relleno relleno".into(),
+        created: "2026-09-01".into(), event_start: None, event_end: None,
+        source: "migrated".into(), ext_id: Some("x".into()),
+        tags: vec![], refs: vec![],
+    }).unwrap();
+
+    let evalset = dir.path().join("evalset.json");
+    std::fs::write(&evalset, r#"{"cases":[
+        {"id":"q1","query":"gato","expect_docs":["x"],"kind":"factual"}
+    ]}"#).unwrap();
+
+    let r = evalrun::run(&conn, &evalset, "bm25", &search::SearchContext::bm25_only()).unwrap();
+    assert_eq!(r.per_case[0].returned, vec![format!("id:{sin_ext}"), "x".to_string()],
+        "returned has to line up with the ranks: {:?}", r.per_case[0].returned);
+}

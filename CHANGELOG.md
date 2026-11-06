@@ -14,9 +14,73 @@ live in the database, not in the binary.
 
 - The **minisign public key** releases are signed with. It lives in
   `scripts/install.sh`, in `anathem.pub` at the root and in the project's
-  description on GitLab — three places, so a repository tampered with on its
-  own cannot swap it without the others disagreeing. v0.3.0 is the first
-  signed release; `sh install.sh --verify-signature` checks it.
+  description on GitLab. Only the last of those is independent — the copies
+  in here change together with a single push — so the description is the one
+  a repository tampered with on its own cannot reach. v0.3.0 was signed after
+  it was published, and is the first release for which
+  `sh install.sh --verify-signature` has anything to check.
+
+### Added
+
+- **`budget` is a setting**, next to `candidates` and `excerpt` in
+  `config.json`. It was a compile-time constant, and it silently governed the
+  two beside it: the budget trims the candidate list before `candidates` gets
+  to matter, so a configuration that raised `candidates` to 50 and left the
+  budget at 1,200 changed nothing. One of the pair was configurable and the
+  other was not, which made the configurable one a setting that does nothing
+  on its own. The default is the same 1,200, a caller may still override it
+  per call, and zero is refused the way `candidates` and `excerpt` already
+  refuse it.
+
+- **`search_memory` says how much rephrasing is worth.** It already told the
+  model to rephrase when a search came back empty; what it did not say is
+  that one more try is not the point. Measured over 16 questions that
+  describe a situation instead of naming it, one phrasing lands the memory
+  inside the twenty candidates 5 times and three genuinely different
+  phrasings land it 15 — and several arrive at rank 1. Rephrasing also
+  reorders the ones that already worked: rank 16 to 1, 36 to 2, 43 to 3.
+
+  The guidance lives in the tool description, which is anathem's own voice
+  and not retrieved content. The matching signal in the *response* — telling
+  the model when nothing matched strongly — is deliberately not here: with
+  no stopword list, a coverage threshold would count "que" and "los" as
+  terms covered, which is the failure this project names when describing
+  Engram, and shipping an uncalibrated threshold is worse than shipping
+  none.
+
+- **`mem tune`**, which looks for a better `bm25_weight` for the corpus in
+  front of it. There is no right default: measured on LongMemEval the best
+  weight is 1.0, and on a corpus of real technical notes it is 8.0 — prose
+  gives the vector ranking something to catch, while notes dense in
+  identifiers have bm25 already confident at rank 1, where fusing dilutes
+  it. The distance is 0.03 to 0.06 of MRR in both directions.
+
+  Finding it normally costs an afternoon of writing questions and labelling
+  answers. It does not here, because the topic keys are that labelling
+  already done: `--topic` is somebody declaring that a memory is the current
+  answer about a subject, which is a query and its expected document. The
+  output says, above the table, that a key names its subject in keywords and
+  so flatters bm25 — it is for choosing between configurations, where the
+  bias falls on every row equally, not for quoting as a quality figure.
+  Checked against a hand-labelled set of 50 queries over the same corpus:
+  the two rank the weights the same way, Spearman 0.86, and both put the
+  default third of seven.
+
+  It recommends and changes nothing, refuses under 20 keys saying how many
+  there are, refuses with no vocabulary pack because then every weight gives
+  the same answer, and says so when the best value sits on the edge of the
+  grid.
+
+- **An eval case can name a memory by id.** `expect_docs` matched
+  `memories.ext_id` and nothing else, and only `migrate` and `import` assign
+  one — so every memory `save_memory` wrote was unmatchable, and `mem eval`
+  could measure an imported corpus but not the corpus a person actually
+  accumulated. `id:<number>` names a `memories.id`; a bare entry still means
+  an ext_id, so no existing eval set changes meaning. `per_case[].returned`
+  now lists those hits too, under the same spelling, because the block
+  `benchmarks.md` tells you to compute the strict metrics from was silently
+  dropping them and its positions no longer lined up with the ranks beside
+  it.
 
 ### Changed
 
@@ -28,7 +92,55 @@ live in the database, not in the binary.
   Ultimate only. GitLab keeps the Linux suite and the dependency audit on
   every push, and no longer builds.
 
+- **The README quotes the numbers that are worse, next to the ones that are
+  better.** It led with 90.5% recall@5 on LongMemEval-S and said nothing
+  about the 78.0% on -M, or the 52% measured over the author's own notes,
+  both of which were already in `docs/`. The gap is not a different method —
+  a benchmark's questions are written against the sessions that answer them,
+  and your notes were not — so it is reported rather than buried.
+
+- **"About 9 MB at rest and single-digit milliseconds" was the best case
+  presented as the only one.** 9 MB is a session that has not searched yet;
+  one holding the vocabulary pack is about 64 MB, and each agent session runs
+  its own `mem serve`. 8 ms is a 449-memory corpus; the public benchmark's
+  23,854 take 375 ms. Both figures were already measured in
+  `docs/vocabulary-packs.md` and `docs/benchmarks.md`, and the README now
+  carries them whole.
+
+- **The head-to-head table against supermemory is gone.** Its LLM provider
+  key was expired on that machine, so its memory agent never ran and the
+  figures compared a finished anathem against supermemory's chunk layer. The
+  caveat was already written underneath; a caveat underneath is not enough,
+  because the table is what gets quoted. What stays is the part that does not
+  depend on its agent and is a property of the API: it returns at most four
+  documents per query, and nothing at all for 19 of 46 questions.
+
 ### Fixed
+
+- **`docs/installation.md` said the vocabulary pack "is not published
+  anywhere yet".** It has been published since v0.3.0 — the release carries
+  `en-es.anathem-pack` with its `.sha256` and its signature, and `install.sh`
+  downloads it unless you pass `--no-pack`. The document sent a new reader to
+  ask someone for the file or to build it from a 512 MB model instead, and it
+  is the document the README sends people to.
+
+- **`docs/security.md` read as though no release had been signed yet.**
+  v0.3.0 was, after it was published: five `.minisig` files, one per asset.
+
+- **The minisign key was described as living in "three places", of which two
+  were inside the repository.** Three copies that a single push changes
+  together are one copy for this purpose. The claim now rests where it
+  always did: on the one outside, in the project's description.
+
+- **A sentence in `docs/benchmarks.md` claimed the README had quoted its old
+  figures "for years".** The first design document is dated 2026-09-21. It
+  quoted them from v0.1.0 to v0.2.2, which is six weeks.
+
+- **Smaller ones**: `comparison-with-supermemory.md` said anathem hands the
+  model fifty candidates in one paragraph and twenty in another (it is
+  twenty); the README rounded the pack to 22 MB where every other document
+  says 22.5; and `installation.md` pointed at `paquetes-de-vocabulario.md`,
+  renamed to `vocabulary-packs.md` during the translation.
 
 - **The macOS binaries published as v0.2.1 and v0.2.2 were built from
   v0.2.0's code.** Both carry `commit b0586db`. The workflow checked out

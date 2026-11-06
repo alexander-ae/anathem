@@ -5,7 +5,7 @@ SQLite file, no daemon and no HTTP server. An agent saves what it learned
 and finds it again in the next session — on your machine, costing no tokens
 to write and asking nobody for an API key.
 
-Search is BM25 by default. An optional 22 MB vocabulary pack adds a vector
+Search is BM25 by default. An optional 22.5 MB vocabulary pack adds a vector
 layer that helps across languages; the binary works just as well without it.
 
 ## Why it exists
@@ -15,13 +15,17 @@ documents** on a laptop that also has to run an editor. Its embedder
 normalised Spanish into English before storing it, so a question in Spanish
 shared neither a lexical nor a semantic anchor with the fact it was looking
 for. And it decided on its own what was worth keeping: measured over that
-corpus, **56% of what it saved that way was noise**.
+corpus, **56% of what it saved that way was noise**. Those are one
+installation's numbers, self-hosted v0.0.8, measured by the author in
+September 2026 and not since: they say why this exists, not what supermemory
+is today.
 
 anathem takes the opposite bets. Nothing is written unless someone asks for
 it. Writing costs no model and no tokens. Corrections are explicit —
 a topic key or an id — and the old version stays in the history rather than
-competing with the new one in searches. It is about 9 MB at rest and answers
-in single-digit milliseconds.
+competing with the new one in searches. It is also far smaller and faster,
+and *What it costs*, below, says by how much without rounding in its own
+favour.
 
 Whether those are the right bets for you is a different question, and three
 documents answer it with numbers instead of adjectives:
@@ -61,10 +65,11 @@ connect each agent by hand: [`docs/installation.md`](docs/installation.md).
 ### Checking that a release is really ours
 
 Releases are signed with [minisign](https://jedisct1.github.io/minisign/).
-The public key is below, and the same key is in
-[`anathem.pub`](anathem.pub) and in the project's description — three
-places, so a repository tampered with on its own cannot swap it without the
-others disagreeing:
+The public key is below, in [`anathem.pub`](anathem.pub) and in
+[`scripts/install.sh`](scripts/install.sh) — and, outside the repository, in
+the project's description on GitLab. Only that last copy is independent: the
+three in here change together with a single push, so the description is what a
+repository tampered with on its own cannot reach:
 
 ```
 RWSWmH6T7DiU70G5GQAS2vwI5/3YwCf0LlwSgJFQ/mlm3oh2CyVD0XdT
@@ -124,6 +129,7 @@ nothing to learn by heart.
 | `forget <id>` | Takes a memory out of search without deleting the row | `mem forget 88` |
 | `history <id>` | Shows a memory's supersession chain, newest to oldest | `mem history 42` |
 | `recent` | What was saved lately, newest to oldest, and which agent saved it. It is the opposite of `search`, which orders by relevance. `--since` accepts `6h`, `90m`, `2d` or `todo` (no bound); 24h by default | `mem recent --since 6h` |
+| `tune` | Looks for a better `bm25_weight` for **this** corpus, using the topic keys as a free eval set. It prints a table and a recommendation and changes nothing; it needs a vocabulary pack and at least 20 topic keys | `mem tune` |
 | `eval --evalset <json>` | Runs the evaluation harness | `mem eval --evalset eval/evalset.json --out eval/results/anathem-bm25.json` |
 | `serve` | Starts the MCP server over stdio (5 tools: `search_memory`, `save_memory`, `get_memory`, `list_tags`, `recent_memories`) | `mem serve` |
 | `model install <file>` | Installs a vocabulary pack (`.anathem-pack`) and reindexes every chunk | `mem model install mini-es.anathem-pack` |
@@ -157,7 +163,7 @@ the pack format and how to generate one.
   last one left. A memory can also arrive from another machine, marked with
   who sent it and held as a draft until you accept it.
   → [`docs/handoff.md`](docs/handoff.md)
-- **The vocabulary pack** is the optional vector layer: 22 MB, no model at
+- **The vocabulary pack** is the optional vector layer: 22.5 MB, no model at
   runtime, and it earns its size on cross-lingual search.
   → [`docs/vocabulary-packs.md`](docs/vocabulary-packs.md)
 
@@ -167,9 +173,10 @@ A `config.json` next to the database, every key optional:
 
 | key | default | what it does |
 |---|---|---|
-| `bm25_weight` | `1.0` | how much the lexical ranking weighs against the vector one |
+| `bm25_weight` | `1.0` | how much the lexical ranking weighs against the vector one. The right value depends on your corpus — `mem tune` measures it |
 | `candidates` | `20` | how many candidates `search_memory` returns |
 | `excerpt` | `120` | characters of each candidate's snippet |
+| `budget` | `1200` | tokens `search_memory` spends on its answer. It trims the list before `candidates` applies, so raising one without the other changes nothing |
 | `outline` | `false` | replaces the excerpt of a long memory that has headings with an outline of it |
 | `handoff_items` | `5` | memories named in the MCP greeting; `0` turns it off |
 | `handoff_window` | `"24h"` | how far back that greeting looks |
@@ -179,6 +186,21 @@ A malformed file fails loudly, naming the file and the key. It never falls
 back silently to a value you did not ask for. What each default was measured
 against is in [`docs/search.md`](docs/search.md) and
 [`docs/vocabulary-packs.md`](docs/vocabulary-packs.md).
+
+## What it costs
+
+A session that has not searched holds about **9 MB**; one with the vocabulary
+pack loaded holds about **64 MB**, and the pack is released after five minutes
+idle, which takes it back to 12. Each agent session runs its own `mem serve`,
+so four of them searching at once is a quarter of a gigabyte and not nine
+megabytes — still well under one 2 GB process, and not the 220× the first
+figure on its own would suggest. The measurements, and the setting that tunes
+the release, are in
+[`docs/vocabulary-packs.md`](docs/vocabulary-packs.md).
+
+Search answers in **8 ms** over a 449-memory corpus and **375 ms** over the
+23,854 of the public benchmark below. Which of those you see is a fact about
+how much you have saved.
 
 ## How it measures up
 
@@ -193,6 +215,34 @@ Those are retrieval numbers: whether the evidence was handed to the model,
 not whether the model then answered correctly. The method, the three
 definitions of recall and what none of it proves are in
 [`docs/benchmarks.md`](docs/benchmarks.md).
+
+**Depth costs more than the headline admits.** On LongMemEval-M, where each
+question searches some 476 sessions instead of some 50, the same two runs are
+**78.0% and 81.6%**. That is the same code against a deeper haystack, and it
+is the number to carry if your memory is going to get large.
+
+**And a real corpus is harder than either.** Measured over the author's own
+notes, asked in prose rather than in keywords, recall@5 is **52%** — 449
+memories and 50 queries, in
+[`comparison-with-engram.md`](docs/comparison-with-engram.md). An earlier
+measurement split those queries by how they were phrased, and the split is
+the finding: **88%** when the question named the thing, **19%** when it
+described the situation instead, in
+[`comparison-with-supermemory.md`](docs/comparison-with-supermemory.md).
+
+Fifty queries is a small sample and one person's writing is not everyone's,
+so treat those as the author's own calibration rather than as a measurement
+you could repeat. They are here because they are worse than the headline, not
+because they are strong enough to argue with.
+
+Both are true, and the distance between them is the honest subject.
+LongMemEval's questions are written against the sessions that answer them, so
+they share vocabulary with the evidence; a note you wrote in June and a
+question you ask in November often share nothing but the subject. So the
+public figure is the reproducible one and the private figure is the one you
+will live with, and which of the two you get depends on how you write and how
+you ask. The second cannot be reproduced by anybody else — which is why it is
+labelled rather than headlined, and why it is here rather than left out.
 
 ## Known limitations
 

@@ -355,44 +355,41 @@ above its BM25 row, and the most likely reason is the indexing unit rather
 than anything clever. That is a narrower claim than "anathem beats BM25 by 15
 points", and it is the one the measurement supports.
 
-## One head-to-head, with its caveats
+## One head-to-head, and why its numbers are not here
 
 Published scores from the memory products cannot be compared with these
-(above). So one was run here instead: the same corpus, the same questions,
-the same machine, the same metric. **supermemory** v0.0.8, self-hosted, 46
+(above), so one was run here instead: **supermemory** v0.0.8, self-hosted, 46
 questions over 2,374 sessions of LongMemEval-S, scoped per question
-(`containerTags` where anathem uses `project`).
+(`containerTags` where anathem uses `project`), on the same machine with the
+same metric.
 
-|                                  | supermemory | anathem bm25 | anathem hybrid |
-|----------------------------------|------------:|-------------:|---------------:|
-| recall@5, fraction of evidence   |       0.473 |        0.912 |          0.933 |
-| recall@1                         |       0.500 |        0.826 |          0.891 |
-| MRR                              |       0.511 |        0.885 |          0.937 |
-| p50 per query                    |       39 ms |        45 ms |          47 ms |
-| ingesting the 2,374 sessions     |      ~1 hour |     < 1 min |        < 1 min |
+**The retrieval figures it produced are not published, because the run could
+not be made fair.** supermemory's LLM provider key was expired on this
+machine, so its memory agent never ran and every document finalized with
+`0 memories`. The half of the product that decides what a memory *is* never
+executed, so a table would have put a finished anathem next to supermemory's
+chunk layer and called the distance between them a result. On top of that, 46
+questions is a small sample and it was v0.0.8 with v0.0.9 available. A
+caveat underneath such a table does not fix it: the table is what gets
+quoted, and the paragraph is what gets left behind.
 
-**Read that gap correctly: it is not ranking quality.** supermemory returns
-1.3 documents per query on average, never more than 4, whatever `limit` says.
-It returned *nothing at all* for 19 of the 46 questions — and for the 27
-where it did answer, the evidence was among its results 89% of the time. It
-is not worse at ordering candidates; it abstains, and when it speaks it is
-usually right. Its recall@50 equals its recall@5 for the same reason: there
-is no fiftieth candidate to find.
+What the attempt did establish does not depend on the agent, because it is a
+property of the API rather than of the ranking: **supermemory returned about
+1.3 documents per query, never more than four, whatever `limit` asked for,
+and returned nothing at all for 19 of the 46 questions.** For the 27 where it
+did answer, the evidence was among its results 89% of the time. It is not
+ordering candidates badly; it abstains, and when it speaks it is usually
+right.
 
-That is a different design, not a worse one. anathem hands a model fifty
-candidates and lets the model filter; supermemory hands back a few it is
-confident about. Which is better depends on what is downstream.
+That is a different design and not a worse one, and it is the part worth
+keeping. anathem hands a model twenty candidates with a short excerpt each
+and lets the model filter; supermemory hands back a few it is confident
+about. Which of those is better depends on what is downstream, and this run
+was in no position to say.
 
-**The caveats, which are not small.** Its LLM provider key was expired on
-this machine, so its memory agent never ran and every document finalized with
-`0 memories`: what was measured is its chunk layer, not the whole product.
-46 questions is a small sample. It is v0.0.8 with v0.0.9 available. And it
-refuses to start at all without a model provider key, where anathem talks to
-nothing — a real difference, but one that also means this run could not be
-made fair without an account somewhere.
-
-The ingestion row has no such asterisk: same 2,374 documents, same machine,
-measured end to end.
+Anyone wanting the comparison this one failed to be should run supermemory
+with its memory agent working. `mem eval` is the harness and the conversion
+script is in `tools/`; neither is specific to anathem.
 
 ## What this does not measure
 
@@ -417,6 +414,13 @@ mem --db ~/.anathem/mem.db eval --evalset my-evalset.json --label "before" \
   --out before.json
 ```
 
+An `expect_docs` entry names a `memories.ext_id`, or a `memories.id` with
+the `id:` prefix — `"expect_docs": ["id:42"]`. The prefix is not decoration:
+only memories that arrived through `migrate` or `import` carry an ext_id, so
+`id:` is the only way to write a case about something anathem saved itself,
+which on a corpus you grew rather than imported is all of it. `mem topics`
+and `mem recent` both print the ids.
+
 The format is the one `tools/longmemeval_to_memories.py` writes, and
 `tools/validate_evalset.py` checks it before you spend an hour measuring
 against it — including, with `--db`, that every `expect_docs` entry really
@@ -424,7 +428,11 @@ is in the corpus and really is `active`. A case whose evidence is not there
 can never be answered, so it drags the score down for a reason that has
 nothing to do with retrieval.
 
-The figures the README quoted for years came from the author's private
-corpus, which nobody else can reproduce. They are kept in
-[`comparison-with-supermemory.md`](comparison-with-supermemory.md) with
-that caveat attached, and everything in this document replaces them.
+The figures the README quoted before this document existed — from v0.1.0 to
+v0.2.2 — came from the author's private corpus, which nobody else can
+reproduce. They are kept in
+[`comparison-with-supermemory.md`](comparison-with-supermemory.md) and
+[`comparison-with-engram.md`](comparison-with-engram.md) with that caveat
+attached. This document does not replace them: it measures something
+reproducible, and the gap between the two is reported in the README because
+it is information rather than an embarrassment.

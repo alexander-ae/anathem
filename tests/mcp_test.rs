@@ -243,3 +243,57 @@ fn every_surface_that_shows_the_topic_key_uses_the_same_label() {
         assert!(!txt.contains("[tema:"), "{tool} dejó la etiqueta vieja: {txt}");
     }
 }
+
+/// The point of the setting: `candidates` alone cannot widen the list,
+/// because the budget trims it first. A configuration that raises one
+/// without the other changes nothing, which is why the budget had to stop
+/// being a constant.
+#[test]
+fn the_configured_budget_bounds_what_search_memory_returns() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    for n in 0..12 {
+        ingest::insert(&conn, &NewMemory {
+            project: "acme".into(),
+            title: format!("nota {n}"),
+            body: format!("El cache del breakdown, anotacion numero {n}, con texto \
+                           suficiente para que el excerpt cueste tokens de verdad."),
+            created: "2026-09-21".into(), event_start: None, event_end: None,
+            source: "migrated".into(), ext_id: Some(format!("e{n}")),
+            tags: vec![], refs: vec![],
+        }).unwrap();
+    }
+    let ask = |cfg: &Config| {
+        let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+            "params":{"name":"search_memory","arguments":{"query":"cache breakdown"}}});
+        let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), cfg, &req)
+            .unwrap().unwrap();
+        res["result"]["content"][0]["text"].as_str().unwrap().to_string()
+    };
+    let narrow = ask(&Config { budget: 120, ..Config::default() });
+    let wide = ask(&Config { budget: 20_000, ..Config::default() });
+    let count = |s: &str| s.matches("nota ").count();
+    assert!(count(&wide) > count(&narrow),
+        "a bigger budget has to show more candidates: {} against {}\n--- narrow ---\n{narrow}\n--- wide ---\n{wide}",
+        count(&wide), count(&narrow));
+}
+
+/// Measured: of 16 questions phrased the way a person describes a situation
+/// rather than names it, one try lands 5 inside the twenty candidates and
+/// three different wordings land 15. The tool already said to rephrase; what
+/// it did not say is that one more try is not the point, several genuinely
+/// different ones are.
+#[test]
+fn search_memory_asks_for_several_different_wordings_not_one_retry() {
+    let (_d, conn) = conn_with_data();
+    let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/list"});
+    let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req)
+        .unwrap().unwrap();
+    let tools = res["result"]["tools"].as_array().unwrap();
+    let d = tools.iter().find(|t| t["name"] == "search_memory").unwrap()["description"]
+        .as_str().unwrap();
+    assert!(d.contains("two or three"),
+        "it has to ask for more than one retry: {d}");
+    assert!(d.contains("different"),
+        "and for wordings that differ, since repeating the same nouns measures nothing: {d}");
+}
