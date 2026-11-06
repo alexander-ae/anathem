@@ -120,7 +120,24 @@ done
 
 paso "4. Upload the signatures and register them in the release"
 
+# A signature already registered is left alone. GitLab answers a duplicate
+# asset link with a 400 — "Name has already been taken" — and that aborts
+# the whole run, so one file already published takes the rest down with it.
+# `publish-binaries.sh` has carried this guard for a while; this script did
+# not, and it did not need it until the vocabulary pack started being
+# carried over from the previous release **with its signature**. Then the
+# pack's `.minisig` was already there, and signing v0.6.0 ended in a red
+# error after having correctly signed and uploaded all four binaries.
+#
+# Being last is what made that harmless. Had the pack been first, it would
+# have taken the four binaries with it, and the release would have looked
+# signed in the log and been unsigned on the server.
+YA="$(glab release view "$ETIQUETA" --repo "$REPO" 2>/dev/null | awk '/^[a-zA-Z0-9._-]+\t/ {print $1}')"
 for f in $PRESENTES; do
+  if printf '%s\n' "$YA" | grep -qx "$f.minisig"; then
+    aviso "$f.minisig is already in the release; leaving it as it is"
+    continue
+  fi
   glab release upload "$ETIQUETA" "$TEMPORAL/$f.minisig" --repo "$REPO"
   ok "uploaded $f.minisig"
 done

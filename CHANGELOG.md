@@ -10,6 +10,19 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Signing a release no longer fails on a signature that is already
+  there.** GitLab answers a duplicate asset link with a 400 that aborts the
+  whole run, and `sign-release.sh` had no guard against it — it did not
+  need one until the vocabulary pack started being carried over from the
+  previous release **with its signature**. Signing v0.6.0 then ended in a
+  red error after having correctly signed and uploaded all four binaries.
+  Harmless only because the pack happened to be last: first, it would have
+  taken the binaries with it and left a release that looked signed in the
+  log and was unsigned on the server.
+
+
 ### Changed
 
 - **The documentation says what the last two releases changed.** `mem doctor`
