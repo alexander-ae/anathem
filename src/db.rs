@@ -131,6 +131,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     add_follow_up_column(&conn)?;
     add_provenance_columns(&conn)?;
     migrate_indexed_body(&conn)?;
+    migrate_project_name(&conn)?;
     restringir(path);
     Ok(conn)
 }
@@ -315,6 +316,21 @@ fn migrate_indexed_body(conn: &Connection) -> Result<()> {
     tx.execute_batch(SCHEMA)?;
     tx.execute_batch("insert into chunks_fts(chunks_fts) values ('rebuild');")?;
     tx.commit()?;
+    Ok(())
+}
+
+/// Moves memories off the Spanish name for "no project at all".
+///
+/// It is a value in an indexed column, so this is one `UPDATE` and not a
+/// schema change, and it has to happen rather than only being read around:
+/// a corpus with some rows under each spelling would filter wrong in both
+/// directions. Writing the old name is folded on insert as well, so an
+/// import of an older export does not bring it back.
+fn migrate_project_name(conn: &Connection) -> Result<()> {
+    conn.execute(
+        "update memories set project = ?1 where project = ?2",
+        rusqlite::params![crate::project::NO_PROJECT, crate::project::NO_PROJECT_WAS],
+    )?;
     Ok(())
 }
 

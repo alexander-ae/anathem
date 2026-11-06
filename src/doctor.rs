@@ -631,8 +631,29 @@ fn topic_keys(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Says that the packs directory still carries its old Spanish name, and
+/// the one condition that makes renaming it safe.
+///
+/// Nothing moves it automatically: the file in there is memory-mapped for
+/// as long as a `mem serve` lives, and this is cosmetic, so it is the
+/// person's call and not the binary's.
+fn old_packs_dir_name(s: &mut Section, dir: &Path) {
+    let old = dir.join("paquetes");
+    if old.exists() && !dir.join("packs").exists() {
+        s.warning(format!(
+            "the packs directory still carries the name it was given before the \
+             rest of this was translated. Moving it is safe with no `mem serve` \
+             running, because the file in it stays memory-mapped while one lives: \
+             `mv {} {}`. Nothing depends on the name, so leaving it is fine too",
+            old.display(),
+            dir.join("packs").display()
+        ));
+    }
+}
+
 fn vector_section(conn: &Connection, dir: &Path) -> Section {
     let mut s = Section::new("Vector layer");
+    old_packs_dir_name(&mut s, dir);
     // The tables' absence was already reported in the database section;
     // here it is only a matter of not tripping over it.
     if missing_vector_tables(conn).map_or(false, |v| !v.is_empty()) {

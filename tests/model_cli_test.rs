@@ -86,7 +86,7 @@ fn a_missing_pack_file_degrades_search_to_bm25() {
     support::write_pack_mini(&r, "mini-es");
     mem(d.path(), &["save", "hola mundo"]);
     mem(d.path(), &["model", "install", r.to_str().unwrap()]);
-    std::fs::remove_file(d.path().join("paquetes").join("mini-es.anathem-pack")).unwrap();
+    std::fs::remove_file(anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack")).unwrap();
 
     let o = mem(d.path(), &["search", "hola"]);
     assert!(o.status.success(), "buscar no puede fallar por un paquete ausente");
@@ -165,7 +165,7 @@ fn a_pack_swapped_by_hand_triggers_the_reindex() {
     mem(d.path(), &["save", "hola mundo"]);
     mem(d.path(), &["model", "install", a.to_str().unwrap()]);
 
-    let instalado = d.path().join("paquetes").join("mini-es.anathem-pack");
+    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
     write_pack_wide(&instalado, "mini-es"); // mismo name, otras dimensiones
 
     let o = mem(d.path(), &["search", "hola"]);
@@ -190,7 +190,7 @@ fn a_name_mismatch_leaves_the_registry_consistent_with_disk() {
     mem(d.path(), &["save", "hola mundo"]);
     mem(d.path(), &["model", "install", a.to_str().unwrap()]);
 
-    let instalado = d.path().join("paquetes").join("mini-es.anathem-pack");
+    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
     support::write_pack_mini(&instalado, "otro-es"); // mismas dims, otro name
 
     let o1 = mem(d.path(), &["search", "hola"]);
@@ -201,7 +201,7 @@ fn a_name_mismatch_leaves_the_registry_consistent_with_disk() {
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let (name, _sha, _dims) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
     assert_eq!(name, "otro-es", "el registro debe reflejar el nombre real del paquete");
-    let registered_path = d.path().join("paquetes").join(format!("{name}.anathem-pack"));
+    let registered_path = anathem::packstore::packs_dir(d.path()).join(format!("{name}.anathem-pack"));
     assert!(
         registered_path.exists(),
         "el archivo tiene que vivir donde dice el registro: {}",
@@ -235,7 +235,7 @@ fn reinstalling_from_the_installed_path_does_not_destroy_the_pack() {
     let o = mem(d.path(), &["model", "install", r.to_str().unwrap()]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
 
-    let instalado = d.path().join("paquetes").join("mini-es.anathem-pack");
+    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
     let tam = std::fs::metadata(&instalado).unwrap().len();
     assert!(tam > 0);
 
@@ -262,7 +262,7 @@ fn reinstalling_from_the_installed_path_does_not_destroy_the_pack() {
 
     // And the install leaves no temporaries lying around in `packs/` — the
     // pack and the sidecar it writes beside it are the whole contents.
-    let extras: Vec<String> = std::fs::read_dir(d.path().join("paquetes"))
+    let extras: Vec<String> = std::fs::read_dir(anathem::packstore::packs_dir(d.path()))
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
         .filter(|n| n != "mini-es.anathem-pack" && n != "mini-es.anathem-pack.sha256")
@@ -378,7 +378,7 @@ fn an_install_cut_short_after_the_rename_does_not_keep_querying_the_old_build() 
 
     let o = mem(d.path(), &["model", "install", new_id.to_str().unwrap()]);
     assert!(!o.status.success(), "esta instalación tenía que quedar cortada");
-    let instalado = d.path().join("paquetes").join("mini-es.anathem-pack");
+    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
     assert_eq!(
         std::fs::read(&instalado).unwrap(),
         std::fs::read(&new_id).unwrap(),
@@ -444,7 +444,7 @@ fn an_install_failing_before_touching_the_file_leaves_no_mark() {
     support::write_pack_mini(&r, "mini-es");
     mem(d.path(), &["save", "hola mundo"]);
 
-    let packs = d.path().join("paquetes");
+    let packs = anathem::packstore::packs_dir(d.path());
     std::fs::create_dir_all(&packs).unwrap();
     let target = packs.join("mini-es.anathem-pack");
     std::fs::create_dir(&target).unwrap();
@@ -509,8 +509,8 @@ fn the_installed_pack_carries_its_sha256_so_reinstalling_still_verifies() {
     mem(d.path(), &["save", "hola mundo"]);
     assert!(mem(d.path(), &["model", "install", r.to_str().unwrap()]).status.success());
 
-    let instalado = d.path().join("paquetes").join("mini-es.anathem-pack");
-    let firma = d.path().join("paquetes").join("mini-es.anathem-pack.sha256");
+    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
+    let firma = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack.sha256");
     assert!(firma.exists(), "el paquete instalado tiene que quedar verificable");
     assert!(
         std::fs::read_to_string(&firma).unwrap().contains(&anathem::pack::sha256(&instalado).unwrap()),

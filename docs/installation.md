@@ -219,7 +219,9 @@ mem --db ~/.anathem/mem.db model status
 the pack file**, and search goes back to being purely lexical. Watch out for
 that: if the `.anathem-pack` you installed was your only copy, `remove`
 destroys it and reinstalling means downloading it again. Keep the file outside
-`~/.anathem/paquetes/` if you want to be able to go back and forth.
+`~/.anathem/packs/` if you want to be able to go back and forth. (An
+installation made before this was renamed still has `paquetes/`, and keeps
+working; `mem doctor` says how to move it.)
 
 The pack weighs 22.5 MB and is the static model trimmed down to the languages
 it covers. To generate one with other languages, see
@@ -230,7 +232,7 @@ it covers. To generate one with other languages, see
 Every memory belongs to a project. When saving without `--project`, it is
 derived from the repository you are standing in: the name of the `origin`
 remote, or the name of the repo's folder if there is no remote, or
-`sin-proyecto` outside any repository.
+`no-project` outside any repository.
 
 The remote is used rather than the directory on purpose: a repo usually lives
 in a folder that is not named after it, and inside a worktree the folder is

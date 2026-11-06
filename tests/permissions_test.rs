@@ -92,7 +92,7 @@ fn an_installed_pack_is_read_only_and_still_replaceable() {
     support::write_pack_mini(&origen, "mini-es");
     assert!(mem(&db, &["model", "install", origen.to_str().unwrap()]));
 
-    let instalado = dir.path().join("paquetes").join("mini-es.anathem-pack");
+    let instalado = anathem::packstore::packs_dir(dir.path()).join("mini-es.anathem-pack");
     assert_eq!(mode(&instalado), 0o400, "el paquete instalado tiene que ser 0400");
 
     // Writing over it in place is what the mode prevents — for everyone

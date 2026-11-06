@@ -114,7 +114,7 @@ filter.
 
   The **name** the pack declares is validated too, and that is not a detail:
   that name decides the path of the installed file
-  (`paquetes/<name>.anathem-pack`), so one with `..` or an absolute path would
+  (`packs/<name>.anathem-pack`), so one with `..` or an absolute path would
   write wherever it wanted with whatever content it wanted. It has to be a
   simple file name or the pack does not open.
 

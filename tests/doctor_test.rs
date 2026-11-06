@@ -193,7 +193,7 @@ fn a_registered_pack_whose_file_is_missing_is_detected() {
     let d = tempfile::tempdir().unwrap();
     let db = healthy_database(d.path());
     install_pack(d.path(), &db);
-    std::fs::remove_file(d.path().join("paquetes").join("mini-es.anathem-pack")).unwrap();
+    std::fs::remove_file(anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack")).unwrap();
 
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
@@ -304,7 +304,7 @@ fn leftover_stray_files_are_a_warning_and_not_a_problem() {
     let db = healthy_database(d.path());
     install_pack(d.path(), &db);
     std::fs::write(
-        d.path().join("paquetes").join("mini-es.anathem-pack.reemplazando-4242"),
+        anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack.reemplazando-4242"),
         b"resto",
     )
     .unwrap();
@@ -343,8 +343,8 @@ fn a_missing_database_does_not_claim_everything_is_fine() {
 fn the_summary_tells_all_clear_from_no_problems_but_warnings() {
     let d = tempfile::tempdir().unwrap();
     let db = healthy_database(d.path());
-    std::fs::create_dir(d.path().join("paquetes")).unwrap();
-    std::fs::write(d.path().join("paquetes").join("x.anathem-pack.reemplazando-1"), b"r").unwrap();
+    std::fs::create_dir(anathem::packstore::packs_dir(d.path())).unwrap();
+    std::fs::write(anathem::packstore::packs_dir(d.path()).join("x.anathem-pack.reemplazando-1"), b"r").unwrap();
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
     // (If the binary was built without git there is one more warning: the count is not pinned.)
@@ -438,7 +438,7 @@ fn the_diagnostic_is_read_only_even_with_a_damaged_database() {
     c.execute("delete from chunk_vectors", []).unwrap();
     drop(c);
     std::fs::write(d.path().join("config.json"), "roto").unwrap();
-    std::fs::write(d.path().join("paquetes").join("x.anathem-pack.reemplazando-1"), b"r").unwrap();
+    std::fs::write(anathem::packstore::packs_dir(d.path()).join("x.anathem-pack.reemplazando-1"), b"r").unwrap();
 
     let before = snapshot(d.path());
     // If the auxiliary-file filter swallowed too much, the test would pass

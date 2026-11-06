@@ -120,7 +120,7 @@ fn search_does_not_fail_even_when_it_cannot_reindex() {
 
     // The installed file becomes, in fact, a different pack: the guard
     // trips and the reindex needs to rename it.
-    let packs = d.path().join("paquetes");
+    let packs = anathem::packstore::packs_dir(d.path());
     support::write_pack_permuted(&packs.join("mini-es.anathem-pack"), "otro-es");
 
     // The rename has to fail, and it has to fail for anyone. This used to
@@ -177,7 +177,7 @@ fn two_parallel_searches_both_survive_with_the_guard_tripped() {
     assert!(mem(&db, &["save", "hola mundo"]).status.success());
     assert!(mem(&db, &["model", "install", a.to_str().unwrap()]).status.success());
     support::write_pack_permuted(
-        &d.path().join("paquetes").join("mini-es.anathem-pack"),
+        &anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack"),
         "otro-es",
     );
 

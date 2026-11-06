@@ -41,8 +41,23 @@ const SAMPLE: usize = 200;
 pub use crate::vecstore::PackIdentity;
 
 /// The directory where a database's packs live.
+///
+/// `packs` for anything new. An installation that already has `paquetes`
+/// keeps it, because there is a 22 MB file in there registered in `meta` by
+/// name and possibly memory-mapped by a running server: deciding it now
+/// lives elsewhere would turn a working installation into one that quietly
+/// searches with bm25 only. Nothing is moved automatically — `doctor` says
+/// how, and whoever renames it by hand gets the new name honoured, since
+/// `packs` wins as soon as it exists.
 pub fn packs_dir(dir: &Path) -> PathBuf {
-    dir.join("paquetes")
+    let new = dir.join("packs");
+    if !new.exists() {
+        let old = dir.join("paquetes");
+        if old.exists() {
+            return old;
+        }
+    }
+    new
 }
 
 /// The canonical path of the pack called `name`.

@@ -65,7 +65,7 @@ is, not anathem's code.
    that failed on Windows with the original `rename`. It has to reinstall
    without an error and leave the pack file intact and complete — along with
    the `.sha256` the install now writes beside it, which is what lets a
-   reinstall from `paquetes/` be verified at all.
+   reinstall from the packs directory be verified at all.
 4. **The unresolved critical scenario, below.**
 5. **`mem edit` with no `$EDITOR` defined.** It should open `notepad`.
 
@@ -90,5 +90,5 @@ single process.
 `replace_file` leaves a sidecar file — `{name}.anathem-pack.reemplazando-{pid}`
 — if the process dies between moving the target aside and finishing. It is
 inert garbage: it was verified that no production function enumerates
-`paquetes/` by pattern, so it confuses neither path resolution nor the pack's
+the packs directory by pattern, so it confuses neither path resolution nor the pack's
 identity guard. It can be deleted by hand with no consequences.
