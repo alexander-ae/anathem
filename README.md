@@ -175,6 +175,7 @@ A `config.json` next to the database, every key optional:
 | `bm25_weight` | `1.0` | how much the lexical ranking weighs against the vector one |
 | `candidates` | `20` | how many candidates `search_memory` returns |
 | `excerpt` | `120` | characters of each candidate's snippet |
+| `budget` | `1200` | tokens `search_memory` spends on its answer. It trims the list before `candidates` applies, so raising one without the other changes nothing |
 | `outline` | `false` | replaces the excerpt of a long memory that has headings with an outline of it |
 | `handoff_items` | `5` | memories named in the MCP greeting; `0` turns it off |
 | `handoff_window` | `"24h"` | how far back that greeting looks |

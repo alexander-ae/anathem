@@ -20,6 +20,18 @@ live in the database, not in the binary.
   it was published, and is the first release for which
   `sh install.sh --verify-signature` has anything to check.
 
+### Added
+
+- **`budget` is a setting**, next to `candidates` and `excerpt` in
+  `config.json`. It was a compile-time constant, and it silently governed the
+  two beside it: the budget trims the candidate list before `candidates` gets
+  to matter, so a configuration that raised `candidates` to 50 and left the
+  budget at 1,200 changed nothing. One of the pair was configurable and the
+  other was not, which made the configurable one a setting that does nothing
+  on its own. The default is the same 1,200, a caller may still override it
+  per call, and zero is refused the way `candidates` and `excerpt` already
+  refuse it.
+
 ### Changed
 
 - **The binaries are built on GitHub Actions**, in a public mirror that

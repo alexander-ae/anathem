@@ -125,3 +125,29 @@ fn an_unknown_key_is_still_rejected() {
     std::fs::write(d.path().join("config.json"), r#"{"inventada": 1}"#).unwrap();
     assert!(config::load(d.path()).is_err());
 }
+
+#[test]
+fn with_no_file_it_uses_the_default_budget() {
+    // 1200 is what `search_memory` has always spent when nobody said
+    // otherwise. Moving it into the file does not move the number.
+    let d = tempfile::tempdir().unwrap();
+    assert_eq!(config::load(d.path()).unwrap().budget, 1200);
+}
+
+#[test]
+fn it_reads_the_budget_from_the_file() {
+    let d = tempfile::tempdir().unwrap();
+    std::fs::write(d.path().join("config.json"), r#"{"budget": 4000}"#).unwrap();
+    assert_eq!(config::load(d.path()).unwrap().budget, 4000);
+}
+
+#[test]
+fn a_zero_budget_is_rejected() {
+    // Like `candidates` and `excerpt`: zero is not a setting, it is a search
+    // that can never return anything, and finding that out from an empty
+    // result is worse than finding it out from an error.
+    let d = tempfile::tempdir().unwrap();
+    std::fs::write(d.path().join("config.json"), r#"{"budget": 0}"#).unwrap();
+    let e = config::load(d.path()).unwrap_err().to_string();
+    assert!(e.contains("budget"), "the error has to name the key: {e}");
+}

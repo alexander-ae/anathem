@@ -40,6 +40,21 @@ pub struct Config {
     #[serde(default = "default_excerpt")]
     pub excerpt: usize,
 
+    /// The tokens `search_memory` spends on its answer when the caller does
+    /// not say otherwise.
+    ///
+    /// It was a constant until it became clear that it silently governs
+    /// `candidates`: the budget trims the list before the candidate count
+    /// gets to matter, so raising `candidates` to 50 and leaving the budget
+    /// at 1,200 changes nothing at all. One of the two was configurable and
+    /// the other was not, which made the configurable one a setting that
+    /// does nothing on its own.
+    ///
+    /// A caller may still override it per call, and that override is clamped
+    /// rather than rejected — see `search::MAX_BUDGET_TOKENS`.
+    #[serde(default = "default_budget")]
+    pub budget: usize,
+
     /// Replaces a long memory's excerpt with a deterministic outline of the
     /// whole memory: its first paragraph and its headings. Off by default.
     ///
@@ -113,6 +128,10 @@ fn default_excerpt() -> usize {
     120
 }
 
+fn default_budget() -> usize {
+    crate::search::DEFAULT_BUDGET_TOKENS
+}
+
 fn default_handoff_items() -> usize {
     5
 }
@@ -131,6 +150,7 @@ impl Default for Config {
             bm25_weight: default_bm25_weight(),
             candidates: default_candidates(),
             excerpt: default_excerpt(),
+            budget: default_budget(),
             outline: false,
             handoff_items: default_handoff_items(),
             handoff_window: default_handoff_window(),
@@ -164,6 +184,9 @@ pub fn load(dir: &Path) -> Result<Config> {
     }
     if c.excerpt == 0 {
         bail!("{}: excerpt has to be greater than zero, not {}", pack_path.display(), c.excerpt);
+    }
+    if c.budget == 0 {
+        bail!("{}: budget has to be greater than zero, not {}", pack_path.display(), c.budget);
     }
     Ok(c)
 }
