@@ -431,3 +431,34 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
     let r = anathem::vecstore::search_vectors(&conn, &query_, &with_topic, 50).unwrap();
     assert_eq!(r.len(), 1, "el filtro de topic tiene que valer también acá: {r:?}");
 }
+
+#[test]
+fn a_vector_of_the_wrong_width_is_skipped_and_not_scored() {
+    // A row left behind by another pack: the dimensions do not match, so
+    // there is no meaningful cosine to compute against it. It has to be
+    // passed over rather than scored on whatever bytes happen to be there.
+    //
+    // This pins the branch that the read loop is most likely to get wrong
+    // when it stops allocating a `Vec<f32>` per row and reads the blob in
+    // place: the width check then has to be made on bytes rather than on
+    // floats, and four bytes per float is exactly the kind of arithmetic
+    // that goes unnoticed.
+    let (_d, conn, p) = fixture();
+    let hola = seed(&conn, "hola");
+    let intruso = seed(&conn, "mundo");
+    support::register_and_sync(&conn, &p);
+    // Half the width this pack produces, so it cannot be compared.
+    let v = p.embed("hola").unwrap();
+    let corto: Vec<u8> = (0..(v.len() * 4 / 2)).map(|i| i as u8).collect();
+    conn.execute(
+        "update chunk_vectors set vec = ?2
+          where chunk_id in (select id from chunks where memory_id = ?1)",
+        rusqlite::params![intruso, corto],
+    ).unwrap();
+
+    let q = search::Query { text: String::new(), ..Default::default() };
+    let r = vecstore::search_vectors(&conn, &v, &q, 10).unwrap();
+    assert!(r.iter().all(|a| a.memory_id != intruso),
+        "the mismatched row must not be scored: {r:?}");
+    assert_eq!(r[0].memory_id, hola);
+}
