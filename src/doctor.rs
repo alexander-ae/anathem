@@ -476,6 +476,46 @@ fn check_database(conn: &Connection, s: &mut Section) {
     guard(s, "the orphans", |s| orphans(conn, s));
     guard(s, "the supersession chains", |s| supersession(conn, s));
     guard(s, "the topic keys", |s| topic_keys(conn, s));
+    guard(s, "the near-duplicates", |s| near_duplicates(conn, s));
+}
+
+/// Pairs of memories that look like the same fact written twice.
+///
+/// Information and never a problem: duplication is untidy, not broken, and
+/// an exit code that turns red because somebody saved a note twice would
+/// teach whoever runs this in a script to stop reading it.
+///
+/// It only ever reports. Which of two overlapping notes is the keeper needs
+/// judgement about what they are for, and merging destroys the loser;
+/// `mem forget <id>` and `mem supersede` are the commands, and they are the
+/// person's to run. See `dupes` for why nothing automatic was built.
+fn near_duplicates(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
+    let pairs = crate::dupes::find(conn)?;
+    if pairs.is_empty() {
+        s.bien("no near-duplicate memories");
+        return Ok(());
+    }
+    let shown = pairs.len().min(crate::dupes::MAX_LISTED);
+    s.info(format!(
+        "{} pair{} of memories share most of their words. They are not a problem, \
+         only untidy: `mem supersede <new> <old>` keeps one, `mem forget <id>` \
+         retires the other",
+        pairs.len(),
+        if pairs.len() == 1 { "" } else { "s" }
+    ));
+    for pair in pairs.iter().take(shown) {
+        s.info(format!(
+            "  id:{} and id:{} in {} share {:.0}% of their words",
+            pair.a,
+            pair.b,
+            pair.project,
+            pair.overlap * 100.0
+        ));
+    }
+    if pairs.len() > shown {
+        s.info(format!("  and {} more", pairs.len() - shown));
+    }
+    Ok(())
 }
 
 fn counts(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {

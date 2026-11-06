@@ -1,0 +1,100 @@
+//! Finding the same fact saved twice.
+//!
+//! The real case this was written against, found on the first run over a
+//! 688-memory corpus: somebody saved a note, noticed the shell had eaten
+//! part of it, saved it again — and never superseded the first. Both stayed
+//! active and both kept turning up in searches. The second note even says
+//! so in its own title.
+
+use anathem::{db, dupes, model::NewMemory};
+
+fn save(conn: &rusqlite::Connection, project: &str, ext: &str, body: &str) {
+    anathem::ingest::insert(conn, &NewMemory {
+        project: project.into(),
+        title: body.chars().take(40).collect(),
+        body: body.into(),
+        created: "2026-11-06".into(),
+        event_start: None,
+        event_end: None,
+        source: "migrated".into(),
+        ext_id: Some(ext.into()),
+        tags: vec![],
+        refs: vec![],
+    })
+    .unwrap();
+}
+
+fn conn() -> (tempfile::TempDir, rusqlite::Connection) {
+    let d = tempfile::tempdir().unwrap();
+    let c = db::open(&d.path().join("t.db")).unwrap();
+    (d, c)
+}
+
+const LARGO: &str =
+    "the quota middleware charged administrators for responses that never \
+     reached them, because the after_action ran on every status including \
+     the five hundreds";
+
+#[test]
+fn the_same_note_saved_twice_is_found() {
+    let (_d, c) = conn();
+    save(&c, "p", "a", LARGO);
+    save(&c, "p", "b", LARGO);
+    let pairs = dupes::find(&c).unwrap();
+    assert_eq!(pairs.len(), 1, "expected exactly one pair: {pairs:?}");
+    assert!(pairs[0].overlap > 0.9, "identical text should overlap almost fully: {pairs:?}");
+}
+
+/// What the check has to survive: a corpus is full of notes about the same
+/// subject, and those are not duplicates.
+#[test]
+fn two_notes_on_one_subject_are_not_a_duplicate() {
+    let (_d, c) = conn();
+    save(&c, "p", "a", "the quota middleware charged for five hundreds, fixed in the after_action");
+    save(&c, "p", "b", "the quota dashboard shows a monthly total per administrator and exports csv");
+    assert!(dupes::find(&c).unwrap().is_empty(), "two different notes were called duplicates");
+}
+
+/// Two projects saying the same thing is two projects, not duplication.
+/// Merging across them is what the scoping in `search_memory` exists to
+/// prevent.
+#[test]
+fn the_same_text_in_two_projects_is_not_a_pair() {
+    let (_d, c) = conn();
+    save(&c, "uno", "a", LARGO);
+    save(&c, "otro", "b", LARGO);
+    assert!(dupes::find(&c).unwrap().is_empty(), "a pair was reported across projects");
+}
+
+/// A memory already retired is not a duplicate of anything: the whole point
+/// of `forget` and `supersede` is that it stopped competing.
+#[test]
+fn a_retired_memory_is_not_counted() {
+    let (_d, c) = conn();
+    save(&c, "p", "a", LARGO);
+    save(&c, "p", "b", LARGO);
+    assert_eq!(dupes::find(&c).unwrap().len(), 1);
+    c.execute("update memories set status = 'forgotten' where ext_id = 'b'", []).unwrap();
+    assert!(dupes::find(&c).unwrap().is_empty(), "a forgotten memory still formed a pair");
+}
+
+/// Every pair appears once. Memories share many rare words, so the same two
+/// are reached through several of them, and without the guard the report
+/// would list one duplicate a dozen times.
+#[test]
+fn a_pair_is_reported_once_however_many_words_it_shares() {
+    let (_d, c) = conn();
+    save(&c, "p", "a", LARGO);
+    save(&c, "p", "b", LARGO);
+    let pairs = dupes::find(&c).unwrap();
+    assert_eq!(pairs.len(), 1, "the same pair came back more than once: {pairs:?}");
+}
+
+/// An empty corpus is an answer, not an error.
+#[test]
+fn nothing_to_compare_is_not_a_failure() {
+    let (_d, c) = conn();
+    assert!(dupes::find(&c).unwrap().is_empty());
+    save(&c, "p", "a", LARGO);
+    assert!(dupes::find(&c).unwrap().is_empty());
+}

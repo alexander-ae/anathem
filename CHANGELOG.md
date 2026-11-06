@@ -10,6 +10,32 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Added
+
+- **A hit no word of the query matched says so**, with ` [no word match]`
+  next to its project. The vector ranking orders the whole corpus by
+  distance and returns the nearest, so it answers every query — including
+  one whose words appear nowhere — and those answers used to be shaped
+  exactly like the good ones. The model now has something to tell them
+  apart with, and when *every* candidate carries the label the answer reads
+  as "nothing here matched" instead of as findings. It is a label and not a
+  filter: reach is what the vector layer measurably contributes, and a
+  memory sharing no word with the query is sometimes the right one. (#28)
+
+- **`mem doctor` lists memories that look like the same fact saved twice.**
+  Information, never a problem — duplication is untidy, not broken. It
+  reports and never merges: which of two overlapping notes is the keeper
+  needs judgement, and merging destroys the loser. On the corpus it was
+  written against it found one real pair on the first run, a note saved
+  again after the shell ate part of it and never superseded. (#30)
+
+### Changed
+
+- **`docs/search.md` no longer quotes 97% recall without saying what the
+  same measure gives on real notes** (52%). The README already carried both
+  figures side by side; this one page did not. (#31)
+
+
 ## [0.5.1] - 2026-11-06
 
 ### Fixed
