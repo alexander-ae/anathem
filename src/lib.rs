@@ -20,6 +20,7 @@ pub mod packstore;
 pub mod project;
 pub mod recent;
 pub mod search;
+pub mod stats;
 pub mod supersede;
 pub mod tags;
 pub mod tune;

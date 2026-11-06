@@ -129,6 +129,7 @@ nothing to learn by heart.
 | `forget <id>` | Takes a memory out of search without deleting the row | `mem forget 88` |
 | `history <id>` | Shows a memory's supersession chain, newest to oldest | `mem history 42` |
 | `recent` | What was saved lately, newest to oldest, and which agent saved it. It is the opposite of `search`, which orders by relevance. `--since` accepts `6h`, `90m`, `2d` or `todo` (no bound); 24h by default | `mem recent --since 6h` |
+| `stats` | What the search log says about whether this is earning its place: how often a search led to opening a memory, what it cost in tokens, and the queries that found nothing. Read-only, and it says above the table what it cannot measure | `mem stats --since 30d` |
 | `tune` | Looks for a better `bm25_weight` for **this** corpus, using the topic keys as a free eval set. It prints a table and a recommendation and changes nothing; it needs a vocabulary pack and at least 20 topic keys | `mem tune` |
 | `eval --evalset <json>` | Runs the evaluation harness | `mem eval --evalset eval/evalset.json --out eval/results/anathem-bm25.json` |
 | `serve` | Starts the MCP server over stdio (5 tools: `search_memory`, `save_memory`, `get_memory`, `list_tags`, `recent_memories`) | `mem serve` |
