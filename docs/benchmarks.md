@@ -286,9 +286,17 @@ and that the README names as the weak ones; they are the two that move most.
 Where the baseline already sat at 100% there is nothing to win, which is what
 makes the first column worth reading.
 
-**Latency falls by more than a third of what it was** — 375 ms to 106 ms.
-That is not a bound and not an estimate: a smaller pool really is faster to
-search, and a scope a user types gets that part in full.
+**Latency falls to 106 ms from 375 — and this is the half of the simulation
+that does not transfer.** It was once claimed here that it did, on the
+reasoning that a smaller pool is faster to search. Measured since, over the
+same 23,854 memories with each question confined to its own project, a real
+scope is **slower**: 1,184 ms against 646 ms for the same questions pooled.
+
+The reason is the one this section already gives for the recall half. The
+simulation rebuilds the index over a smaller corpus; a real `--scope`
+filters in the `WHERE` clause of the full index, so FTS5 walks further to
+collect enough rows that match. Narrowing the pool buys recall, and it costs
+time rather than saving it.
 
 **`single-session-preference` is the odd one**, +16.7 and +23.3 from a
 baseline of 70%. Thirty questions is a small stratum and this is the one
