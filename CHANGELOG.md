@@ -10,6 +10,8 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-06
+
 ### Fixed
 
 - **The widening that makes project scoping safe now works with a pack
