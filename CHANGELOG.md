@@ -14,9 +14,11 @@ live in the database, not in the binary.
 
 - The **minisign public key** releases are signed with. It lives in
   `scripts/install.sh`, in `anathem.pub` at the root and in the project's
-  description on GitLab — three places, so a repository tampered with on its
-  own cannot swap it without the others disagreeing. v0.3.0 is the first
-  signed release; `sh install.sh --verify-signature` checks it.
+  description on GitLab. Only the last of those is independent — the copies
+  in here change together with a single push — so the description is the one
+  a repository tampered with on its own cannot reach. v0.3.0 was signed after
+  it was published, and is the first release for which
+  `sh install.sh --verify-signature` has anything to check.
 
 ### Changed
 
@@ -28,7 +30,55 @@ live in the database, not in the binary.
   Ultimate only. GitLab keeps the Linux suite and the dependency audit on
   every push, and no longer builds.
 
+- **The README quotes the numbers that are worse, next to the ones that are
+  better.** It led with 90.5% recall@5 on LongMemEval-S and said nothing
+  about the 78.0% on -M, or the 52% measured over the author's own notes,
+  both of which were already in `docs/`. The gap is not a different method —
+  a benchmark's questions are written against the sessions that answer them,
+  and your notes were not — so it is reported rather than buried.
+
+- **"About 9 MB at rest and single-digit milliseconds" was the best case
+  presented as the only one.** 9 MB is a session that has not searched yet;
+  one holding the vocabulary pack is about 64 MB, and each agent session runs
+  its own `mem serve`. 8 ms is a 449-memory corpus; the public benchmark's
+  23,854 take 375 ms. Both figures were already measured in
+  `docs/vocabulary-packs.md` and `docs/benchmarks.md`, and the README now
+  carries them whole.
+
+- **The head-to-head table against supermemory is gone.** Its LLM provider
+  key was expired on that machine, so its memory agent never ran and the
+  figures compared a finished anathem against supermemory's chunk layer. The
+  caveat was already written underneath; a caveat underneath is not enough,
+  because the table is what gets quoted. What stays is the part that does not
+  depend on its agent and is a property of the API: it returns at most four
+  documents per query, and nothing at all for 19 of 46 questions.
+
 ### Fixed
+
+- **`docs/installation.md` said the vocabulary pack "is not published
+  anywhere yet".** It has been published since v0.3.0 — the release carries
+  `en-es.anathem-pack` with its `.sha256` and its signature, and `install.sh`
+  downloads it unless you pass `--no-pack`. The document sent a new reader to
+  ask someone for the file or to build it from a 512 MB model instead, and it
+  is the document the README sends people to.
+
+- **`docs/security.md` read as though no release had been signed yet.**
+  v0.3.0 was, after it was published: five `.minisig` files, one per asset.
+
+- **The minisign key was described as living in "three places", of which two
+  were inside the repository.** Three copies that a single push changes
+  together are one copy for this purpose. The claim now rests where it
+  always did: on the one outside, in the project's description.
+
+- **A sentence in `docs/benchmarks.md` claimed the README had quoted its old
+  figures "for years".** The first design document is dated 2026-09-21. It
+  quoted them from v0.1.0 to v0.2.2, which is six weeks.
+
+- **Smaller ones**: `comparison-with-supermemory.md` said anathem hands the
+  model fifty candidates in one paragraph and twenty in another (it is
+  twenty); the README rounded the pack to 22 MB where every other document
+  says 22.5; and `installation.md` pointed at `paquetes-de-vocabulario.md`,
+  renamed to `vocabulary-packs.md` during the translation.
 
 - **The macOS binaries published as v0.2.1 and v0.2.2 were built from
   v0.2.0's code.** Both carry `commit b0586db`. The workflow checked out

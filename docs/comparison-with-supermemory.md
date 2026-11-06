@@ -38,7 +38,7 @@ nothing at all for 19 of 46 questions — and for the 27 where it did answer,
 the evidence was among its results 89% of the time. A `recall@50` for it
 would be a fact about its API's ceiling and not about its ranking, which is
 why that column is not in this table. The two tools make different bets:
-anathem hands a model fifty candidates and lets the model filter,
+anathem hands a model twenty candidates and lets the model filter,
 supermemory hands back a few it is confident about.
 
 These figures are also from September, over a corpus nobody else can see.

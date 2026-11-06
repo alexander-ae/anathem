@@ -134,8 +134,10 @@ filter.
   checks it. The key is held by the maintainer and not by any CI system — a
   key in a pipeline signs whatever that pipeline produced, which is what the
   `.sha256` already attests, and this project builds on two systems, so such
-  a key would have to exist in both places to cover everything. Until a
-  release is actually signed, `--verify-signature` says so and refuses rather
+  a key would have to exist in both places to cover everything. **v0.3.0 is
+  the first signed release**: every asset in it, the vocabulary pack
+  included, carries a `.minisig` beside its `.sha256`. For a release that
+  publishes no signature, `--verify-signature` says so and refuses rather
   than pretending to check.
 
   What did change already is that nothing carries on when it cannot verify. The installer

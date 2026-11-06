@@ -187,17 +187,23 @@ asking in English, or the other way round. On a real corpus that takes
 cross-language recall@5 from 34 % to 58 %, without losing anything on
 same-language searches.
 
-**The pack is not published anywhere yet.** It is a 22.5 MB binary file that
-does not belong under version control in the repository, and where to host it
-has not been decided. Today there are two ways to get it:
+**The installer downloads it for you**, from the release, with its `.sha256`
+and its signature beside it — so if you installed with `install.sh` and did
+not pass `--no-pack`, you already have it and this section is only here to
+explain what it is. It is a 22.5 MB binary file, kept out of version control
+and published as a release asset instead.
 
+To get it on its own there are three ways:
+
+- **Download it from the [release](https://gitlab.com/__alexander__/anathem/-/releases)**,
+  together with the `.sha256` next to it. `model install` wants both.
 - **Have someone send it to you.** It is a loose file: sending it by any means
   works. It does not depend on the operating system or the architecture — it
   is a table of numbers, the same on Linux, macOS or Windows.
-- **Generate it yourself**, with `tools/build_pack.py`. That requires
-  downloading the 512 MB base model and a text sample in the languages you
-  want to cover. The full procedure is in
-  [`vocabulary-packs.md`](vocabulary-packs.md).
+- **Generate it yourself**, with `tools/build_pack.py`, which is what you want
+  for languages the published pack does not cover. That requires downloading
+  the 512 MB base model and a text sample in the languages you want. The full
+  procedure is in [`vocabulary-packs.md`](vocabulary-packs.md).
 
 With the file in hand — and with its `.sha256` beside it, which is how both
 the release and `build_pack.py` hand it over; `model install` refuses a pack
@@ -217,7 +223,7 @@ destroys it and reinstalling means downloading it again. Keep the file outside
 
 The pack weighs 22.5 MB and is the static model trimmed down to the languages
 it covers. To generate one with other languages, see
-`paquetes-de-vocabulario.md`.
+[`vocabulary-packs.md`](vocabulary-packs.md).
 
 ## 4. The project detects itself
 
