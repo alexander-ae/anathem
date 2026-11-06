@@ -47,11 +47,22 @@ create table if not exists chunks (
   id        integer primary key,
   memory_id integer not null references memories(id) on delete cascade,
   ord       integer not null,
-  body      text not null
+  body      text not null,
+  -- What gets indexed, which is not always what gets shown. For Latin text
+  -- the two are identical; for Chinese and Japanese this holds the bigram
+  -- form (see `chunk::segment_cjk`), because `unicode61` would otherwise
+  -- index a whole clause as one token nobody can type.
+  --
+  -- It is a column and not a transformation in the trigger because
+  -- `chunks_fts` is an external-content table: `insert into
+  -- chunks_fts(chunks_fts) values ('rebuild')` re-reads this table, so a
+  -- trigger-side transformation would be reverted by the next rebuild
+  -- without a word.
+  fts_body  text not null default ''
 );
 
 create virtual table if not exists chunks_fts using fts5(
-  body,
+  fts_body,
   content='chunks',
   content_rowid='id',
   tokenize="unicode61 remove_diacritics 2"
@@ -86,14 +97,14 @@ create index if not exists idx_tags_tag           on memory_tags(tag);
 create index if not exists idx_refs_value         on memory_refs(value);
 
 create trigger if not exists chunks_ai after insert on chunks begin
-  insert into chunks_fts(rowid, body) values (new.id, new.body);
+  insert into chunks_fts(rowid, fts_body) values (new.id, new.fts_body);
 end;
 create trigger if not exists chunks_ad after delete on chunks begin
-  insert into chunks_fts(chunks_fts, rowid, body) values ('delete', old.id, old.body);
+  insert into chunks_fts(chunks_fts, rowid, fts_body) values ('delete', old.id, old.fts_body);
 end;
 create trigger if not exists chunks_au after update on chunks begin
-  insert into chunks_fts(chunks_fts, rowid, body) values ('delete', old.id, old.body);
-  insert into chunks_fts(rowid, body) values (new.id, new.body);
+  insert into chunks_fts(chunks_fts, rowid, fts_body) values ('delete', old.id, old.fts_body);
+  insert into chunks_fts(rowid, fts_body) values (new.id, new.fts_body);
 end;
 "#;
 
@@ -119,6 +130,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     add_handoff_columns(&conn)?;
     add_follow_up_column(&conn)?;
     add_provenance_columns(&conn)?;
+    migrate_indexed_body(&conn)?;
     restringir(path);
     Ok(conn)
 }
@@ -258,6 +270,52 @@ fn rename_columns_to_english(conn: &Connection) -> Result<()> {
 /// "yes, and which one was not recorded": the truth about them.
 fn add_follow_up_column(conn: &Connection) -> Result<()> {
     add_column(conn, "search_log", "followed_up_id", "integer")
+}
+
+/// Moves an existing database onto the indexed-body column.
+///
+/// A database written before this indexed `chunks.body` directly, so every
+/// Chinese or Japanese memory in it is one token and unreachable. `create
+/// ... if not exists` cannot change a table that exists, so the FTS table
+/// and its three triggers are dropped and rebuilt, and `fts_body` is filled
+/// in from `body` — which for Latin text copies it unchanged.
+///
+/// It detects the old shape by looking at the stored DDL rather than keeping
+/// a version number: the question is literally "does this index fts_body",
+/// and `sqlite_master` answers it.
+fn migrate_indexed_body(conn: &Connection) -> Result<()> {
+    add_column(conn, "chunks", "fts_body", "text not null default ''")?;
+    let ddl: String = conn
+        .query_row(
+            "select coalesce(sql, '') from sqlite_master where name = 'chunks_fts'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or_default();
+    if ddl.contains("fts_body") {
+        return Ok(());
+    }
+    let tx = conn.unchecked_transaction()?;
+    tx.execute_batch(
+        "drop trigger if exists chunks_ai;
+         drop trigger if exists chunks_ad;
+         drop trigger if exists chunks_au;
+         drop table if exists chunks_fts;",
+    )?;
+    {
+        let mut st = tx.prepare("select id, body from chunks")?;
+        let rows: Vec<(i64, String)> = st
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        let mut up = tx.prepare("update chunks set fts_body = ?2 where id = ?1")?;
+        for (id, body) in rows {
+            up.execute(rusqlite::params![id, crate::chunk::segment_cjk(&body)])?;
+        }
+    }
+    tx.execute_batch(SCHEMA)?;
+    tx.execute_batch("insert into chunks_fts(chunks_fts) values ('rebuild');")?;
+    tx.commit()?;
+    Ok(())
 }
 
 /// Where a memory came from, when it did not come from here.

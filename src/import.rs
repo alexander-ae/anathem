@@ -223,8 +223,8 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
                 .enumerate()
         {
             tx.execute(
-                "insert into chunks (memory_id, ord, body) values (?1, ?2, ?3)",
-                params![new_id, ord as i64, body],
+                "insert into chunks (memory_id, ord, body, fts_body) values (?1, ?2, ?3, ?4)",
+                params![new_id, ord as i64, body, crate::chunk::segment_cjk(body)],
             )?;
         }
         for t in &m.tags {

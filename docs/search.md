@@ -152,6 +152,38 @@ do is give you a quality figure — a topic key names its subject in keywords,
 so those questions flatter the lexical side — and the command says so above
 its own table.
 
+## Chinese and Japanese
+
+FTS5's `unicode61` tokenizer splits on whitespace and punctuation. A Japanese
+or Chinese sentence has neither inside it, so before this was handled an
+entire clause arrived in the index as **one token**: `設定ファイル` sat inside
+`決済プロバイダーはAdyenです。設定ファイルに書いてあります。` and searching for
+it returned nothing, the way `figur` does not find `configuration`. The
+memory was stored, counted, exported — and unreachable. `mem doctor` called
+the installation healthy, because everything it checks was true.
+
+Runs of Han, hiragana and katakana are now indexed as overlapping character
+bigrams, which is what Lucene's `CJKBigramFilter` does for the same reason:
+`設定ファイル` is indexed as `設定 定フ ファ ァイ イル`, and a query for `設定`
+has a token to hit. The query goes through the same transformation, or the
+two sides would be tokenized differently and nothing would ever match.
+
+**Korean is deliberately left alone.** It is written with spaces between
+words, so `unicode61` already splits it correctly and bigramming it would
+break what works.
+
+**Latin text is untouched**, and that is load-bearing: every figure this
+document and `benchmarks.md` publish was measured on it. Checked rather than
+assumed — the same 50 queries over the same 682-memory corpus give
+`recall@5` 50%, `recall@50` 84% and MRR 0.409 before and after.
+
+The indexed form lives in its own column, `chunks.fts_body`, rather than in
+a trigger. `chunks_fts` is an external-content table, so
+`insert into chunks_fts(chunks_fts) values ('rebuild')` re-reads the source
+table: a transformation applied in the trigger would be reverted by the next
+rebuild without saying anything. An existing database migrates itself the
+next time it is opened.
+
 ## Narrowing the pool
 
 `--scope key:value` narrows a search to a `project`, a `tag` or a `topic`,

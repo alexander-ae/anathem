@@ -7,8 +7,8 @@ fn rechunk(conn: &Connection, memory_id: i64, body: &str) -> Result<()> {
     conn.execute("delete from chunks where memory_id = ?1", [memory_id])?;
     for (ord, c) in chunk::split(body, ingest::CHUNK_SIZE, ingest::CHUNK_STEP).iter().enumerate() {
         conn.execute(
-            "insert into chunks (memory_id, ord, body) values (?1, ?2, ?3)",
-            params![memory_id, ord as i64, c],
+            "insert into chunks (memory_id, ord, body, fts_body) values (?1, ?2, ?3, ?4)",
+            params![memory_id, ord as i64, c, chunk::segment_cjk(c)],
         )?;
     }
     Ok(())

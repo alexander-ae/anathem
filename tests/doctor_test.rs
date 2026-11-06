@@ -126,8 +126,8 @@ fn it_detects_an_out_of_sync_fts5_index_and_exits_nonzero() {
     // happen if a write path skipped the triggers.
     let c = sabotage(&db);
     c.execute(
-        "insert into chunks_fts(chunks_fts, rowid, body)
-         select 'delete', id, body from chunks where id = (select min(id) from chunks)",
+        "insert into chunks_fts(chunks_fts, rowid, fts_body)
+         select 'delete', id, fts_body from chunks where id = (select min(id) from chunks)",
         [],
     )
     .unwrap();
@@ -430,8 +430,8 @@ fn the_diagnostic_is_read_only_even_with_a_damaged_database() {
     let c = sabotage(&db);
     c.execute("update memories set supersedes_id = 9999 where id = 3", []).unwrap();
     c.execute(
-        "insert into chunks_fts(chunks_fts, rowid, body)
-         select 'delete', id, body from chunks where id = (select min(id) from chunks)",
+        "insert into chunks_fts(chunks_fts, rowid, fts_body)
+         select 'delete', id, fts_body from chunks where id = (select min(id) from chunks)",
         [],
     )
     .unwrap();
@@ -549,12 +549,12 @@ fn the_fts5_index_is_compared_by_ids_and_not_only_by_count() {
     let db = healthy_database(d.path());
     let c = sabotage(&db);
     c.execute(
-        "insert into chunks_fts(chunks_fts, rowid, body)
-         select 'delete', id, body from chunks where id = 1",
+        "insert into chunks_fts(chunks_fts, rowid, fts_body)
+         select 'delete', id, fts_body from chunks where id = 1",
         [],
     )
     .unwrap();
-    c.execute("insert into chunks_fts(rowid, body) values (99, 'fantasma')", []).unwrap();
+    c.execute("insert into chunks_fts(rowid, fts_body) values (99, 'fantasma')", []).unwrap();
     let chunks: i64 = c.query_row("select count(*) from chunks", [], |r| r.get(0)).unwrap();
     let indexed: i64 =
         c.query_row("select count(*) from chunks_fts_docsize", [], |r| r.get(0)).unwrap();
