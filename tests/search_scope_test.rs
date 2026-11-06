@@ -154,3 +154,67 @@ fn a_named_project_that_is_empty_does_not_widen() {
         "a named project widened on its own: {out}"
     );
 }
+
+/// The widening has to survive a pack being installed, and this is the case
+/// that nearly made it worthless.
+///
+/// `search::run` with a vector layer returns its nearest neighbours whatever
+/// the query, so the scoped search practically never comes back empty and
+/// "empty" stops being a usable signal — the net that justified narrowing by
+/// default was switched off by the feature that ships enabled. What is
+/// watched instead is whether the project held any lexical evidence.
+///
+/// Built with a real pack rather than a stub: the point is the behaviour of
+/// a vector ranking that answers everything, which a stub would not have.
+#[test]
+fn it_widens_even_when_the_vector_side_answers_everything() {
+    let d = tempfile::tempdir().unwrap();
+    let db = d.path().join("t.db");
+    let conn = db::open(&db).unwrap();
+    let mine = here().unwrap_or_else(|| "no-project".into());
+    insert(&conn, &mine, "mine", "the deployment pipeline runs nightly");
+    insert(&conn, "somewhere-else", "theirs", "an unrelated note about invoices");
+
+    let Some(pack) = installed_pack() else {
+        // No pack on this machine: `a_search_stays_in_the_project...` and
+        // `an_empty_project_widens_by_itself...` already cover the lexical
+        // path, and inventing one here would test the stub, not the case.
+        return;
+    };
+    anathem::packstore::install(&conn, d.path(), &pack, anathem::packstore::Sidecar::Optional)
+        .unwrap();
+    let live = anathem::packstore::resolve(&conn, d.path());
+    let pair = live.pack.as_ref().zip(live.identity.as_ref());
+    let ctx = search::SearchContext::for_server(pair, 1.0);
+    assert!(ctx.pack().is_some(), "the pack did not come back from the registry");
+
+    let req = json!({
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": "search_memory", "arguments": {"query": "invoices"}}
+    });
+    let res = mcp::handle(&conn, &ctx, &Config::default(), &req).unwrap().unwrap();
+    let out = res["result"]["content"][0]["text"].as_str().unwrap();
+
+    if here().is_some() {
+        assert!(
+            out.contains("invoices"),
+            "the vector layer answered from the local project and hid the real match: {out}"
+        );
+        assert!(
+            out.contains("searched every project"),
+            "it widened without saying so: {out}"
+        );
+    }
+}
+
+/// The pack this machine has installed, if any. The test that needs it is
+/// about a vector ranking that answers everything, so a hand-built stub
+/// would be testing the stub.
+fn installed_pack() -> Option<std::path::PathBuf> {
+    let p = dirs_home()?.join(".anathem").join("paquetes").join("en-es.anathem-pack");
+    p.is_file().then_some(p)
+}
+
+fn dirs_home() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(std::path::PathBuf::from)
+}

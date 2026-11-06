@@ -189,12 +189,31 @@ fn call_tool(
             // parameter exists. Nothing is hidden by the widening either:
             // every hit prints the project it came from.
             let mut widened_from: Option<String> = None;
-            if hits.is_empty() && implicit {
+            if implicit {
                 if let Some(p) = q.project.clone() {
-                    let wide = search::Query { project: None, ..q.clone() };
-                    hits = search::run(conn, &wide, ctx)?;
-                    if !hits.is_empty() {
-                        widened_from = Some(p);
+                    // "No results" is not the test. With a pack installed the
+                    // vector side returns its nearest neighbours whatever the
+                    // query, so an answer always comes back and the emptiness
+                    // this used to watch for never happens — the safety net
+                    // was switched off by the feature that ships enabled.
+                    //
+                    // What decides it is whether the project held any
+                    // LEXICAL evidence. None, and its vector hits are the
+                    // nearest average of a corpus that knows nothing about
+                    // the question, which is exactly the case worth looking
+                    // past the project for.
+                    let evidence = if ctx.pack().is_some() {
+                        !search::run(conn, &q, &search::SearchContext::bm25_only())?.is_empty()
+                    } else {
+                        !hits.is_empty()
+                    };
+                    if !evidence {
+                        let wide = search::Query { project: None, ..q.clone() };
+                        let wider = search::run(conn, &wide, ctx)?;
+                        if !wider.is_empty() {
+                            hits = wider;
+                            widened_from = Some(p);
+                        }
                     }
                 }
             }
