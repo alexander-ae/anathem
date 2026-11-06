@@ -261,26 +261,6 @@ twenty-four thousand, against a 774 MB database. SQLite stays on disk and
 pages in what it needs. It is the one row of this table that can be quoted
 without a caveat.
 
-### And scoping recovers all of it
-
-The same 23,854 memories, the same hundred questions, each confined to its
-own project — which is what anathem does by itself, since every memory takes
-the project of the repository it was saved from:
-
-| | recall@5 | recall@50 | MRR | p50 |
-|---|--:|--:|--:|--:|
-| pooled | 42 % | 70 % | 0.330 | 646 ms |
-| **scoped by project** | **95 %** | **100 %** | **0.886** | 1,184 ms |
-
-So the degradation is a fact about the **searched pool** and not about the
-database. Twenty-four thousand memories spread over twenty projects is the
-top row of the first table, not the bottom one.
-
-That reframes `--project` from bookkeeping into the scaling mechanism, and
-it is the reason the default — derive the project from the repository and
-never make anyone type it — matters more than it looks. It also sets the
-price: scoping buys recall and spends time, 1,184 ms against 646.
-
 ### What it does not cover
 
 bm25 only, nothing past 23,854, and LongMemEval sessions are prose while a
@@ -288,6 +268,10 @@ working memory is technical notes — a difference this document has already
 measured to matter elsewhere. And `recall@50` of 70 % on the pooled run says
 the answer is usually *there* and ranked too low, which is a ranking problem
 rather than a retrieval one, and a different piece of work from this.
+
+The obvious mitigation is to search less of it. That is the next section,
+which measures it twice — first as a ceiling, before there was a way to
+measure a real scope, and then for real.
 
 ## Does narrowing the pool help?
 
@@ -370,7 +354,32 @@ time rather than saving it.
 baseline of 70%. Thirty questions is a small stratum and this is the one
 figure here not to lean on.
 
-### What this does not prove
+### And measured for real, it recovers all of it
+
+The ceiling above is what a perfect scope *could* buy. This is a real one.
+The same 23,854 memories as the pooled run two sections up, the same hundred
+questions, each confined to its own project — which is what anathem does by itself, since every memory takes
+the project of the repository it was saved from:
+
+| | recall@5 | recall@50 | MRR | p50 |
+|---|--:|--:|--:|--:|
+| pooled | 42 % | 70 % | 0.330 | 646 ms |
+| **scoped by project** | **95 %** | **100 %** | **0.886** | 1,184 ms |
+
+So the degradation is a fact about the **searched pool** and not about the
+database. Twenty-four thousand memories spread over twenty projects is the
+top row of the first table, not the bottom one.
+
+That reframes `--project` from bookkeeping into the scaling mechanism, and
+it is the reason the default — derive the project from the repository and
+never make anyone type it — matters more than it looks. It also sets the
+price: scoping buys recall and spends time, 1,184 ms against 646.
+
+### What the ceiling does not prove
+
+These four are about the **simulation**, not about the real measurement
+above it. The real one was scoped rather than modelled, so the first two do
+not apply to it — it has its own limits, at the end.
 
 **It is a bound, not a product.** Nothing was scoped: a corpus was built the
 way a perfect scope would have left it. A real `--scope` is written by
@@ -390,8 +399,16 @@ project here, in both runs, so what was measured is the gain from narrowing
 topic:` offer, and not what `--project` already did.
 
 **It says nothing about ranking.** Removing distractors is not reordering.
-The README's binding constraint — paraphrastic queries found at rank 30 —
-is untouched by any of this, and remains the other half of the week.
+The binding constraint — paraphrastic queries found at rank 30 — is
+untouched by any of this, and remains the other half of the work.
+
+And what the **real** measurement does not prove: it scopes by `project`
+only, which is the one anathem sets by itself. `--scope tag:` and `--scope
+topic:` are narrower still and were not measured directly, so the ceiling
+above remains the only estimate for those. It is also one dataset of prose
+sessions; a corpus of technical notes divides into projects differently, and
+somebody whose whole memory is one repository gets the pooled row rather
+than the scoped one.
 
 ## Against published numbers
 
