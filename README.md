@@ -137,7 +137,7 @@ nothing to learn by heart.
 | `model status` | Shows the active pack, its dimensions and the vector coverage | `mem model status` |
 | `model remove` | Removes the vectors **and deletes the pack file**; search goes back to bm25 only | `mem model remove` |
 | `update` | Checks whether a newer version has been published. It goes to the network **only when you ask it to**: anathem does not talk to any server on its own. It downloads nothing and replaces nothing, it tells you what to run | `mem update` |
-| `doctor` | Diagnoses the installation without modifying anything: version and commit of the binary, database (counts, FTS5 index, orphans, supersession chains), vector layer (pack, file, coverage) and `config.json`/`tags.json`. It exits with 0 if there are no problems, 1 if there are and 2 if it could not run, so a script can tell "it found problems" from "it broke"; having no pack installed is information, not a problem, and a database that does not exist is a notice (code 0) | `mem doctor` |
+| `doctor` | Diagnoses the installation without modifying anything: version and commit of the binary, database (counts, FTS5 index, orphans, supersession chains, memories that look like the same fact saved twice), vector layer (pack, file, coverage) and `config.json`/`tags.json`. It exits with 0 if there are no problems, 1 if there are and 2 if it could not run, so a script can tell "it found problems" from "it broke"; having no pack installed is information, not a problem, and a database that does not exist is a notice (code 0) | `mem doctor` |
 
 Every subcommand accepts `--db <path>` (`~/.anathem/mem.db` by default).
 `mem --version` prints the version and the commit the binary was built from.
@@ -154,7 +154,11 @@ the pack format and how to generate one.
   is installed. `search_memory` returns twenty candidates with a ~120
   character excerpt each, so the model picks among more options at the same
   token cost. `--scope project:/tag:/topic:` narrows the pool, which is a
-  measured improvement and not only a convenience.
+  measured improvement and not only a convenience. A candidate marked
+  `[no word match]` came from the vector ranking alone — that ranking sorts
+  the whole corpus by distance and always answers, so the label is what
+  separates a find from the nearest neighbour of a corpus that knows nothing
+  about the question.
   → [`docs/search.md`](docs/search.md)
 - **Every memory belongs to a project**, derived from the repository you are
   standing in unless you say otherwise. `search_memory` searches that project

@@ -188,6 +188,57 @@ table: a transformation applied in the trigger would be reverted by the next
 rebuild without saying anything. An existing database migrates itself the
 next time it is opened.
 
+## When nothing matched
+
+A vector ranking has no notion of *too far*. It orders the whole corpus by
+distance and returns the nearest entries, so with a pack installed a search
+**always** answers — including one whose words appear nowhere in the corpus.
+Those answers used to be shaped exactly like the good ones: same excerpt,
+same position, same confidence.
+
+`search_memory` marks them:
+
+```
+query "deployment"
+  [id:1] the deployment pipeline runs nightly
+  [id:2] [no word match] notes about invoices and billing
+
+query "kubernetes autoscaling"
+  [id:2] [no word match] notes about invoices and billing
+  [id:1] [no word match] the deployment pipeline runs nightly
+```
+
+One labelled candidate among several is ordinary, and is the vector layer
+doing its job: the memory may be the right one phrased differently, which is
+the whole reason the pack exists. **Every** candidate labelled is the answer
+saying that nothing here matched, and the useful response is another
+wording rather than these results.
+
+It is a label and not a filter, deliberately. Reach — documents BM25 never
+surfaces at all — is what the pack measurably contributes; dropping
+unmatched hits would cost the only thing it buys. `mem search` on the
+command line does not print the label: there the ranking is read by a person
+who can see for themselves that nothing is related.
+
+## Near-duplicates
+
+`mem doctor` lists memories inside one project that share most of their
+words — the same fact saved twice. It is information, never a problem, and
+it reports rather than merges: which of two overlapping notes is the keeper
+needs judgement about what they are for, and merging destroys the loser.
+`mem supersede <new> <old>` keeps one, `mem forget <id>` retires the other.
+
+The scale it was built for: near-duplicate pairs came to **0.21 %** of all
+pairs over a real 682-memory corpus. That number is why nothing automatic
+exists. The first run of the check over a 688-memory corpus found one pair
+at 82 % overlap, a note saved again after a shell ate part of it and never
+superseded — both still active, both still ranking.
+
+It is not contradiction detection, and nothing here is. Two notes can share
+every word and disagree on the one that matters; token overlap cannot see
+the difference, and the only comprehension in reach is an embedding average
+already measured to miss paraphrase.
+
 ## Narrowing the pool
 
 `--scope key:value` narrows a search to a `project`, a `tag` or a `topic`,

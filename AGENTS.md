@@ -167,6 +167,10 @@ What is worth knowing:
   the same one `save_memory` files into; pass `all_projects: true` for
   something saved while working elsewhere — a preference, a decision, anything
   about the person rather than about this repository.
+  A candidate marked `[no word match]` shares no word with your query and came
+  from the vector ranking alone, which always answers: if every candidate
+  carries it, nothing here matched and another wording is worth more than
+  these results.
 - **Reading the state of a subject** with `mem show --topic <key>`, which
   prints what that topic says now and the versions it had before. It is the
   shortest way to pick a thread back up when you already know its key;
