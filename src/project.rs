@@ -1,13 +1,29 @@
 //! Which project a memory belongs to, when nobody says.
 //!
 //! Without this, everything saved without `--project` lands in
-//! `sin-proyecto` and filtering by project stops being useful — which is
+//! `no-project` and filtering by project stops being useful — which is
 //! exactly the flaw of the previous system, where all 390 documents lived in
 //! a single filler container.
 
 use std::path::{Path, PathBuf};
 
-pub const NO_PROJECT: &str = "sin-proyecto";
+pub const NO_PROJECT: &str = "no-project";
+
+/// The name this used to carry. Anything still producing it — an export
+/// taken before the rename, a script, another machine's database about to be
+/// imported — must not split the corpus in two, so it is folded into
+/// `NO_PROJECT` on the way in.
+pub const NO_PROJECT_WAS: &str = "sin-proyecto";
+
+/// The name a project is stored under, folding the old spelling into the
+/// current one.
+pub fn canonical(project: &str) -> &str {
+    if project == NO_PROJECT_WAS {
+        NO_PROJECT
+    } else {
+        project
+    }
+}
 
 /// Derives the project name from the working directory.
 ///

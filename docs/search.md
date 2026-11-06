@@ -216,7 +216,7 @@ are standing in, in this order:
    is named after the branch. The remote is the only name that is stable
    across clones, worktrees and machines.
 2. The name of the repository's folder, if there is no remote.
-3. `sin-proyecto`, outside any repository.
+3. `no-project`, outside any repository.
 
 An explicit `--project` always wins. The project used is reported when
 saving, with the `(detected)` mark when it was not chosen by hand: an

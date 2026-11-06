@@ -79,7 +79,7 @@ pub fn run(conn: &Connection, path: &Path) -> Result<MigrateReport> {
         });
 
         let m = NewMemory {
-            project: meta.and_then(|m| m.project.clone()).unwrap_or_else(|| "sin-proyecto".into()),
+            project: meta.and_then(|m| m.project.clone()).unwrap_or_else(|| crate::project::NO_PROJECT.into()),
             title: title_from(&body),
             tags: tags::classify(&body).map_err(|e| anyhow::anyhow!(e))?,
             refs: tags::extract_refs(&body),

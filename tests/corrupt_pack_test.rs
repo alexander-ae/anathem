@@ -28,7 +28,7 @@ fn a_corrupt_pack_degrades_to_bm25_without_breaking_search() {
         let conn = anathem::db::open(&db).unwrap();
         anathem::vecstore::register_pack(&conn, "mini-es", "deadbeef", 4).unwrap();
     }
-    let packs = dir.path().join("paquetes");
+    let packs = anathem::packstore::packs_dir(dir.path());
     std::fs::create_dir_all(&packs).unwrap();
     std::fs::write(packs.join("mini-es.anathem-pack"), b"esto no es un paquete valido").unwrap();
 
@@ -45,7 +45,7 @@ fn a_corrupt_pack_degrades_to_bm25_without_breaking_search() {
     );
 }
 
-/// A-1, second half: a name that escapes `paquetes/` may already be sitting
+/// A-1, second half: a name that escapes the packs directory may already be sitting
 /// in `meta`, written by a version from before `pack::validate_name`
 /// existed. Reading it has to degrade to bm25 and say so, not hand the name
 /// to `rename` or `remove_file`.
@@ -73,6 +73,6 @@ fn a_poisoned_pack_name_in_the_database_degrades_to_bm25() {
     // And nothing was created or removed outside the packs directory.
     assert!(
         !dir.path().parent().unwrap().join("escapado.anathem-pack").exists(),
-        "no se puede haber tocado nada fuera de paquetes/"
+        "no se puede haber tocado nada fuera del directorio de paquetes"
     );
 }

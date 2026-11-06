@@ -115,6 +115,27 @@ live in the database, not in the binary.
   depend on its agent and is a property of the API: it returns at most four
   documents per query, and nothing at all for 19 of 46 questions.
 
+### Changed
+
+- **The last two Spanish names are gone from disk**: `~/.anathem/paquetes/`
+  is `packs/`, and the project a memory gets when nothing else applies is
+  `no-project` rather than `sin-proyecto`. Every other surface a person sees
+  had been English for months; these two were left because they are data
+  rather than source, and moving data carelessly loses memories.
+
+  So neither is a rename in place. The packs directory is **not moved**: a
+  new installation gets `packs/`, one that already has `paquetes/` keeps it
+  and keeps working, and `mem doctor` says how to move it and the one
+  condition that makes it safe — no `mem serve` running, since the file in
+  there is memory-mapped. Whoever renames it by hand gets the new name
+  honoured from then on.
+
+  The project name is migrated, because a corpus with rows under both
+  spellings would filter wrong in both directions: one `UPDATE` when the
+  database is opened. Anything that still produces the old string — an
+  export taken yesterday, a script, another machine's database about to be
+  imported — is folded into the new name on insert, so it cannot come back.
+
 ### Fixed
 
 - **A memory in Chinese or Japanese was silently unsearchable.** `unicode61`
