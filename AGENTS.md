@@ -163,7 +163,10 @@ What is worth knowing:
 - **Searching** with `search_memory` using the nouns that are likely written in
   the memory, not the question as it would be said out loud: the database is
   lexical. It returns candidates with a short excerpt; for the whole body of
-  one, `get_memory` with its id.
+  one, `get_memory` with its id. It searches the project you are standing in,
+  the same one `save_memory` files into; pass `all_projects: true` for
+  something saved while working elsewhere — a preference, a decision, anything
+  about the person rather than about this repository.
 - **Reading the state of a subject** with `mem show --topic <key>`, which
   prints what that topic says now and the versions it had before. It is the
   shortest way to pick a thread back up when you already know its key;

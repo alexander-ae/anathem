@@ -10,6 +10,20 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A release published with `publish-binaries.sh` carries the vocabulary
+  pack over.** It did not, and `publish.sh` did: the two publishing paths
+  disagreed and the one in use was the one that forgot. v0.4.0 went out with
+  four binaries and no pack, which leaves every new install on lexical search
+  — quietly, because the installer warns and carries on, which is right for
+  the installer and no use as a safeguard. The pack was added to v0.4.0 after
+  the fact; now the script carries it, checks it against its own sha256
+  before republishing it, and refuses to finish a release without it.
+
+- **The docs that still said search ignores the project.** `README.md`,
+  `docs/installation.md` and `AGENTS.md` described the old behaviour.
+
 ### Changed
 
 - **`search_memory` now searches the project the session is in.** It was the

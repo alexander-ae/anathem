@@ -244,8 +244,14 @@ right project without anyone configuring anything.
     saved memory 42 in api-monolito (detected)
 
 The `(detected)` marker distinguishes what was derived from what was chosen by
-hand. Search does **not** filter by project on its own: you pass `--project`
-when you want to narrow it down.
+hand.
+
+The same detection decides what `search_memory` searches: the project the
+session is in, so what was saved here is what is found here. The agent can
+pass `all_projects: true` to look past it, and when the project comes back
+empty the search widens by itself and says so, so nothing is ever out of
+reach. On the command line `mem search` is unchanged: it searches everything
+until you pass `--project`.
 
 ## 5. Checking resource consumption
 

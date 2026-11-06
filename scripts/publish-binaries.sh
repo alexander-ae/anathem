@@ -53,6 +53,7 @@ for cmd in gh glab git curl; do
   command -v "$cmd" >/dev/null 2>&1 || { malo "$cmd is missing from the PATH"; exit 1; }
 done
 
+EXTRA=""
 ARCHIVOS="mem-linux-x86_64.tar.gz mem-windows-x86_64.zip mem-macos-arm64.tar.gz mem-macos-x86_64.tar.gz"
 
 paso "1. Check the tag, here and there"
@@ -154,21 +155,87 @@ for f in $PRESENTES; do
 done
 [ "$SUBIDOS" -gt 0 ] || aviso "nothing new to upload; checking what is published anyway"
 
-paso "5. Download every link back"
+paso "5. The vocabulary pack"
 
-ROTOS=0
-for f in $PRESENTES; do
-  for archivo in "$f" "$f.sha256"; do
-    URL="https://gitlab.com/$REPO_GL/-/releases/$ETIQUETA/downloads/$archivo"
-    CODIGO="$(curl -s -o /dev/null -w '%{http_code}' -L "$URL")"
-    if [ "$CODIGO" = "200" ]; then
-      ok "$archivo"
+# The installer downloads the pack from the SAME release as the binary, and
+# defaults to `permalink/latest`. A release published without it therefore
+# degrades every new install to lexical search, quietly: the installer warns
+# and carries on, which is the right thing for it to do and the wrong thing
+# to rely on.
+#
+# This happened. v0.4.0 went out with four binaries and no pack, because this
+# script only ever dealt with what the build produced and the pack is not
+# built here — `scripts/publish.sh` carried it over and this one did not. The
+# two publishing paths disagreed, and the one in use was the one that forgot.
+PAQUETE=en-es.anathem-pack
+YA="$(glab release view "$ETIQUETA" --repo "$REPO_GL" 2>/dev/null | awk '/^[a-zA-Z0-9._-]+\t/ {print $1}')"
+if printf '%s\n' "$YA" | grep -qx "$PAQUETE"; then
+  ok "already in the release"
+else
+  # The newest release that is not this one. `per_page=2` and not 1, because
+  # this release exists by now and would be its own source.
+  ANTERIOR="$(glab api "projects/$(printf '%s' "$REPO_GL" | sed 's|/|%2F|')/releases?per_page=2" 2>/dev/null \
+    | tr ',' '\n' | sed -n 's/.*"tag_name":"\([^"]*\)".*/\1/p' | grep -vx "$ETIQUETA" | head -1)"
+  if [ -z "$ANTERIOR" ]; then
+    malo "no earlier release to take $PAQUETE from, and this one has none"
+    echo "      Every install would fall back to bm25. Build it with" >&2
+    echo "      tools/build_pack.py and upload it before announcing this." >&2
+    exit 1
+  fi
+  ok "taking it from $ANTERIOR"
+  LLEVADOS=""
+  for f in "$PAQUETE" "$PAQUETE.sha256" "$PAQUETE.minisig"; do
+    URL="https://gitlab.com/$REPO_GL/-/releases/$ANTERIOR/downloads/$f"
+    if curl -fsSL --retry 3 --connect-timeout 20 -o "$TEMPORAL/$f" "$URL"; then
+      LLEVADOS="$LLEVADOS $f"
+      ok "downloaded $f"
+    elif [ "$f" = "$PAQUETE" ]; then
+      malo "$ANTERIOR has no $PAQUETE either"
+      exit 1
     else
-      malo "$archivo -> HTTP $CODIGO"
-      echo "      $URL" >&2
-      ROTOS=$((ROTOS + 1))
+      # The signature is only published for releases that were signed, so
+      # its absence is not a failure. The pack's absence is.
+      aviso "$ANTERIOR has no $f"
     fi
   done
+  # The sha travels with it, so checking costs nothing and the thing being
+  # republished is exactly what was published.
+  if [ -f "$TEMPORAL/$PAQUETE.sha256" ]; then
+    ( cd "$TEMPORAL" && { sha256sum -c "$PAQUETE.sha256" >/dev/null 2>&1 \
+        || shasum -a 256 -c "$PAQUETE.sha256" >/dev/null 2>&1; } ) \
+      && ok "sha256 verified here" \
+      || { malo "the carried-over pack does not match its sha256"; exit 1; }
+  else
+    malo "$ANTERIOR published $PAQUETE with no sha256; not republishing it unchecked"
+    exit 1
+  fi
+  for f in $LLEVADOS; do
+    glab release upload "$ETIQUETA" "$TEMPORAL/$f" --repo "$REPO_GL"
+  done
+  ok "carried over from $ANTERIOR"
+  # Not into `PRESENTES`: that list holds base names and the check below
+  # appends `.sha256` to each. These are already whole file names.
+  EXTRA="$EXTRA $LLEVADOS"
+fi
+
+paso "6. Download every link back"
+
+ROTOS=0
+# The binaries, each with the sha256 published beside it, plus whatever the
+# pack step carried over under its own whole name.
+LISTA=""
+for f in $PRESENTES; do LISTA="$LISTA $f $f.sha256"; done
+LISTA="$LISTA $EXTRA"
+for archivo in $LISTA; do
+  URL="https://gitlab.com/$REPO_GL/-/releases/$ETIQUETA/downloads/$archivo"
+  CODIGO="$(curl -s -o /dev/null -w '%{http_code}' -L "$URL")"
+  if [ "$CODIGO" = "200" ]; then
+    ok "$archivo"
+  else
+    malo "$archivo -> HTTP $CODIGO"
+    echo "      $URL" >&2
+    ROTOS=$((ROTOS + 1))
+  fi
 done
 [ "$ROTOS" -eq 0 ] || { malo "$ROTOS links do not work; the release is not usable"; exit 1; }
 
