@@ -9,24 +9,24 @@ struct EvalSet {
     cases: Vec<Case>,
 }
 
-#[derive(Deserialize)]
-struct Case {
-    id: String,
-    query: String,
-    expect_docs: Vec<String>,
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct Case {
+    pub id: String,
+    pub query: String,
+    pub expect_docs: Vec<String>,
     /// The project this case's haystack lives in. A benchmark that gives
     /// every question its own history needs the search confined to it:
     /// pooling the haystacks and searching all of them measures something
     /// harder than the benchmark defines. `None` searches everything, which
     /// is what an eval set over a single corpus wants.
     #[serde(default)]
-    project: Option<String>,
+    pub project: Option<String>,
     #[serde(default)]
-    kind: Option<String>,
+    pub kind: Option<String>,
     #[serde(default)]
-    parafrastica: Option<bool>,
+    pub parafrastica: Option<bool>,
     #[serde(default)]
-    words: Option<u64>,
+    pub words: Option<u64>,
 }
 
 #[derive(Serialize, Debug)]
@@ -60,27 +60,6 @@ fn median(mut v: Vec<f64>) -> f64 {
     v[v.len() / 2]
 }
 
-pub fn run(
-    conn: &Connection,
-    evalset: &Path,
-    system: &str,
-    ctx: &search::SearchContext,
-) -> Result<EvalResult> {
-    let raw = std::fs::read_to_string(evalset)
-        .with_context(|| format!(
-            "could not parse the eval set at {}.\n\n\
-             An eval set is a JSON file with the queries to measure retrieval\n\
-             against, and which memories they should find. Without it there is\n\
-             nothing to measure. Minimal format:\n\
-             \n\
-             {{\"cases\": [{{\"id\": \"q1\", \"query\": \"...\", \"expect_docs\": [\"<ext_id>\"], \"kind\": \"factual\"}}]}}\n\
-             \n\
-             An `expect_docs` entry is a `memories.ext_id`, or `id:<number>`\n\
-             for a `memories.id` — which is how you name a memory anathem\n\
-             saved itself, since those have no ext_id. See the README.",
-            evalset.display()))?;
-    let set: EvalSet = serde_json::from_str(&raw).context("eval set with invalid JSON")?;
-
 /// How an `expect_docs` entry is compared with a hit.
 ///
 /// A bare entry is an `ext_id`. `id:<number>` is a `memories.id`, which is
@@ -102,6 +81,42 @@ fn name_of(h: &crate::model::SearchHit) -> String {
         None => format!("id:{}", h.memory_id),
     }
 }
+
+pub fn run(
+    conn: &Connection,
+    evalset: &Path,
+    system: &str,
+    ctx: &search::SearchContext,
+) -> Result<EvalResult> {
+    let raw = std::fs::read_to_string(evalset)
+        .with_context(|| format!(
+            "could not parse the eval set at {}.\n\n\
+             An eval set is a JSON file with the queries to measure retrieval\n\
+             against, and which memories they should find. Without it there is\n\
+             nothing to measure. Minimal format:\n\
+             \n\
+             {{\"cases\": [{{\"id\": \"q1\", \"query\": \"...\", \"expect_docs\": [\"<ext_id>\"], \"kind\": \"factual\"}}]}}\n\
+             \n\
+             An `expect_docs` entry is a `memories.ext_id`, or `id:<number>`\n\
+             for a `memories.id` — which is how you name a memory anathem\n\
+             saved itself, since those have no ext_id. See the README.",
+            evalset.display()))?;
+    let set: EvalSet = serde_json::from_str(&raw).context("eval set with invalid JSON")?;
+    run_cases(conn, &set.cases, system, ctx)
+}
+
+/// The measurement itself, over cases already in hand.
+///
+/// `run` reads a file and calls this; `tune` builds its cases out of the
+/// topic keys and calls it too, so both report the same numbers computed the
+/// same way rather than two implementations that drift.
+pub fn run_cases(
+    conn: &Connection,
+    cases: &[Case],
+    system: &str,
+    ctx: &search::SearchContext,
+) -> Result<EvalResult> {
+    let set = EvalSet { cases: cases.to_vec() };
 
     let (mut h5, mut h50) = (0usize, 0usize);
     let (mut rr, mut lat, mut per_case) = (Vec::new(), Vec::new(), Vec::new());

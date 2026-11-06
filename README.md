@@ -129,6 +129,7 @@ nothing to learn by heart.
 | `forget <id>` | Takes a memory out of search without deleting the row | `mem forget 88` |
 | `history <id>` | Shows a memory's supersession chain, newest to oldest | `mem history 42` |
 | `recent` | What was saved lately, newest to oldest, and which agent saved it. It is the opposite of `search`, which orders by relevance. `--since` accepts `6h`, `90m`, `2d` or `todo` (no bound); 24h by default | `mem recent --since 6h` |
+| `tune` | Looks for a better `bm25_weight` for **this** corpus, using the topic keys as a free eval set. It prints a table and a recommendation and changes nothing; it needs a vocabulary pack and at least 20 topic keys | `mem tune` |
 | `eval --evalset <json>` | Runs the evaluation harness | `mem eval --evalset eval/evalset.json --out eval/results/anathem-bm25.json` |
 | `serve` | Starts the MCP server over stdio (5 tools: `search_memory`, `save_memory`, `get_memory`, `list_tags`, `recent_memories`) | `mem serve` |
 | `model install <file>` | Installs a vocabulary pack (`.anathem-pack`) and reindexes every chunk | `mem model install mini-es.anathem-pack` |
@@ -172,7 +173,7 @@ A `config.json` next to the database, every key optional:
 
 | key | default | what it does |
 |---|---|---|
-| `bm25_weight` | `1.0` | how much the lexical ranking weighs against the vector one |
+| `bm25_weight` | `1.0` | how much the lexical ranking weighs against the vector one. The right value depends on your corpus — `mem tune` measures it |
 | `candidates` | `20` | how many candidates `search_memory` returns |
 | `excerpt` | `120` | characters of each candidate's snippet |
 | `budget` | `1200` | tokens `search_memory` spends on its answer. It trims the list before `candidates` applies, so raising one without the other changes nothing |

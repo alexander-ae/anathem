@@ -22,4 +22,5 @@ pub mod recent;
 pub mod search;
 pub mod supersede;
 pub mod tags;
+pub mod tune;
 pub mod vecstore;

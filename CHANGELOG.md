@@ -32,6 +32,29 @@ live in the database, not in the binary.
   per call, and zero is refused the way `candidates` and `excerpt` already
   refuse it.
 
+- **`mem tune`**, which looks for a better `bm25_weight` for the corpus in
+  front of it. There is no right default: measured on LongMemEval the best
+  weight is 1.0, and on a corpus of real technical notes it is 8.0 — prose
+  gives the vector ranking something to catch, while notes dense in
+  identifiers have bm25 already confident at rank 1, where fusing dilutes
+  it. The distance is 0.03 to 0.06 of MRR in both directions.
+
+  Finding it normally costs an afternoon of writing questions and labelling
+  answers. It does not here, because the topic keys are that labelling
+  already done: `--topic` is somebody declaring that a memory is the current
+  answer about a subject, which is a query and its expected document. The
+  output says, above the table, that a key names its subject in keywords and
+  so flatters bm25 — it is for choosing between configurations, where the
+  bias falls on every row equally, not for quoting as a quality figure.
+  Checked against a hand-labelled set of 50 queries over the same corpus:
+  the two rank the weights the same way, Spearman 0.86, and both put the
+  default third of seven.
+
+  It recommends and changes nothing, refuses under 20 keys saying how many
+  there are, refuses with no vocabulary pack because then every weight gives
+  the same answer, and says so when the best value sits on the edge of the
+  grid.
+
 - **An eval case can name a memory by id.** `expect_docs` matched
   `memories.ext_id` and nothing else, and only `migrate` and `import` assign
   one — so every memory `save_memory` wrote was unmatchable, and `mem eval`
