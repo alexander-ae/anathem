@@ -93,6 +93,15 @@ enum Cmd {
     },
     /// Rebuilds chunks and the FTS5 index from memories.body
     Reindex,
+    /// What the search log says about whether this is earning its place
+    Stats {
+        /// How far back: 7d, 30d, 6h. Everything, by default.
+        #[arg(long)]
+        since: Option<String>,
+        /// How many of the queries that found nothing to list
+        #[arg(long, default_value_t = 10)]
+        empty: usize,
+    },
     /// Looks for a better `bm25_weight` for this corpus, using the topic
     /// keys as its eval set. It recommends and changes nothing.
     Tune {},
@@ -640,6 +649,57 @@ fn run(cli: Cli) -> Result<()> {
             let n = anathem::edit::reindex(&conn)?;
             println!("reindexed {n} memories");
             sync_after_write(&conn, &dir);
+        }
+        Cmd::Stats { since, empty } => {
+            let conn = anathem::db::open(&path)?;
+            let cutoff = anathem::stats::cutoff_for(since.as_deref())?;
+            let s = anathem::stats::collect(&conn, cutoff.as_deref())?;
+            if s.searches == 0 {
+                println!("No searches logged{}.\n\nOnly the MCP server writes to the log; \
+                          searches run from this CLI are not recorded.",
+                    since.as_deref().map(|w| format!(" in the last {w}")).unwrap_or_default());
+                return Ok(());
+            }
+            println!(
+                "{} searches{}, {} to {}.\n",
+                s.searches,
+                since.as_deref().map(|w| format!(" in the last {w}")).unwrap_or_default(),
+                s.first.as_deref().unwrap_or("?").chars().take(10).collect::<String>(),
+                s.last.as_deref().unwrap_or("?").chars().take(10).collect::<String>(),
+            );
+            println!(
+                "This is not recall. It cannot say whether the memory you wanted existed\n\
+                 and was missed — only what happened to the searches that ran.\n"
+            );
+            println!("  answered         {:>6}  ({:.0}% of searches ended in opening a memory)",
+                s.followed_up, s.answer_rate() * 100.0);
+            println!("  found nothing    {:>6}  ({:.0}%)",
+                s.empty, s.empty as f64 / s.searches as f64 * 100.0);
+            println!("  tokens           {:>6}  in all, {} per search at the median",
+                s.tokens_total, s.tokens_p50);
+            match s.median_rank() {
+                Some(r) if s.ranks.len() >= 20 => println!(
+                    "  opened at rank   {:>6}  at the median, over {} searches that recorded one",
+                    r, s.ranks.len()),
+                _ => println!(
+                    "  opened at rank        -  {} searches recorded which one, too few to rank",
+                    s.ranks.len()),
+            }
+            if s.by_week.len() > 1 {
+                println!("\n  week starting   searches   answered");
+                for (w, n, f) in &s.by_week {
+                    println!("  {w}   {n:>8}   {f:>8}");
+                }
+            }
+            if !s.empty_queries.is_empty() {
+                println!("\nFound nothing. These are the wordings to improve, and they are free:");
+                for q in s.empty_queries.iter().take(empty) {
+                    println!("  {q}");
+                }
+                if s.empty_queries.len() > empty {
+                    println!("  ... and {} more", s.empty_queries.len() - empty);
+                }
+            }
         }
         Cmd::Tune {} => {
             let conn = anathem::db::open(&path)?;

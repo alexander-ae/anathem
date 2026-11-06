@@ -48,6 +48,22 @@ live in the database, not in the binary.
   Engram, and shipping an uncalibrated threshold is worse than shipping
   none.
 
+- **`mem stats`**, which reads the search log back. "Is this still earning
+  its place after a month" had no answer with numbers in it, and the data to
+  answer it was already being written: how often a search led to opening a
+  memory, what the searches cost in tokens, which ones came back empty, and
+  how all of that moves week by week.
+
+  It says what it cannot measure before it says anything else. It is not
+  recall — you never learn whether the right memory existed and was missed,
+  and a search with no follow-up can mean three different things. And it
+  refuses to publish a median rank until there are enough rows to support
+  one: in the installation this was built against, 669 searches recorded 19
+  follow-ups and **zero** of them recorded which memory, so any MRR would
+  have been a number with nothing behind it.
+
+  Nothing in it runs during a search.
+
 - **`mem tune`**, which looks for a better `bm25_weight` for the corpus in
   front of it. There is no right default: measured on LongMemEval the best
   weight is 1.0, and on a corpus of real technical notes it is 8.0 — prose
