@@ -277,3 +277,23 @@ fn the_configured_budget_bounds_what_search_memory_returns() {
         "a bigger budget has to show more candidates: {} against {}\n--- narrow ---\n{narrow}\n--- wide ---\n{wide}",
         count(&wide), count(&narrow));
 }
+
+/// Measured: of 16 questions phrased the way a person describes a situation
+/// rather than names it, one try lands 5 inside the twenty candidates and
+/// three different wordings land 15. The tool already said to rephrase; what
+/// it did not say is that one more try is not the point, several genuinely
+/// different ones are.
+#[test]
+fn search_memory_asks_for_several_different_wordings_not_one_retry() {
+    let (_d, conn) = conn_with_data();
+    let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/list"});
+    let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req)
+        .unwrap().unwrap();
+    let tools = res["result"]["tools"].as_array().unwrap();
+    let d = tools.iter().find(|t| t["name"] == "search_memory").unwrap()["description"]
+        .as_str().unwrap();
+    assert!(d.contains("two or three"),
+        "it has to ask for more than one retry: {d}");
+    assert!(d.contains("different"),
+        "and for wordings that differ, since repeating the same nouns measures nothing: {d}");
+}

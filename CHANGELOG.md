@@ -32,6 +32,22 @@ live in the database, not in the binary.
   per call, and zero is refused the way `candidates` and `excerpt` already
   refuse it.
 
+- **`search_memory` says how much rephrasing is worth.** It already told the
+  model to rephrase when a search came back empty; what it did not say is
+  that one more try is not the point. Measured over 16 questions that
+  describe a situation instead of naming it, one phrasing lands the memory
+  inside the twenty candidates 5 times and three genuinely different
+  phrasings land it 15 — and several arrive at rank 1. Rephrasing also
+  reorders the ones that already worked: rank 16 to 1, 36 to 2, 43 to 3.
+
+  The guidance lives in the tool description, which is anathem's own voice
+  and not retrieved content. The matching signal in the *response* — telling
+  the model when nothing matched strongly — is deliberately not here: with
+  no stopword list, a coverage threshold would count "que" and "los" as
+  terms covered, which is the failure this project names when describing
+  Engram, and shipping an uncalibrated threshold is worse than shipping
+  none.
+
 - **`mem tune`**, which looks for a better `bm25_weight` for the corpus in
   front of it. There is no right default: measured on LongMemEval the best
   weight is 1.0, and on a corpus of real technical notes it is 8.0 — prose
