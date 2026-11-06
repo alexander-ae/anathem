@@ -93,10 +93,10 @@ enum Cmd {
     },
     /// Rebuilds chunks and the FTS5 index from memories.body
     Reindex,
-    /// Runs the evaluation harness
     /// Looks for a better `bm25_weight` for this corpus, using the topic
     /// keys as its eval set. It recommends and changes nothing.
     Tune {},
+    /// Runs the evaluation harness
     Eval {
         /// `evalset.json` next to the database, by default. Relative to
         /// the current directory would be fragile: running the same command
