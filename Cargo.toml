@@ -31,6 +31,16 @@ sha2 = "0.10"
 tempfile = "3"
 tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
 
+# Only to put `SIGPIPE` back to its default handler in `main`; Rust
+# ignores it, which turns `mem ... | head` into a panic. See the comment
+# on `die_on_closed_pipe`.
+# `tests/broken_pipe_test.rs` builds the closed pipe it hands the child.
+[target.'cfg(unix)'.dev-dependencies]
+libc = "0.2"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 serde_yaml = "0.9.34"
 tempfile = "3"

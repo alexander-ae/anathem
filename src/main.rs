@@ -414,7 +414,34 @@ fn sync_after_write(conn: &rusqlite::Connection, dir: &Path) {
     }
 }
 
+/// Dies from `SIGPIPE` the way `grep` and `cat` do, instead of panicking.
+///
+/// Rust sets `SIGPIPE` to `SIG_IGN` before `main` runs, so a write to a
+/// closed pipe returns `EPIPE` and `println!` — which unwraps — panics on
+/// it. For a library that is the safe default; for a command line tool it
+/// means `mem search x | head -1` ends in a panic and a backtrace note,
+/// after the user did something entirely ordinary.
+///
+/// This also changes how `serve` ends when its MCP client disappears: today
+/// the `writeln!` returns `EPIPE`, which travels up as an error and prints
+/// `Error: Broken pipe`. With the default handler back the process is killed
+/// by the signal instead. That is the better of the two — the message was
+/// being written to a client that is already gone — but it is a change, not
+/// only a fix.
+#[cfg(unix)]
+fn die_on_closed_pipe() {
+    // SAFETY: `signal` with `SIG_DFL` is async-signal-safe, and this runs
+    // before any thread is spawned.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
+#[cfg(not(unix))]
+fn die_on_closed_pipe() {}
+
 fn main() {
+    die_on_closed_pipe();
     let cli = Cli::parse();
     let is_doctor = matches!(cli.cmd, Cmd::Doctor);
     if let Err(e) = run(cli) {

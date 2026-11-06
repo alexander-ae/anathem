@@ -10,6 +10,18 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`mem` no longer panics when whatever was reading its output goes away.**
+  `mem search x | head -1`, a `less` quit before the end, any pipeline whose
+  reader leaves first: Rust ignores `SIGPIPE`, so the write came back
+  `EPIPE` and `println!` panicked on it, printing a backtrace note at
+  someone who had done nothing unusual. The default handler is restored at
+  the top of `main`, and the process now ends the way `grep` and `cat` do.
+  This also changes how `serve` ends when its MCP client disappears: it is
+  killed by the signal instead of reporting `Error: Broken pipe` to a client
+  that is already gone.
+
 ## [0.4.0] - 2026-11-06
 
 ### Added
