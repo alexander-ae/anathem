@@ -10,6 +10,17 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Changed
+
+- **The documentation says what the last two releases changed.** `mem doctor`
+  grew a section nothing described, `search_memory` prints a label nothing
+  explained, and the README still listed the old set of checks. Added: what
+  `[no word match]` means and when every candidate carrying it is the
+  answer, the near-duplicate report and the 0.21 %% that is why nothing
+  automatic exists, and the pinned-version example no longer points at
+  v0.1.0.
+
+
 ## [0.6.0] - 2026-11-06
 
 ### Added

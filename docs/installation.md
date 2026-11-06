@@ -37,7 +37,7 @@ sh install.sh --setup-path --pack ~/Downloads/en-es.anathem-pack
 sh install.sh --setup-path --no-pack
 
 # pin a version instead of the latest one
-sh install.sh --tag v0.1.0
+sh install.sh --tag v0.5.1
 ```
 
 Everything that gets downloaded is checked against its sha256, and if it
