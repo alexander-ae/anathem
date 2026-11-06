@@ -112,6 +112,46 @@ recall@5 goes from 34% to 58% (n=50). See
   was really searching.
 
 
+## `bm25_weight`: the corpus decides it, not the default
+
+`bm25_weight` balances the lexical ranking against the vector one when the
+two are fused. The default is 1.0, and there is no value that is right for
+everybody — this is measured, on two corpora, with the same code:
+
+| `bm25_weight` | LongMemEval-S (MRR) | a corpus of real technical notes (MRR) |
+|---|--:|--:|
+| 0,25 | — | 0,390 |
+| 0,5 | — | 0,388 |
+| **1,0 (default)** | **0,938** | 0,409 |
+| 2,0 | 0,932 | 0,422 |
+| 4,0 | 0,920 | 0,454 |
+| **8,0** | 0,904 | **0,466** |
+| 16,0 | 0,902 | 0,455 |
+
+(LongMemEval-S: 142 answerable questions of a 150-question sample, 7,168
+memories, `en-es` pack installed. The notes: 48 hand-written questions over
+682 memories. `recall@5` is saturated at 97% on the benchmark, so MRR is the
+only column there that discriminates.)
+
+**The two want opposite settings, and both are right.** LongMemEval's
+sessions are conversation in prose: there is meaning for a vector ranking to
+catch, and it deserves its weight. A corpus of working notes is dense in
+identifiers — ticket numbers, flag names, commit hashes — where BM25 is
+already confident at rank 1, and fusing a second ranking dilutes that
+confidence. The gap between the two optima is larger than what the pack
+itself buys on either corpus.
+
+The default stays at 1.0 because that is where the published figures are
+measured and it suits prose. If your memory is mostly technical notes, try
+4 to 8.
+
+Or measure it instead of guessing: **`mem tune`** runs that grid over your
+own corpus, using your topic keys as its eval set, and prints the table with
+your current value marked. It recommends and changes nothing. What it cannot
+do is give you a quality figure — a topic key names its subject in keywords,
+so those questions flatter the lexical side — and the command says so above
+its own table.
+
 ## Narrowing the pool
 
 `--scope key:value` narrows a search to a `project`, a `tag` or a `topic`,
