@@ -117,6 +117,19 @@ live in the database, not in the binary.
 
 ### Fixed
 
+- **A memory in Chinese or Japanese was silently unsearchable.** `unicode61`
+  splits on whitespace and punctuation, and those languages have neither
+  inside a sentence, so a whole clause was indexed as one token: `設定ファイル`
+  sat inside a stored memory and searching for it returned nothing. The
+  memory was saved, counted and exported, and could not be retrieved; `mem
+  doctor` reported the installation healthy, because everything it checks
+  was true. Runs of Han, hiragana and katakana are now indexed as
+  overlapping bigrams, and the query is transformed the same way. Korean is
+  untouched, since it is written with spaces and already worked. Latin text
+  is untouched too, verified rather than assumed: the same 50 queries over
+  the same corpus give the same recall@5, recall@50 and MRR as before. An
+  existing database migrates itself when it is next opened.
+
 - **`docs/installation.md` said the vocabulary pack "is not published
   anywhere yet".** It has been published since v0.3.0 — the release carries
   `en-es.anathem-pack` with its `.sha256` and its signature, and `install.sh`

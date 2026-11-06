@@ -146,6 +146,10 @@ fn word_re() -> &'static Regex {
 /// Turns free text into a safe FTS5 MATCH expression. Each term is quoted
 /// so characters like the `+` in "N+1" are not read as query syntax.
 pub fn to_match(text: &str) -> String {
+    // The index holds CJK as bigrams (`chunk::segment_cjk`), so the query
+    // has to become bigrams too. For text with no CJK in it this is the
+    // identity and the expression is exactly what it always was.
+    let text = &crate::chunk::segment_cjk(text);
     let terms: Vec<String> = word_re()
         .find_iter(text)
         .take(MAX_TERMS)
