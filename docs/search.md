@@ -206,19 +206,62 @@ query "deployment"
 query "kubernetes autoscaling"
   [id:2] [no word match] notes about invoices and billing
   [id:1] [no word match] the deployment pipeline runs nightly
+
+query "the deployment schedule"
+  [id:1] [2/3 words] the deployment pipeline runs nightly
 ```
 
 One labelled candidate among several is ordinary, and is the vector layer
 doing its job: the memory may be the right one phrased differently, which is
 the whole reason the pack exists. **Every** candidate labelled is the answer
 saying that nothing here matched, and the useful response is another
-wording rather than these results.
+wording rather than these results. A fraction says the same thing more
+precisely: `[1/4 words]` across a whole answer is as thin as no match at all.
+
+### Which words count
+
+Only the ones that can tell one memory from another. A term matching more
+than half the chunks separates nothing — BM25's own IDF crosses zero around
+there, so the ranker already treats it as saying nothing — and it is
+therefore left out of both the total and the count.
+
+This is the whole fix for a defect that made the label useless in Spanish.
+It used to read "did anything match at all", so a single `de` in the query
+scored every memory in the corpus and the warning went silent:
+
+```
+query "quuxly frobnicate"      ->  8 hits, 7 labelled
+query "de quuxly frobnicate"   ->  7 hits, 0 labelled      (before)
+                                   7 hits, 7 labelled      (now)
+```
+
+Neither invented word is anywhere in the corpus. One stopword used to be
+enough to hide that — and a question phrased the way a person asks one
+nearly always carries a stopword, so the warning fired mainly for the
+keyword queries that least needed it.
+
+The test is frequency and deliberately **not** a stopword list. The index is
+`unicode61` with no stopwords in any language; a list would have to be
+written per language, and the obvious shortcut of dropping short words would
+throw away `api`, `ci` and `n+1`, which are exactly the terms worth
+matching. Frequency needs no list and no language.
+
+Below twenty chunks the test is suspended: in a corpus of ten notes a word
+in six of them is not a stopword, it is a small corpus, and discarding it
+would leave the search with no evidence at all.
 
 It is a label and not a filter, deliberately. Reach — documents BM25 never
 surfaces at all — is what the pack measurably contributes; dropping
 unmatched hits would cost the only thing it buys. `mem search` on the
-command line does not print the label: there the ranking is read by a person
-who can see for themselves that nothing is related.
+command line does not print the label, because there the ranking is read by
+a person who can see for themselves that nothing is related; `mem search
+--explain` does print the count, next to the raw scores:
+
+```
+mem search "por que fallo el deploy" --explain
+  1. [p] the deploy of OP-204 broke production  (bm25=-5.433, 3/3 words)
+  7. [p] a note about something else            (bm25=-4.717, 1/3 words)
+```
 
 ## Near-duplicates
 

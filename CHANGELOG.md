@@ -12,6 +12,25 @@ live in the database, not in the binary.
 
 ### Fixed
 
+- **One stopword in the query no longer silences the "nothing matched"
+  warning.** The `[no word match]` label asked whether *anything* had
+  matched rather than whether anything useful had, so a single `de` gave
+  every memory in a Spanish corpus a score and the warning went quiet.
+  Measured on a real corpus: `quuxly frobnicate`, with neither word anywhere
+  in it, came back with 7 of 8 hits labelled; `de quuxly frobnicate` came
+  back with **none**, and `la de el en` answered a question that says
+  nothing with eight confident, unlabelled results. The warning therefore
+  fired for keyword searches and stayed silent for the questions phrased the
+  way a person asks them.
+
+  A term is now counted only when it appears in fewer than half the chunks,
+  which is where BM25's own IDF crosses zero — the ranker already treats a
+  word past that point as saying nothing. It is frequency and not a stopword
+  list on purpose: the index is `unicode61` with no stopwords in any
+  language, and dropping short words instead would throw away `api`, `ci`
+  and `n+1`. Below twenty chunks the test is suspended, because in a corpus
+  that small a frequent word is not a stopword, it is a small corpus.
+
 - **Signing a release no longer fails on a signature that is already
   there.** GitLab answers a duplicate asset link with a 400 that aborts the
   whole run, and `sign-release.sh` had no guard against it — it did not
@@ -22,6 +41,14 @@ live in the database, not in the binary.
   taken the binaries with it and left a release that looked signed in the
   log and was unsigned on the server.
 
+
+### Added
+
+- **Candidates say how much of the query they hold**, as ` [1/3 words]`
+  beside the existing ` [no word match]`. The boolean could not distinguish
+  a hit that matched every word from one that matched a single common one,
+  which is the ordinary case for a question asked in prose. `mem search
+  --explain` prints the same count next to the raw scores.
 
 ### Changed
 

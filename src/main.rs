@@ -558,6 +558,11 @@ fn run(cli: Cli) -> Result<()> {
                         (None, Some(c)) => format!("cosine={c:.3}, vector only"),
                         (None, None) => "no signal".to_string(),
                     };
+                    // The raw scores do not say how much of the question
+                    // landed: a hit scored on one common word looks the same
+                    // as one that matched every term. This is the number
+                    // that told them apart.
+                    let signals = format!("{signals}, {}/{} words", e.words_matched, e.words_total);
                     println!("{:2}. [{}]{} {}  ({signals})", i + 1, e.hit.project, from, e.hit.title);
                 } else {
                     println!("{:2}. [{}]{} {}", i + 1, e.hit.project, from, e.hit.title);
