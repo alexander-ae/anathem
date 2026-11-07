@@ -33,6 +33,13 @@ pub const MAX_BUDGET_TOKENS: usize = 100_000;
 /// `Config::candidates` were run on queries of a handful of words.
 const MAX_TERMS: usize = 50;
 
+/// Below this many chunks, document frequency says nothing about whether a
+/// word is common. In a corpus of ten notes a word in six of them is not a
+/// stopword, it is a small corpus, and discarding it would throw away the
+/// only evidence there is. Real corpora are orders of magnitude past this,
+/// so the floor only ever applies to a database that has just been created.
+const MIN_CHUNKS_FOR_DF: usize = 20;
+
 #[derive(Debug, Clone)]
 pub struct Query {
     pub text: String,
@@ -143,19 +150,35 @@ fn word_re() -> &'static Regex {
     R.get_or_init(|| Regex::new(r"\w+").unwrap())
 }
 
-/// Turns free text into a safe FTS5 MATCH expression. Each term is quoted
-/// so characters like the `+` in "N+1" are not read as query syntax.
-pub fn to_match(text: &str) -> String {
+/// The query's distinct terms, each already quoted as its own FTS5 MATCH
+/// expression. Quoted so characters like the `+` in "N+1" are not read as
+/// query syntax.
+///
+/// Distinct by the lowercased term: asking for `de de de` is asking about
+/// one word, and counting it three times would make a query look better
+/// matched the more it repeated itself. The index also folds diacritics
+/// (`remove_diacritics 2`) and this does not, so `política` and `politica`
+/// survive here as two terms where the index has one. That is the harmless
+/// direction: it can only make a query look longer than it is, never make a
+/// word that matched nothing look like it matched.
+pub fn match_terms(text: &str) -> Vec<String> {
     // The index holds CJK as bigrams (`chunk::segment_cjk`), so the query
     // has to become bigrams too. For text with no CJK in it this is the
     // identity and the expression is exactly what it always was.
     let text = &crate::chunk::segment_cjk(text);
-    let terms: Vec<String> = word_re()
+    let mut seen = std::collections::HashSet::new();
+    word_re()
         .find_iter(text)
         .take(MAX_TERMS)
-        .map(|m| format!("\"{}\"", m.as_str().replace('"', "")))
-        .collect();
-    terms.join(" OR ")
+        .map(|m| m.as_str().replace('"', ""))
+        .filter(|t| seen.insert(t.to_lowercase()))
+        .map(|t| format!("\"{t}\""))
+        .collect()
+}
+
+/// Turns free text into a safe FTS5 MATCH expression.
+pub fn to_match(text: &str) -> String {
+    match_terms(text).join(" OR ")
 }
 
 fn est_tokens(s: &str) -> usize {
@@ -219,6 +242,12 @@ pub struct Explained {
     pub hit: SearchHit,
     pub bm25: Option<f64>,
     pub cosine: Option<f32>,
+    /// How many of `words_total` this memory actually contains.
+    pub words_matched: usize,
+    /// How many of the query's terms carry evidence at all — see
+    /// `word_evidence`. Zero means the query had nothing to match with, and
+    /// then `words_matched` is zero too and says nothing.
+    pub words_total: usize,
 }
 
 /// Which retrievers are available for this operation.
@@ -453,6 +482,71 @@ fn hit_from_chunk(conn: &Connection, chunk_id: i64) -> Result<Option<(SearchHit,
     }
 }
 
+/// For each memory in `ids`, how many of the query's terms it contains —
+/// counting only the terms that could tell one memory from another.
+///
+/// Returns `(terms that carry evidence, count per memory)`.
+///
+/// **Which terms count.** A term that matches more than half the chunks
+/// separates nothing: BM25's own IDF goes to zero and past it right around
+/// there, so the ranker already treats such a word as saying nothing, and
+/// `de` in a Spanish corpus is in every chunk there is. The test is document
+/// frequency and deliberately not a stopword list: the index is `unicode61`
+/// with no stopwords, in any language, and a list would have to be written
+/// per language and would still call `api` or `ci` short enough to drop.
+/// Frequency needs no list and no language.
+///
+/// **What it costs.** One FTS5 lookup per term, each stopped at the
+/// threshold — a word common enough to be discarded is never walked further
+/// than the point that discards it. Terms are counted in chunks rather than
+/// memories, the unit the index is built in; a memory that repeats a word
+/// across many chunks therefore pushes it towards common, which is the
+/// direction that errs on the side of saying less.
+fn word_evidence(
+    conn: &Connection,
+    terms: &[String],
+    ids: &[i64],
+) -> Result<(usize, HashMap<i64, usize>)> {
+    let mut per: HashMap<i64, usize> = HashMap::new();
+    if terms.is_empty() || ids.is_empty() {
+        return Ok((0, per));
+    }
+    let chunks: i64 = conn.query_row("select count(*) from chunks", [], |r| r.get(0))?;
+    let cap: i64 = if (chunks as usize) >= MIN_CHUNKS_FOR_DF { chunks / 2 } else { i64::MAX };
+    let wanted: std::collections::HashSet<i64> = ids.iter().copied().collect();
+
+    let mut total = 0usize;
+    let mut st = conn.prepare_cached(
+        "select c.memory_id
+           from chunks_fts join chunks c on c.id = chunks_fts.rowid
+          where chunks_fts match ?1
+          limit ?2",
+    )?;
+    for term in terms {
+        // One past the threshold is all it takes to know the term is over
+        // it, and it is also the most this ever reads.
+        let limit = cap.saturating_add(1);
+        let rows = st.query_map(rusqlite::params![term, limit], |r| r.get::<_, i64>(0))?;
+        let mut seen: std::collections::HashSet<i64> = std::collections::HashSet::new();
+        let mut df: i64 = 0;
+        for row in rows {
+            let id = row?;
+            df += 1;
+            if wanted.contains(&id) {
+                seen.insert(id);
+            }
+        }
+        if df > cap {
+            continue;
+        }
+        total += 1;
+        for id in seen {
+            *per.entry(id).or_insert(0) += 1;
+        }
+    }
+    Ok((total, per))
+}
+
 pub fn run_explained(
     conn: &Connection,
     q: &Query,
@@ -604,7 +698,16 @@ pub fn run_explained(
         spent += cost;
         let bm25 = if hit.score < 0.0 { Some(hit.score) } else { None };
         let cosine = cosines.get(&id).copied();
-        out.push(Explained { hit, bm25, cosine });
+        out.push(Explained { hit, bm25, cosine, words_matched: 0, words_total: 0 });
+    }
+
+    // Counted once the list is final, so the work is proportional to what
+    // is returned and not to the candidate pool.
+    let ids: Vec<i64> = out.iter().map(|e| e.hit.memory_id).collect();
+    let (words_total, per) = word_evidence(conn, &match_terms(&q.text), &ids)?;
+    for e in out.iter_mut() {
+        e.words_total = words_total;
+        e.words_matched = per.get(&e.hit.memory_id).copied().unwrap_or(0);
     }
     Ok(out)
 }

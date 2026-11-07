@@ -154,11 +154,13 @@ the pack format and how to generate one.
   is installed. `search_memory` returns twenty candidates with a ~120
   character excerpt each, so the model picks among more options at the same
   token cost. `--scope project:/tag:/topic:` narrows the pool, which is a
-  measured improvement and not only a convenience. A candidate marked
-  `[no word match]` came from the vector ranking alone — that ranking sorts
-  the whole corpus by distance and always answers, so the label is what
-  separates a find from the nearest neighbour of a corpus that knows nothing
-  about the question.
+  measured improvement and not only a convenience. Every candidate says how
+  much of the query it holds — `[no word match]`, `[1/3 words]`, or nothing
+  when all of it landed — counting only the words rare enough to tell one
+  memory from another, so one `de` in a Spanish query no longer makes an answer
+  look matched. That ranking sorts the whole corpus by distance and always
+  answers, so the label is what separates a find from the nearest neighbour
+  of a corpus that knows nothing about the question.
   → [`docs/search.md`](docs/search.md)
 - **Every memory belongs to a project**, derived from the repository you are
   standing in unless you say otherwise. `search_memory` searches that project
