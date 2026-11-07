@@ -10,6 +10,8 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-07
+
 ### Fixed
 
 - **One stopword in the query no longer silences the "nothing matched"
@@ -56,7 +58,7 @@ live in the database, not in the binary.
   grew a section nothing described, `search_memory` prints a label nothing
   explained, and the README still listed the old set of checks. Added: what
   `[no word match]` means and when every candidate carrying it is the
-  answer, the near-duplicate report and the 0.21 %% that is why nothing
+  answer, the near-duplicate report and the 0.21 % that is why nothing
   automatic exists, and the pinned-version example no longer points at
   v0.1.0.
 
@@ -621,7 +623,11 @@ First release with prebuilt binaries.
 - The project lives on GitLab. GitHub remains only as the macOS builder, since
   GitLab's macOS runners are Premium and Ultimate only.
 
-[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v0.4.0...main
+[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v0.7.0...main
+[0.7.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.6.0...v0.7.0
+[0.6.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.5.1...v0.6.0
+[0.5.1]: https://gitlab.com/__alexander__/anathem/-/compare/v0.5.0...v0.5.1
+[0.5.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.4.0...v0.5.0
 [0.4.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.3.0...v0.4.0
 [0.3.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.2.2...v0.3.0
 [0.2.2]: https://gitlab.com/__alexander__/anathem/-/compare/v0.2.1...v0.2.2
