@@ -104,7 +104,12 @@ enum Cmd {
     },
     /// Looks for a better `bm25_weight` for this corpus, using the topic
     /// keys as its eval set. It recommends and changes nothing.
-    Tune {},
+    Tune {
+        /// Writes the recommended value into `config.json`, keeping every
+        /// other key it already has
+        #[arg(long)]
+        apply: bool,
+    },
     /// Runs the evaluation harness
     Eval {
         /// `evalset.json` next to the database, by default. Relative to
@@ -740,7 +745,7 @@ fn run(cli: Cli) -> Result<()> {
                 }
             }
         }
-        Cmd::Tune {} => {
+        Cmd::Tune { apply } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new("."));
             let cfg = anathem::config::load(dir)?;
@@ -764,7 +769,7 @@ fn run(cli: Cli) -> Result<()> {
                 cases.len()
             );
 
-            let scored = anathem::tune::sweep(&conn, &cases, &pack)?;
+            let scored = anathem::tune::sweep_until_interior(&conn, &cases, &pack)?;
             println!("{:>8}  {:>7}  {:>9}", "weight", "MRR", "recall@5");
             for (w, mrr, r5) in &scored {
                 let here = if (*w - cfg.bm25_weight).abs() < f64::EPSILON { "  <- yours" } else { "" };
@@ -781,20 +786,59 @@ fn run(cli: Cli) -> Result<()> {
                 Some(n) if (best - cfg.bm25_weight).abs() < f64::EPSILON =>
                     println!("Your `bm25_weight` of {} is already the best of these ({n:.3}).", cfg.bm25_weight),
                 Some(n) => println!(
-                    "`bm25_weight: {best}` scores {best_mrr:.3} against your {}'s {n:.3}.\n\
-                     Put it in {}/config.json if you want it; nothing here changed it.",
-                    cfg.bm25_weight, dir.display()),
+                    "`bm25_weight: {best}` scores {best_mrr:.3} against your {}'s {n:.3}.",
+                    cfg.bm25_weight),
                 None => println!(
                     "`bm25_weight: {best}` is the best of these ({best_mrr:.3}). Your {} was \
                      not on the\ngrid, so there is no row to compare it against.",
                     cfg.bm25_weight),
             }
-            if best == *anathem::tune::WEIGHTS.last().unwrap()
-                || best == anathem::tune::WEIGHTS[0] {
+            let ya_es_el_tuyo = (best - cfg.bm25_weight).abs() < f64::EPSILON;
+            if best >= anathem::tune::MAX_WEIGHT || best <= anathem::tune::MIN_WEIGHT {
                 println!(
-                    "\nIt landed on the edge of the grid, so the real optimum may be \
-                     further out."
+                    "\nThe grid was extended until it ran out of room and the best \
+                     value is still
+at the end, which says the vector ranking is \
+                     adding nothing on this corpus
+rather than that {best} is a good \
+                     number."
                 );
+            }
+            if ya_es_el_tuyo {
+                // Nothing to apply, and `--apply` should say so rather than
+                // rewriting a file to the value it already holds.
+            } else if apply {
+                use anathem::config::Wrote;
+                let cual = dir.join("config.json");
+                match anathem::config::write_bm25_weight(dir, best)? {
+                    Wrote::Created =>
+                        println!("\n{}: created, holding bm25_weight {best}", cual.display()),
+                    Wrote::KeyAdded =>
+                        println!("\n{}: bm25_weight {best} added", cual.display()),
+                    Wrote::Replaced(v) =>
+                        println!("\n{}: bm25_weight {v} -> {best}", cual.display()),
+                }
+                println!(
+                    "Every other key it had is untouched. To undo it, put the old \
+                     value back
+or delete the key: with none, the default is {}.",
+                    anathem::config::Config::default().bm25_weight
+                );
+                println!(
+                    "\nThis was measured against THIS corpus's topic keys, and issue \
+                     #25 found
+that the best weight does not carry over between \
+                     corpora. Every figure
+published in the README was measured at 1.0."
+                );
+            } else {
+                println!(
+                    "\nNothing here changed it. `mem tune --apply` writes it for you, \
+                     keeping
+every other key the file has, or put it in {} yourself:",
+                    dir.join("config.json").display()
+                );
+                println!("\n    {{ \"bm25_weight\": {best} }}");
             }
         }
         Cmd::Eval { evalset, label, out } => {

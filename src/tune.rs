@@ -98,6 +98,15 @@ pub fn best_weight(scored: &[(f64, f64)]) -> f64 {
         .unwrap_or(1.0)
 }
 
+/// How far the grid may be extended past its ends before giving up.
+///
+/// A weight of 256 means the lexical ranking decides the order on its own
+/// and the vector one only breaks ties; past that the number stops meaning
+/// anything, so there is nothing to find further out. The same reasoning
+/// downwards bottoms out well before 1/256.
+pub const MAX_WEIGHT: f64 = 256.0;
+pub const MIN_WEIGHT: f64 = 1.0 / 256.0;
+
 /// Runs the grid, returning `(weight, mrr, recall@5)` per point.
 ///
 /// The pack is required: `bm25_weight` only exists to balance the lexical
@@ -110,9 +119,57 @@ pub fn sweep(
 ) -> Result<Vec<(f64, f64, f64)>> {
     let mut out = Vec::new();
     for &w in WEIGHTS {
-        let ctx = search::SearchContext::for_reading(Some(pack), w);
-        let r = crate::evalrun::run_cases(conn, cases, &format!("w={w}"), &ctx)?;
-        out.push((w, r.mrr, r.recall_at_5));
+        out.push(punto(conn, cases, pack, w)?);
     }
     Ok(out)
+}
+
+fn punto(
+    conn: &Connection,
+    cases: &[Case],
+    pack: &crate::pack::Pack,
+    w: f64,
+) -> Result<(f64, f64, f64)> {
+    let ctx = search::SearchContext::for_reading(Some(pack), w);
+    let r = crate::evalrun::run_cases(conn, cases, &format!("w={w}"), &ctx)?;
+    Ok((w, r.mrr, r.recall_at_5))
+}
+
+/// The grid, extended past whichever end the best value landed on until the
+/// optimum is interior or the extension runs out of room.
+///
+/// A best value sitting on an end does not mean the end is good; it means
+/// the grid stopped too early and nobody looked further. Reporting that and
+/// leaving the user to re-run something with a wider range is work the tool
+/// can do itself — and it is the difference between a recommendation and a
+/// measurement.
+///
+/// It doubles or halves, so each extra point costs one more sweep and the
+/// range grows geometrically: from 16 to the ceiling is four more sweeps,
+/// not a hundred.
+pub fn sweep_until_interior(
+    conn: &Connection,
+    cases: &[Case],
+    pack: &crate::pack::Pack,
+) -> Result<Vec<(f64, f64, f64)>> {
+    let mut out = sweep(conn, cases, pack)?;
+    loop {
+        let pares: Vec<(f64, f64)> = out.iter().map(|(w, m, _)| (*w, *m)).collect();
+        let best = best_weight(&pares);
+        let alto = out.last().map(|(w, _, _)| *w).unwrap_or(0.0);
+        let bajo = out.first().map(|(w, _, _)| *w).unwrap_or(0.0);
+        let siguiente = if best == alto && alto * 2.0 <= MAX_WEIGHT {
+            alto * 2.0
+        } else if best == bajo && bajo / 2.0 >= MIN_WEIGHT {
+            bajo / 2.0
+        } else {
+            return Ok(out);
+        };
+        let p = punto(conn, cases, pack, siguiente)?;
+        if siguiente > alto {
+            out.push(p);
+        } else {
+            out.insert(0, p);
+        }
+    }
 }

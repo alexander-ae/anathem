@@ -159,6 +159,66 @@ impl Default for Config {
     }
 }
 
+/// Writes one `bm25_weight` into `dir/config.json`, keeping everything else
+/// the file already had.
+///
+/// It edits the parsed JSON object rather than serialising a `Config`,
+/// which is the whole point: a `Config` would carry the defaults for the
+/// seven keys the file does not mention and write them out as if somebody
+/// had chosen them. Anything in there that this version does not know about
+/// survives too.
+///
+/// A file that does not parse is **not** overwritten. Whoever has a broken
+/// `config.json` has something in it they meant; losing it to a tuning run
+/// would be a poor trade for saving them one edit.
+///
+/// Returns what happened, so the caller can say it precisely: a file that
+/// did not exist is not the same as one that existed without the key.
+pub fn write_bm25_weight(dir: &Path, weight: f64) -> Result<Wrote> {
+    let ruta = dir.join("config.json");
+    let existia = ruta.exists();
+    let (mut obj, antes) = if existia {
+        let raw = std::fs::read_to_string(&ruta)
+            .with_context(|| format!("could not read {}", ruta.display()))?;
+        let v: serde_json::Value = serde_json::from_str(&raw).with_context(|| {
+            format!(
+                "{} is not valid JSON, and it was left untouched rather than                  overwritten: fix it by hand, or move it aside",
+                ruta.display()
+            )
+        })?;
+        let obj = match v {
+            serde_json::Value::Object(m) => m,
+            _ => bail!("{} has to hold a JSON object", ruta.display()),
+        };
+        let antes = obj.get("bm25_weight").and_then(|v| v.as_f64());
+        (obj, antes)
+    } else {
+        (serde_json::Map::new(), None)
+    };
+    let n = serde_json::Number::from_f64(weight)
+        .ok_or_else(|| anyhow::anyhow!("{weight} cannot be written as JSON"))?;
+    obj.insert("bm25_weight".into(), serde_json::Value::Number(n));
+    let texto = serde_json::to_string_pretty(&serde_json::Value::Object(obj))?;
+    std::fs::write(&ruta, format!("{texto}\n"))
+        .with_context(|| format!("could not write {}", ruta.display()))?;
+    Ok(match (existia, antes) {
+        (false, _) => Wrote::Created,
+        (true, None) => Wrote::KeyAdded,
+        (true, Some(v)) => Wrote::Replaced(v),
+    })
+}
+
+/// What `write_bm25_weight` found when it got there.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Wrote {
+    /// There was no `config.json`; one was created holding only this key.
+    Created,
+    /// The file was there and said nothing about `bm25_weight`.
+    KeyAdded,
+    /// The file was there and held this value.
+    Replaced(f64),
+}
+
 /// Reads `config.json` from `dir`. If it does not exist, returns the
 /// defaults. If it exists and is malformed, it **fails**: just like
 /// `tags.json`, a broken configuration that degraded silently would let the

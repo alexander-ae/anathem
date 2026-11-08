@@ -12,6 +12,28 @@ live in the database, not in the binary.
 
 ### Added
 
+- **`mem tune --apply` writes the weight it recommends.** It measured a
+  better `bm25_weight`, named a file, and stopped — on a machine with no
+  `config.json` that left the reader to work out that it is JSON and what a
+  minimal one looks like. Without `--apply` it now prints the object to
+  paste; with it, it writes the key and **keeps every other key the file
+  had**, including ones this version does not know about. It edits the parsed
+  JSON rather than serialising a `Config`, which would have turned seven
+  defaults into settings somebody appears to have chosen. A `config.json`
+  that does not parse is reported and left alone, not overwritten.
+
+  It says what it did — created, key added, or the old value replaced — how
+  to undo it, and that the measurement is against this corpus's topic keys,
+  which issue #25 showed does not carry across corpora.
+
+- **The grid extends itself past the end it landed on.** It used to stop at
+  `0.25 … 16` and, when the best value was one of the ends, say that the real
+  optimum might lie further out — leaving the user to re-run something it
+  could do itself. It now doubles or halves until the best value is interior
+  or it runs out of room, which costs one sweep per extra point. On the
+  author's corpus that answered the question in one more pass: 32 scores
+  worse than 16, so 16 was the optimum rather than the edge of the grid.
+
 - **A fact somebody checked is told apart from one somebody typed.** They
   used to be indistinguishable once saved: same shape, same position, same
   weight when they reached the model, so an agent reading them back had
