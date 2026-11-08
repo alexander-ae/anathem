@@ -2,8 +2,10 @@
 
 Local memory for coding agents (Claude Code, opencode): one binary, one
 SQLite file, no daemon and no HTTP server. An agent saves what it learned
-and finds it again in the next session — on your machine, costing no tokens
-to write and asking nobody for an API key.
+and finds it again in the next session — on your machine, with no model call
+and no embedding on write, and asking nobody for an API key. Reading it back
+is what costs context: about 1,300 tokens per search, measured, and the
+excerpt protocol is what keeps that from being the whole memory.
 
 Search is BM25 by default. An optional 22.5 MB vocabulary pack adds a vector
 layer that helps across languages; the binary works just as well without it.
@@ -35,6 +37,27 @@ the same decisions separately — and
 [OpenViking](docs/comparison-with-openviking.md), which takes the opposite
 ones at a far larger scale.
 
+## When a text file is enough
+
+If your notes fit in a `CLAUDE.md` or an `AGENTS.md` of a couple hundred
+lines, use that: no install, no database, and the model reads all of it every
+time. anathem begins to earn its place when the notes stop fitting — 449 of
+them in the measurement below — and something has to choose which twenty go
+in front of the model, at about 1,300 tokens, instead of all of them or none.
+
+Over those 449 memories and 50 questions, recall@5 is 52% when the question
+describes the situation instead of naming it. Over a separate 174-memory
+corpus, the two-stage excerpt put the right memory among the twenty
+candidates in 82% of queries, against 72% before it. A file you paste has
+none of that problem and none of that cost.
+
+What a file also cannot do: hand work from one agent to the next, keep a
+superseded version without it competing in searches, or answer "what did we
+decide about the payment provider" without you grepping for it.
+
+And what anathem does not do either: it never decides what to remember. If
+the agent does not save it, nothing is there.
+
 ## Install
 
 ```bash
@@ -44,7 +67,8 @@ sh install.sh --setup-path --connect
 
 It downloads the prebuilt binary for your platform, checks its sha256,
 installs it at `~/.local/bin/mem`, creates the database at
-`~/.anathem/mem.db`, downloads the vocabulary pack and registers anathem as
+`~/.anathem/mem.db`, downloads the vocabulary pack (22.5 MB; `--no-pack`
+skips it and leaves search lexical) and registers anathem as
 an MCP server. It does not need Rust: there are binaries for Linux x86_64,
 macOS (both architectures) and Windows x86_64, and on anything else it
 compiles from source.
@@ -154,7 +178,8 @@ the pack format and how to generate one.
   is installed. `search_memory` returns twenty candidates with a ~120
   character excerpt each, so the model picks among more options at the same
   token cost. `--scope project:/tag:/topic:` narrows the pool, which is a
-  measured improvement and not only a convenience. Every candidate says how
+  measured improvement and not only a convenience: +8.9 points of recall@5 on
+  `multi-session` questions, +6.0 with the pack. Every candidate says how
   much of the query it holds — `[no word match]`, `[1/3 words]`, or nothing
   when all of it landed — counting only the words rare enough to tell one
   memory from another, so one `de` in a Spanish query no longer makes an answer
@@ -170,7 +195,12 @@ the pack format and how to generate one.
 - **Agents hand work over** through `mem recent` and a short summary anathem
   sends in the MCP greeting, so the next session starts knowing what the
   last one left. A memory can also arrive from another machine, marked with
-  who sent it and held as a draft until you accept it.
+  who sent it and held as a draft until you accept it. That summary goes into
+  the system prompt, so it is also a prompt-injection route: a note an agent
+  saved summarising a web page ends up there. It travels inside a delimited
+  block, sanitised so its content cannot close it, and labelled as data with
+  the name of whoever saved each note; what that covers, and what it does
+  not, is in [`docs/security.md`](docs/security.md).
   → [`docs/handoff.md`](docs/handoff.md)
 - **The vocabulary pack** is the optional vector layer: 22.5 MB, no model at
   runtime, and it earns its size on cross-lingual search.
@@ -214,11 +244,12 @@ how much you have saved.
 ## How it measures up
 
 On [LongMemEval-S](docs/benchmarks.md) — 470 answerable questions over
-23,854 memories, a public dataset anyone can download — recall@5 is **90.5%
-with BM25 alone and 92.9% with the vocabulary pack**, counting a question by
-the fraction of its evidence that lands in the top five. Counting only
-questions where *every* evidence session makes the top five, 82.3% and
-87.9%.
+23,854 memories, a public dataset anyone can download — recall@5 is **82.3%
+with BM25 alone and 87.9% with the vocabulary pack**, counting a question as
+answered only when *every* evidence session it needs is in the top five.
+Counted the looser way, as the fraction of the evidence that lands there:
+90.5% and 92.9%. The strict one is the one to carry, because it is the one
+that answers "did I get everything I needed".
 
 Those are retrieval numbers: whether the evidence was handed to the model,
 not whether the model then answered correctly. The method, the three
@@ -273,6 +304,11 @@ labelled rather than headlined, and why it is here rather than left out.
   is set by whoever saves; a new key does not reach an old memory that was
   saved without one — that one is marked with `mem supersede` or, from MCP,
   with `supersedes: <id>` in `save_memory`.
+- **There is no reranker.** A question that describes the situation instead
+  of naming it is the weak case: 19% recall@5 on the author's own notes,
+  against 88% when the question names the thing (see *How it measures up*).
+  The two-stage excerpt — handing the model twenty candidates and letting it
+  order them — is what stands in for one.
 
 ## Documentation
 
