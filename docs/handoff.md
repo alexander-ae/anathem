@@ -26,6 +26,22 @@ with a topic key, which replaces the previous one instead of piling up:
 mem save "The test migration is half done" --topic estado-del-refactor
 ```
 
+**One writer per topic key.** Each version replaces the previous one, so two
+agents holding the same key are writing to the same place. That is safe here,
+and it is worth knowing why rather than being told to avoid it: the
+replacement runs in an `immediate` transaction, which takes the write lock
+before reading, so the second save waits for the first instead of both seeing
+the same current version. A unique index over `(project, topic)` on the active
+rows backs it up, and a test launches twelve processes at once against one key
+to prove it.
+
+Nothing is overwritten either. The version that loses the race is not lost: it
+is left `superseded`, stays in the chain `mem history` walks, and comes out in
+the export. So the failure that haunts shared documents — several writers,
+facts quietly dropped — has no equivalent here. What two agents on one key do
+cost is meaning, not data: the topic ends up telling one story written by two
+hands. Give each agent its own key when they are tracking different things.
+
 **It is optional and additive.** The two columns this adds (`agent` and
 `created_ts`) are null on everything that came before, and a database where
 nobody uses `recent` behaves exactly as it did. What it deliberately does

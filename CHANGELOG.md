@@ -10,6 +10,28 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Changed
+
+- **Two known limitations were decisions described as shortcomings.** The
+  README listed "there is no reranker" among the things anathem lacks, when
+  what it has instead is measured and is the design the research it was
+  compared against recommends: twenty candidates with excerpts, ordered by
+  the model already in the conversation rather than by a second model nobody
+  loaded — 72 % of queries to 82 %, and 25 % to 50 % on paraphrastic ones.
+  What is actually missing is a dedicated reranking model, which the entry
+  now says. The deliberately small default taxonomy was the other: a fixed
+  "record only failures" rule was measured **costing** the strongest models
+  most of memory's benefit, so leaving the judgement to the agent has
+  evidence behind it rather than being an omission.
+
+- **`docs/handoff.md` says what happens when two agents hold one topic
+  key.** The code has always guaranteed it — an `immediate` transaction, a
+  unique index over the active rows, and twelve concurrent processes in a
+  test — but the guarantee was visible only to someone reading `ingest.rs`,
+  and the handoff document is exactly where sharing a key comes up. It now
+  also says what two writers really cost, which is meaning and not data: the
+  loser of the race is left `superseded` rather than overwritten.
+
 ## [0.7.1] - 2026-11-08
 
 ### Added
