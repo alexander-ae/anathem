@@ -322,7 +322,12 @@ labelled rather than headlined, and why it is here rather than left out.
   expected: the default taxonomy is small on purpose and does not claim to
   cover all the legitimate knowledge of a project (product decisions,
   operational procedures, etc.) — extending it is a decision for whoever
-  operates each installation, not a bug.
+  operates each installation, not a bug. There is outside evidence for
+  leaving the judgement to the agent rather than encoding a rule:
+  Anthropic measured a fixed "record only failures" instruction **costing**
+  their strongest models most of memory's benefit (−0.234 for Opus 5,
+  −0.150 for Opus 4.7), and almost nothing for the weakest
+  ([the write-up](https://www.anthropic.com/research/components-of-agent-memory)).
 - A curated document that the source export lists with status `failed` is
   not migrated: `migrate` reports it but does not insert it. Its content
   stays intact in the source JSONL; it has to be reimported by hand with
@@ -335,11 +340,16 @@ labelled rather than headlined, and why it is here rather than left out.
   is set by whoever saves; a new key does not reach an old memory that was
   saved without one — that one is marked with `mem supersede` or, from MCP,
   with `supersedes: <id>` in `save_memory`.
-- **There is no reranker.** A question that describes the situation instead
-  of naming it is the weak case: 19% recall@5 on the author's own notes,
-  against 88% when the question names the thing (see *How it measures up*).
-  The two-stage excerpt — handing the model twenty candidates and letting it
-  order them — is what stands in for one.
+- **There is no reranking model.** A question that describes the situation
+  instead of naming it is the weak case: 19% recall@5 on the author's own
+  notes, against 88% when the question names the thing (see *How it
+  measures up*). What stands in for one is the model already in the
+  conversation: twenty candidates with excerpts, ordered by it rather than
+  by a second model nobody loaded. That is measured and it is not a
+  consolation prize — it moved the right memory into the candidate set from
+  72% of queries to 82%, and from 25% to 50% on the paraphrastic ones
+  ([`docs/search.md`](docs/search.md)). What is missing is a dedicated
+  reranker, which is a smaller claim than the one this entry used to make.
 
 ## Documentation
 
