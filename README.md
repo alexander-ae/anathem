@@ -96,6 +96,18 @@ JSON to edit:
 /plugin install anathem@anathem
 ```
 
+With Rust already installed, there is a third way:
+
+```bash
+cargo install anathem        # the binary is called `mem`
+```
+
+It compiles and installs the binary and nothing else — no vocabulary pack, no
+database, no MCP registration, and no `PATH` entry beyond cargo's own. Run
+`mem doctor` afterwards: it will tell you what is missing, and
+`mem model install <file.anathem-pack>` adds the pack from the release. The
+script above is still the shorter path for a first install.
+
 The step-by-step version, what the script cannot do on its own and how to
 connect each agent by hand: [`docs/installation.md`](docs/installation.md).
 
