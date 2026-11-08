@@ -58,11 +58,12 @@ time. anathem begins to earn its place when the notes stop fitting — 449 of
 them in the measurement below — and something has to choose which twenty go
 in front of the model, at about 1,300 tokens, instead of all of them or none.
 
-Over those 449 memories and 50 questions, recall@5 is 52% when the question
-describes the situation instead of naming it. Over a separate 174-memory
-corpus, the two-stage excerpt put the right memory among the twenty
-candidates in 82% of queries, against 72% before it. A file you paste has
-none of that problem and none of that cost.
+Over those 449 memories and 50 questions, recall@5 is 52% overall — and the
+average hides the finding: 88% when the question names the thing it is
+looking for, 19% when it describes the situation instead. Over a separate
+174-memory corpus, the two-stage excerpt put the right memory among the
+twenty candidates in 82% of queries, against 72% before it. A file you paste
+has none of that problem and none of that cost.
 
 What a file also cannot do: hand work from one agent to the next, keep a
 superseded version without it competing in searches, or answer "what did we

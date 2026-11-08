@@ -10,6 +10,18 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The README attached 52% to the wrong question.** It read *"recall@5 is
+  52% when the question describes the situation instead of naming it"*. 52%
+  is the average over all 50 questions — `mem eval` prints it — and the whole
+  point of that measurement is that the average hides the split: 88% when the
+  question names the thing, 19% when it describes the situation. The README
+  stated the correct 19% four hundred lines further down, under *Known
+  limitations*, so the document contradicted itself and the generous reading
+  was the one on the first screen. The sentence now gives the average and the
+  split together, which is the only form in which that number means anything.
+
 ### Changed
 
 - **Two known limitations were decisions described as shortcomings.** The
