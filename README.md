@@ -177,6 +177,8 @@ nothing to learn by heart.
 | `pin <id>` | Pins a memory so it survives the search's trimming of candidates | `mem pin 17` |
 | `unpin <id>` | Removes the pin | `mem unpin 17` |
 | `forget <id>` | Takes a memory out of search without deleting the row | `mem forget 88` |
+| `stale` | Memories nobody has opened, oldest first, to start a review pass from. It orders by `last_accessed`, which only counts fetching a whole body, so it says where to start looking rather than which notes are neglected | `mem stale --limit 10` |
+| `origin <id>` | Which transcript a memory was written down in, and on what line. Saving is a tool call and tool calls are logged, so the note finds itself; one written by hand in a terminal is in no log and that is said plainly | `mem origin 781` |
 | `verify <id>` | Marks a memory as checked against the world rather than merely written down; it comes back labelled `[verified]`. `--undo` takes the mark away. It rewrites nothing — not the body, not the date — because confirming a note is not correcting it, and it moves no ranking | `mem verify 88` |
 | `history <id>` | Shows a memory's supersession chain, newest to oldest | `mem history 42` |
 | `recent` | What was saved lately, newest to oldest, and which agent saved it. It is the opposite of `search`, which orders by relevance. `--since` accepts `6h`, `90m`, `2d` or `todo` (no bound); 24h by default | `mem recent --since 6h` |

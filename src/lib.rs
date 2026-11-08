@@ -3,6 +3,7 @@ pub mod chunk;
 pub mod config;
 pub mod db;
 pub mod dupes;
+pub mod stale;
 pub mod doctor;
 pub mod edit;
 pub mod evalrun;

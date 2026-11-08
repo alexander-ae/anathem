@@ -145,6 +145,21 @@ enum Cmd {
     Forget {
         id: i64,
     },
+    /// Memories nobody has opened, to start a review pass from
+    Stale {
+        /// Only this project; by default, every one
+        #[arg(long)]
+        project: Option<String>,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    /// Which transcript a memory was written down in, and on what line
+    Origin {
+        id: i64,
+        /// Where to look. Repeatable; by default `~/.claude/projects`
+        #[arg(long = "in", value_name = "DIR")]
+        roots: Vec<std::path::PathBuf>,
+    },
     /// Marks a memory as checked against the world, not merely written down
     Verify {
         id: i64,
@@ -882,6 +897,65 @@ every other key the file has, or put it in {} yourself:",
             let conn = anathem::db::open(&path)?;
             anathem::maint::pin(&conn, id, false)?;
             println!("memory {id} is no longer pinned");
+        }
+        Cmd::Stale { project, limit } => {
+            let conn = anathem::db::open(&path)?;
+            let filas = anathem::stale::never_read(&conn, project.as_deref(), limit)?;
+            if filas.is_empty() {
+                println!("no active memories to show.");
+                return Ok(());
+            }
+            for s in &filas {
+                let cuando = match &s.last_accessed {
+                    Some(t) => format!("last opened {}", t.get(..10).unwrap_or(t)),
+                    None => "never opened".to_string(),
+                };
+                println!("id:{:<5} [{}] {:<12} {}", s.id, s.project, cuando, s.title);
+            }
+            // Said every time and not once in the docs: a list that looks
+            // like "neglected memories" and is not would send somebody
+            // rewriting notes that were read perfectly well.
+            println!(
+                "\n`last opened` is written by `get_memory`, which fetches a whole body. \
+                 A memory\nread from the excerpt in a search result does not count, and \
+                 most are: that is\nwhat the two-stage protocol is for. So this is where \
+                 to start looking, not a list\nof neglected notes."
+            );
+        }
+        Cmd::Origin { id, roots } => {
+            let conn = anathem::db::open(&path)?;
+            let body: String = match conn.query_row(
+                "select body from memories where id = ?1", [id], |r| r.get::<_, String>(0)) {
+                Ok(b) => b,
+                Err(rusqlite::Error::QueryReturnedNoRows) =>
+                    anyhow::bail!("there is no memory with id:{id}"),
+                Err(e) => return Err(e.into()),
+            };
+            let Some(aguja) = anathem::stale::needle(&body) else {
+                println!("id:{id} has no line long enough to search for.");
+                return Ok(());
+            };
+            let roots = if roots.is_empty() { anathem::stale::default_roots() } else { roots };
+            let hits = anathem::stale::find_origin(&roots, &aguja)?;
+            if hits.is_empty() {
+                // Not an error. A note typed by a person in their own
+                // terminal is in no transcript, and saying so plainly is
+                // more useful than a non-zero exit.
+                println!(
+                    "id:{id} is in no transcript under {}.\nIt was written outside an \
+                     agent session, or the log has been deleted.",
+                    roots.iter().map(|r| r.display().to_string()).collect::<Vec<_>>().join(", ")
+                );
+                return Ok(());
+            }
+            for o in &hits {
+                println!("{}:{}", o.file.display(), o.line);
+            }
+            println!(
+                "\nThe lines before that one are what the agent had just done when it \
+                 decided to\nsave. Twenty of them came to about 10,000 tokens on the \
+                 transcript measured."
+            );
         }
         Cmd::Verify { id, undo } => {
             let conn = anathem::db::open(&path)?;
