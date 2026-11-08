@@ -323,6 +323,11 @@ labelled rather than headlined, and why it is here rather than left out.
 - Windows, and what is still unverified there: [`docs/windows.md`](docs/windows.md)
 - Compared with [supermemory](docs/comparison-with-supermemory.md), [Engram](docs/comparison-with-engram.md) and [OpenViking](docs/comparison-with-openviking.md)
 - What changed in each version: [`CHANGELOG.md`](CHANGELOG.md)
+- Where the tests run: on the GitHub mirror, through
+  [`.github/workflows/test.yml`](.github/workflows/test.yml). GitLab has no
+  pipeline, so a merge request opened there runs **no checks at all** —
+  run `cargo test` before opening one, and expect whoever merges it to be
+  the only gate.
 - The phase 1 spec, a historical document written against the author's
   private corpus: [`docs/historia/2026-09-21-memoria-local-design.md`](docs/historia/2026-09-21-memoria-local-design.md)
 

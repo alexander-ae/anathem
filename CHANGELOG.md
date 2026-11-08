@@ -10,6 +10,17 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The changelog said GitLab still ran the test suite, and it never did in
+  that release.** The 0.4.0 entry claimed *"GitLab keeps the Linux suite and
+  the dependency audit on every push"* while the same release deleted
+  `.gitlab-ci.yml` — v0.3.0 has the file, v0.4.0 does not. The sentence was
+  not stale, it was wrong when it was written, which is why correcting it
+  rewrites nothing. What is true: the suite runs on the GitHub mirror, and a
+  merge request on GitLab runs no checks at all, so whoever merges one is the
+  gate.
+
 ## [0.7.0] - 2026-11-07
 
 ### Fixed
@@ -240,8 +251,9 @@ live in the database, not in the binary.
   uploads them here. Actions is free and unlimited for public repositories
   on all three operating systems; GitLab's 400 monthly minutes were going
   28 at a time on Windows alone, and its macOS runners are Premium and
-  Ultimate only. GitLab keeps the Linux suite and the dependency audit on
-  every push, and no longer builds.
+  Ultimate only. The suite and the dependency audit moved there with them:
+  this release deleted `.gitlab-ci.yml`, so nothing runs on GitLab on a
+  push or on a merge request, and the mirror is the only gate there is.
 
 - **The README quotes the numbers that are worse, next to the ones that are
   better.** It led with 90.5% recall@5 on LongMemEval-S and said nothing
