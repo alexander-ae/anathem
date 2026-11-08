@@ -7,6 +7,16 @@ license = "MIT"
 description = "Local memory for coding agents: one binary, one SQLite file, BM25 plus an optional static-embedding vector layer, and an MCP server."
 repository = "https://gitlab.com/__alexander__/anathem"
 readme = "README.md"
+homepage = "https://gitlab.com/__alexander__/anathem"
+# Five is the ceiling crates.io allows, so these are the words someone would
+# actually type looking for this and not a description in pieces.
+keywords = ["memory", "mcp", "agent", "sqlite", "bm25"]
+categories = ["command-line-utilities", "database", "text-processing"]
+# `graft/` is a context index for agents working ON this repository, useless
+# to anyone depending on it, and `.claude/` holds worktrees. `docs/` stays in:
+# the README links into it, and a published crate whose own links 404 is
+# worse than 150 KB of markdown.
+exclude = ["graft/", ".claude/"]
 
 [lib]
 name = "anathem"
