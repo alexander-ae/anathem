@@ -26,6 +26,57 @@ with a topic key, which replaces the previous one instead of piling up:
 mem save "The test migration is half done" --topic estado-del-refactor
 ```
 
+## Going back over what was saved
+
+A note written in a hurry can be wrong, and nothing notices. anathem does not
+re-read its own memories: deciding whether a note matches what actually
+happened means understanding both, which takes a model — and a binary that
+called one would need an API key of its own, which is the thing this project
+promises not to ask for.
+
+So the pass runs in the agent session you already have open, spending the
+model you are already paying for. What the binary provides is the two
+mechanical parts, neither of which decides anything:
+
+```bash
+mem stale --limit 10        # what to look at
+mem origin 781              # where the evidence is
+```
+
+`mem origin` works because **saving a memory is a tool call, and a tool call
+is recorded with its arguments**. The note is in the transcript verbatim, so
+it finds itself — no matching by project name or date, both of which are
+unreliable. It holds for memories saved through MCP and for ones saved with
+`mem save` in a shell an agent was driving. Measured over 472 transcripts and
+1.44 GB: twenty memories tried, twenty found, about a second per lookup.
+
+A memory you typed yourself in your own terminal is in no transcript. That is
+reported plainly and is not an error.
+
+### The pass
+
+For each memory `mem stale` offers:
+
+1. `mem origin <id>` → a file and a line.
+2. Read the lines **before** that one. They are what the agent had just done
+   when it decided to save. Twenty of them came to about 10,000 tokens on the
+   transcript measured — so this is affordable for a handful of notes and not
+   for hundreds. Choose a few.
+3. Compare, and act: `mem save --topic <key>` if the note is wrong, which
+   supersedes it and keeps the old version in the chain; `mem verify <id>` if
+   it held up.
+
+Never read a whole transcript. The one measured was 28.5 MB — 7.4 million
+tokens — and all that matters is the window around the save.
+
+### What `mem stale` is not
+
+It orders by `last_accessed`, which `get_memory` writes when something fetches
+a whole body. A memory read from the excerpt in a search result does not
+count, **and most are**: that is what the two-stage protocol is for. So
+"never opened" overstates neglect. It is where to start looking, not a list of
+neglected notes, and the command says so every time it runs.
+
 **What the greeting costs.** It is the one piece of text anathem puts in a
 model's system prompt, so it is paid in **every** session of that project,
 whether or not any memory is ever searched. Measured on a real corpus with

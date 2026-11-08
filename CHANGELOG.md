@@ -10,6 +10,30 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Added
+
+- **`mem stale` and `mem origin`, the two mechanical halves of a review
+  pass.** Going back over what was saved means judging whether a note matches
+  what happened, which takes a model — and a binary that called one would
+  need an API key of its own. So the pass runs in the agent session already
+  open, and the binary provides only what it can do honestly: which memories
+  nobody has opened, and where the evidence for each one is.
+
+  `mem origin` works because saving a memory is a tool call and a tool call
+  is recorded with its arguments, so the note is in the transcript verbatim
+  and finds itself — no matching by project name or date, both unreliable.
+  Measured across 472 transcripts and 1.44 GB: twenty memories tried, twenty
+  found, about a second each. It holds for memories saved through MCP and for
+  ones saved with `mem save` in a shell an agent was driving; one typed by a
+  person in their own terminal is in no log, which is reported plainly rather
+  than as an error.
+
+  `mem stale` orders by `last_accessed`, and prints what that signal is not:
+  it counts fetching a whole body, so a memory read from the excerpt in a
+  search result does not register — and most are, since that is what the
+  two-stage protocol is for. The list is where to start looking, not an
+  inventory of neglect, and the command says so on every run.
+
 ### Changed
 
 - **The greeting's token cost is published, after being measured.** It is
