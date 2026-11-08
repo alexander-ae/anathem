@@ -362,6 +362,15 @@ labelled rather than headlined, and why it is here rather than left out.
 - The phase 1 spec, a historical document written against the author's
   private corpus: [`docs/historia/2026-09-21-memoria-local-design.md`](docs/historia/2026-09-21-memoria-local-design.md)
 
+## If it saved you work
+
+anathem is free and stays free: there is no server to keep running and no
+API key to resell, so there is nothing here to charge for. If it saved you
+an afternoon and you feel like saying so, there is a Ko-fi:
+[ko-fi.com/inusual](https://ko-fi.com/inusual). The binary behaves the same
+either way — it does not ask for anything, and this is the only line in the
+project that mentions it.
+
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
