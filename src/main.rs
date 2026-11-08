@@ -140,6 +140,13 @@ enum Cmd {
     Forget {
         id: i64,
     },
+    /// Marks a memory as checked against the world, not merely written down
+    Verify {
+        id: i64,
+        /// Takes the mark away instead of putting it
+        #[arg(long)]
+        undo: bool,
+    },
     /// Lists the topic keys: project, how many memories each had, and which is current
     Topics,
     /// What a topic says today, and what it said before
@@ -831,6 +838,15 @@ fn run(cli: Cli) -> Result<()> {
             let conn = anathem::db::open(&path)?;
             anathem::maint::pin(&conn, id, false)?;
             println!("memory {id} is no longer pinned");
+        }
+        Cmd::Verify { id, undo } => {
+            let conn = anathem::db::open(&path)?;
+            anathem::maint::verify(&conn, id, !undo)?;
+            if undo {
+                println!("memory {id} is no longer marked as verified");
+            } else {
+                println!("memory {id} marked as verified");
+            }
         }
         Cmd::Forget { id } => {
             let conn = anathem::db::open(&path)?;

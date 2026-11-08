@@ -130,6 +130,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     add_handoff_columns(&conn)?;
     add_follow_up_column(&conn)?;
     add_provenance_columns(&conn)?;
+    add_verified_column(&conn)?;
     migrate_indexed_body(&conn)?;
     migrate_project_name(&conn)?;
     restringir(path);
@@ -349,6 +350,22 @@ fn migrate_project_name(conn: &Connection) -> Result<()> {
 fn add_provenance_columns(conn: &Connection) -> Result<()> {
     add_column(conn, "memories", "received_from", "text")?;
     add_column(conn, "memories", "received_at", "text")
+}
+
+/// Whether someone checked this memory against the world, or only wrote it
+/// down.
+///
+/// An integer and not a text with a CHECK constraint, for the same reason
+/// `received_from` is a column: changing a CHECK in SQLite means rebuilding
+/// the table and copying every row, and this needs room to grow a third
+/// value without that cost. Today it holds 0 and 1.
+///
+/// `default 0` is what makes this additive. Every memory that existed before
+/// the column reads as unverified, which is exactly what it is: nobody
+/// checked it, because there was no way to say so. No backfill, and nothing
+/// a reader has to be told about their old notes.
+fn add_verified_column(conn: &Connection) -> Result<()> {
+    add_column(conn, "memories", "verified", "integer not null default 0")
 }
 
 fn add_handoff_columns(conn: &Connection) -> Result<()> {
