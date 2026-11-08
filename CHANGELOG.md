@@ -10,6 +10,8 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-08
+
 ### Added
 
 - **`mem stale` and `mem origin`, the two mechanical halves of a review
@@ -33,24 +35,6 @@ live in the database, not in the binary.
   search result does not register — and most are, since that is what the
   two-stage protocol is for. The list is where to start looking, not an
   inventory of neglect, and the command says so on every run.
-
-### Changed
-
-- **The greeting's token cost is published, after being measured.** It is
-  the only text anathem puts in a model's system prompt, so it is paid in
-  every session of a project whether or not anything is ever searched, and
-  that number was nowhere. On a real corpus with the default
-  `handoff_items: 5` it is **186 tokens**, with a ceiling of **470** that
-  follows from limits already in the code — 160 characters of title, 40 of
-  agent, 40 of topic key, five notes — so it cannot grow with the corpus.
-  A search costs about 1,300 for comparison.
-
-  The measurement also answers what to do about it: **nothing**. Of those
-  186, a hundred are the fixed framing that tells the model the notes are
-  data and not instructions, and only 54 are the notes. Making the list
-  terser would cut the smaller half and leave the half that cannot go.
-
-### Added
 
 - **`mem tune --apply` writes the weight it recommends.** It measured a
   better `bm25_weight`, named a file, and stopped — on a machine with no
@@ -94,19 +78,21 @@ live in the database, not in the binary.
   backfill — and confirming is not correcting, so it rewrites neither the body
   nor the date.
 
-### Fixed
-
-- **The README attached 52% to the wrong question.** It read *"recall@5 is
-  52% when the question describes the situation instead of naming it"*. 52%
-  is the average over all 50 questions — `mem eval` prints it — and the whole
-  point of that measurement is that the average hides the split: 88% when the
-  question names the thing, 19% when it describes the situation. The README
-  stated the correct 19% four hundred lines further down, under *Known
-  limitations*, so the document contradicted itself and the generous reading
-  was the one on the first screen. The sentence now gives the average and the
-  split together, which is the only form in which that number means anything.
-
 ### Changed
+
+- **The greeting's token cost is published, after being measured.** It is
+  the only text anathem puts in a model's system prompt, so it is paid in
+  every session of a project whether or not anything is ever searched, and
+  that number was nowhere. On a real corpus with the default
+  `handoff_items: 5` it is **186 tokens**, with a ceiling of **470** that
+  follows from limits already in the code — 160 characters of title, 40 of
+  agent, 40 of topic key, five notes — so it cannot grow with the corpus.
+  A search costs about 1,300 for comparison.
+
+  The measurement also answers what to do about it: **nothing**. Of those
+  186, a hundred are the fixed framing that tells the model the notes are
+  data and not instructions, and only 54 are the notes. Making the list
+  terser would cut the smaller half and leave the half that cannot go.
 
 - **Two known limitations were decisions described as shortcomings.** The
   README listed "there is no reranker" among the things anathem lacks, when
@@ -127,6 +113,18 @@ live in the database, not in the binary.
   and the handoff document is exactly where sharing a key comes up. It now
   also says what two writers really cost, which is meaning and not data: the
   loser of the race is left `superseded` rather than overwritten.
+
+### Fixed
+
+- **The README attached 52% to the wrong question.** It read *"recall@5 is
+  52% when the question describes the situation instead of naming it"*. 52%
+  is the average over all 50 questions — `mem eval` prints it — and the whole
+  point of that measurement is that the average hides the split: 88% when the
+  question names the thing, 19% when it describes the situation. The README
+  stated the correct 19% four hundred lines further down, under *Known
+  limitations*, so the document contradicted itself and the generous reading
+  was the one on the first screen. The sentence now gives the average and the
+  split together, which is the only form in which that number means anything.
 
 ## [0.7.1] - 2026-11-08
 
@@ -803,7 +801,8 @@ First release with prebuilt binaries.
 - The project lives on GitLab. GitHub remains only as the macOS builder, since
   GitLab's macOS runners are Premium and Ultimate only.
 
-[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v0.7.1...main
+[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v0.8.0...main
+[0.8.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.7.1...v0.8.0
 [0.7.1]: https://gitlab.com/__alexander__/anathem/-/compare/v0.7.0...v0.7.1
 [0.7.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.6.0...v0.7.0
 [0.6.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.5.1...v0.6.0
