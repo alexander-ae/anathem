@@ -10,6 +10,22 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Changed
+
+- **The greeting's token cost is published, after being measured.** It is
+  the only text anathem puts in a model's system prompt, so it is paid in
+  every session of a project whether or not anything is ever searched, and
+  that number was nowhere. On a real corpus with the default
+  `handoff_items: 5` it is **186 tokens**, with a ceiling of **470** that
+  follows from limits already in the code — 160 characters of title, 40 of
+  agent, 40 of topic key, five notes — so it cannot grow with the corpus.
+  A search costs about 1,300 for comparison.
+
+  The measurement also answers what to do about it: **nothing**. Of those
+  186, a hundred are the fixed framing that tells the model the notes are
+  data and not instructions, and only 54 are the notes. Making the list
+  terser would cut the smaller half and leave the half that cannot go.
+
 ### Added
 
 - **`mem tune --apply` writes the weight it recommends.** It measured a
