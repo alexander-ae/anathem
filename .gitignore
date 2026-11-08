@@ -4,6 +4,8 @@
 /eval/evalset.json
 /docs/superpowers/fase-2-candidatas-supersede.txt
 /.superpowers/
+/.claude/
+/graft/
 *.db
 *.db-wal
 *.db-shm
