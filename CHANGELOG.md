@@ -10,7 +10,33 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-08
+
+### Added
+
+- **`cargo install anathem` works.** The crate carries the metadata the
+  registry needs — keywords, categories, a homepage — and leaves out of the
+  package what nobody depending on it would want: `graft/`, a context index
+  for agents working on this repository, and `.claude/`. `docs/` stays in,
+  because the README links into it and a published crate whose own links 404
+  is worse than 150 KB of markdown. It installs the binary and nothing else:
+  no vocabulary pack, no database, no MCP registration. The README says so
+  where it offers the path.
+
 ### Changed
+
+- **The README leads with the problem instead of with whose product had
+  it.** The first screen opened on a competitor by name, which is what the
+  head-to-head table was removed for in 0.4.0 — *"a caveat underneath is not
+  enough, because the table is what gets quoted"* — and a paragraph one level
+  up has the same problem. What leads now is the part that cannot expire: a
+  memory that decides on its own what to keep needs a model to decide with,
+  so it wants an API key of its own before it will store anything. Nothing
+  measured was dropped; the figures keep their caveat in the paragraph where
+  they appear, and the one claim that will still be true next year — at most
+  four documents per query, nothing at all for 19 of 46 questions — moved to
+  *How it works*, where it argues for a design decision instead of
+  complaining about a product.
 
 - **The README says where the project lives, and the GitHub mirror stopped
   collecting issues nobody reads.** The mirror is public and exists to build
@@ -23,6 +49,18 @@ live in the database, not in the binary.
   on both sites and cannot drift between them.
 
 ### Fixed
+
+- **An install with no repository stopped looking miscompiled.** `mem
+  --version` was a `concat!` that always printed a parenthesis, so a binary
+  built where `build.rs` found no git said `mem 0.7.0 (commit unknown)`, and
+  `mem doctor` raised a warning: *"there is no way to tell whether this binary
+  is up to date with the code"*. Both are true of a random tarball; neither is
+  true of an install from a published crate, where the version **is** the
+  identity and `mem update` answers the question that matters. It is also what
+  every `cargo install` would have looked like. The whole string is now built
+  in `build.rs`, the only place that knows whether there was a commit, and the
+  diagnosis reports its absence as information rather than as a fault. Inside
+  a repository nothing changes.
 
 - **The changelog said GitLab still ran the test suite, and it never did in
   that release.** The 0.4.0 entry claimed *"GitLab keeps the Linux suite and
@@ -647,7 +685,8 @@ First release with prebuilt binaries.
 - The project lives on GitLab. GitHub remains only as the macOS builder, since
   GitLab's macOS runners are Premium and Ultimate only.
 
-[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v0.7.0...main
+[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v0.7.1...main
+[0.7.1]: https://gitlab.com/__alexander__/anathem/-/compare/v0.7.0...v0.7.1
 [0.7.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.6.0...v0.7.0
 [0.6.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.5.1...v0.6.0
 [0.5.1]: https://gitlab.com/__alexander__/anathem/-/compare/v0.5.0...v0.5.1
