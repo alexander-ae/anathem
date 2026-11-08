@@ -10,6 +10,18 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Changed
+
+- **The README says where the project lives, and the GitHub mirror stopped
+  collecting issues nobody reads.** The mirror is public and exists to build
+  the binaries, but nothing on it said so to a reader who arrived from a
+  search result: an Issues tab, no statement that it is a mirror, and no link
+  to GitLab. Anyone who opened one would have concluded the project was
+  abandoned rather than that they were on the wrong site. Issues there are now
+  off, its homepage points at GitLab, and one paragraph near the top of the
+  README says it — the mirror republishes the README, so that sentence appears
+  on both sites and cannot drift between them.
+
 ### Fixed
 
 - **The changelog said GitLab still ran the test suite, and it never did in

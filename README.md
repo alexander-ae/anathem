@@ -10,6 +10,12 @@ excerpt protocol is what keeps that from being the whole memory.
 Search is BM25 by default. An optional 22.5 MB vocabulary pack adds a vector
 layer that helps across languages; the binary works just as well without it.
 
+The source, the issues and the releases live on
+[GitLab](https://gitlab.com/__alexander__/anathem). The
+[GitHub repository](https://github.com/alexander-ae/anathem) is a mirror that
+builds the binaries, nothing else — its issues are turned off, and a merge
+request belongs on GitLab.
+
 ## Why it exists
 
 The problem it was built for: a memory that decides on its own what is worth
