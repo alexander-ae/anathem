@@ -12,15 +12,22 @@ layer that helps across languages; the binary works just as well without it.
 
 ## Why it exists
 
-The tool it replaces, a self-hosted supermemory, ran **2 GB resident for 390
-documents** on a laptop that also has to run an editor. Its embedder
-normalised Spanish into English before storing it, so a question in Spanish
+The problem it was built for: a memory that decides on its own what is worth
+keeping. Deciding takes a model, so a system built that way wants an LLM API
+key of its own before it will store anything — a second provider to pay, to
+rotate, and to hand your notes to, in exchange for having them summarised by
+someone else's machine.
+
+The deciding is not free in the other sense either. Measured over a
+390-document corpus, **56% of what one such system saved that way was
+noise**: facts nobody asked for, extracted from conversations and stored with
+the same standing as the ones that mattered. Holding them cost **2 GB
+resident**, on a laptop that also has to run an editor. And its embedder
+normalised Spanish into English before storing, so a question in Spanish
 shared neither a lexical nor a semantic anchor with the fact it was looking
-for. And it decided on its own what was worth keeping: measured over that
-corpus, **56% of what it saved that way was noise**. Those are one
-installation's numbers, self-hosted v0.0.8, measured by the author in
-September 2026 and not since: they say why this exists, not what supermemory
-is today.
+for. That system was a self-hosted supermemory v0.0.8 — one installation,
+measured by the author in September 2026 and not since, so it says why this
+exists and not what that project is today.
 
 anathem takes the opposite bets. Nothing is written unless someone asks for
 it. Writing costs no model and no tokens. Corrections are explicit —
@@ -177,7 +184,13 @@ the pack format and how to generate one.
 - **Search** is BM25 over chunks, merged with a vector ranking when a pack
   is installed. `search_memory` returns twenty candidates with a ~120
   character excerpt each, so the model picks among more options at the same
-  token cost. `--scope project:/tag:/topic:` narrows the pool, which is a
+  token cost. Twenty and not a handful because a memory that hands back only
+  what it is confident about declines to answer more often than it looks:
+  measured over a public corpus, the system this replaced returned at most
+  four documents per query and **nothing at all for 19 of 46 questions**
+  ([the numbers](docs/comparison-with-supermemory.md)). Filtering is cheap for
+  a model already in the conversation; a missing document cannot be recovered
+  by anyone. `--scope project:/tag:/topic:` narrows the pool, which is a
   measured improvement and not only a convenience: +8.9 points of recall@5 on
   `multi-session` questions, +6.0 with the pack. Every candidate says how
   much of the query it holds — `[no word match]`, `[1/3 words]`, or nothing

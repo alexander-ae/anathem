@@ -82,4 +82,16 @@ fn main() {
         None
     };
     println!("cargo:rustc-env=ANATHEM_COMMIT={}", commit.as_deref().unwrap_or(UNKNOWN));
+
+    // La cadena entera se arma aquí y no con un `concat!` en el binario,
+    // porque sin commit no hay paréntesis que poner: un `mem 0.7.0 (commit
+    // unknown)` recién instalado desde crates.io parece un binario mal
+    // compilado, cuando lo único que pasa es que un crate publicado no viene
+    // de ningún repositorio. Ahí la versión ES la identidad.
+    let version = std::env::var("CARGO_PKG_VERSION").unwrap_or_default();
+    let completa = match commit.as_deref() {
+        Some(c) => format!("{version} (commit {c})"),
+        None => version,
+    };
+    println!("cargo:rustc-env=ANATHEM_VERSION_FULL={completa}");
 }
