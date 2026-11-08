@@ -42,9 +42,10 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// (see `build.rs`).
 pub const COMMIT: &str = env!("ANATHEM_COMMIT");
 
-/// What `mem --version` prints.
-pub const FULL_VERSION: &str =
-    concat!(env!("CARGO_PKG_VERSION"), " (commit ", env!("ANATHEM_COMMIT"), ")");
+/// What `mem --version` prints: the version, and the commit when there is
+/// one. Built in `build.rs` rather than concatenated here, because without a
+/// commit there is no parenthesis to print — see the comment there.
+pub const FULL_VERSION: &str = env!("ANATHEM_VERSION_FULL");
 
 /// `mem doctor`'s exit code when it found problems.
 pub const EXIT_PROBLEMS: i32 = 1;
@@ -191,9 +192,16 @@ fn binary_section() -> Section {
     let mut s = Section::new("Binary");
     s.bien(format!("mem {VERSION}"));
     if COMMIT == "unknown" {
-        s.warning(
-            "unknown commit: this was built without git at hand, so there is no way to \
-             tell whether this binary is up to date with the code",
+        // Information and not a warning. This is what every install from a
+        // published crate or a source tarball looks like: there was no
+        // repository to read a commit from, which is normal and not a fault.
+        // What it costs is the ability to tell a binary apart from another
+        // built at the same version, and `mem update` answers the question
+        // that actually matters — whether a newer version exists.
+        s.info(
+            "no commit recorded: built outside a git repository, which is how an install \
+             from a published crate or a source tarball looks. `mem update` says whether \
+             a newer version exists",
         );
     } else {
         s.bien(format!("built from commit {COMMIT}"));
