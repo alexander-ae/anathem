@@ -26,6 +26,30 @@ with a topic key, which replaces the previous one instead of piling up:
 mem save "The test migration is half done" --topic estado-del-refactor
 ```
 
+**What the greeting costs.** It is the one piece of text anathem puts in a
+model's system prompt, so it is paid in **every** session of that project,
+whether or not any memory is ever searched. Measured on a real corpus with
+the default `handoff_items: 5`:
+
+| | tokens |
+|---|---|
+| the greeting, as it comes out today | **186** |
+| of those, the fixed framing that says this is data and not instructions | 100 |
+| of those, the notes themselves | 54 |
+| its ceiling, with five notes at the longest each field is allowed | **470** |
+| one `search_memory` call, for comparison | ~1,300 |
+
+The ceiling is not an estimate: every field is already truncated — 160
+characters of title, 40 of agent, 40 of topic key — so five notes cannot
+exceed it however long the originals are. Together with the 24-hour window,
+that is what keeps this from growing with the corpus.
+
+Worth knowing which half is which. Making the list terser — ids and topic
+keys instead of titles — would cut the 54, not the 100: the framing is the
+larger part and it is the part that cannot go, because it is what tells the
+model that a note which reads like an instruction is still only a note.
+`handoff_items: 0` turns the whole thing off.
+
 **One writer per topic key.** Each version replaces the previous one, so two
 agents holding the same key are writing to the same place. That is safe here,
 and it is worth knowing why rather than being told to avoid it: the
