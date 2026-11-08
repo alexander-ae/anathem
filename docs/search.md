@@ -263,6 +263,41 @@ mem search "por que fallo el deploy" --explain
   7. [p] a note about something else            (bm25=-4.717, 1/3 words)
 ```
 
+## Verified, and merely written down
+
+A fact somebody checked and a hunch somebody typed used to be
+indistinguishable once saved: same shape, same position, same weight when
+they reached the model. `mem verify <id>` marks the first kind, and
+`search_memory` labels it:
+
+```
+[id:41] [p] [verified] the deploy of OP-204 broke production
+[id:77] [p] the deploy probably broke on the migration
+```
+
+Only the positive case is labelled. Marking the rest `[unverified]` would put
+the word on nearly every line of nearly every answer, which is how a signal
+stops being read, and it would read as an accusation against every note
+written before there was any way to say otherwise. **Absence means "nobody
+said", never "known to be wrong".**
+
+**It moves no ranking**, and a test pins that. Promoting what is verified
+would quietly bury a correct hunch, and nothing here moves a ranking on
+something that has not been measured. What the mark changes is what the model
+reads, not what it is shown.
+
+Confirming is not correcting, so `verify` rewrites nothing — not the body,
+not the date, not the id. Going through `--topic` instead would create a new
+version and leave the old one superseded, which says the content changed when
+only its standing did. The mark can also go on a superseded memory: whoever
+walks `mem history` to see what a topic used to say is better served knowing
+which of those versions had been confirmed.
+
+From MCP it is one step: `save_memory` takes `verified: true` for something
+the agent checked in that same session — a command whose output it read, a
+file it opened. The mark is worth exactly as much as that honesty, which is
+why the tool's description says what it is not for.
+
 ## Near-duplicates
 
 `mem doctor` lists memories inside one project that share most of their

@@ -10,6 +10,28 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Added
+
+- **A fact somebody checked is told apart from one somebody typed.** They
+  used to be indistinguishable once saved: same shape, same position, same
+  weight when they reached the model, so an agent reading them back had
+  nothing to go on. `mem verify <id>` marks the first kind and
+  `search_memory` labels it `[verified]`; `save_memory` takes
+  `verified: true` for something confirmed in that same session.
+
+  Only the positive case is labelled. Marking the rest would put the word on
+  nearly every line of nearly every answer, which is how a signal stops being
+  read, and it would read as an accusation against notes written before there
+  was any way to say otherwise — so its absence means nobody said, never known
+  to be wrong.
+
+  **It moves no ranking**, and a test pins that: promoting what is verified
+  would quietly bury a correct hunch, and nothing here moves a ranking on
+  something that was not measured. It is additive in the same way the handoff
+  columns were — every memory that existed before reads as unverified, with no
+  backfill — and confirming is not correcting, so it rewrites neither the body
+  nor the date.
+
 ### Fixed
 
 - **The README attached 52% to the wrong question.** It read *"recall@5 is

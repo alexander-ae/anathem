@@ -167,6 +167,11 @@ What is worth knowing:
   the same one `save_memory` files into; pass `all_projects: true` for
   something saved while working elsewhere — a preference, a decision, anything
   about the person rather than about this repository.
+  A candidate marked `[verified]` was checked against the world by whoever
+  saved it, not merely written down; everything else is unmarked, so the
+  absence means nobody said, never known to be wrong. Mark your own with
+  `verified: true` only for what you confirmed in that session, or afterwards
+  with `mem verify <id>`.
   A candidate marked `[no word match]` shares no word with your query that
   tells one memory from another — words the whole corpus has in common, like
   `de`, do not count — and came from the vector ranking alone, which always

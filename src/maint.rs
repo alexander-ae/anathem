@@ -33,6 +33,26 @@ pub fn pin(conn: &Connection, id: i64, on: bool) -> Result<()> {
     Ok(())
 }
 
+/// Marks a memory as checked against the world, or takes the mark away.
+///
+/// Separate from saving on purpose: confirming a note is not correcting it.
+/// Going through `--topic` or `mem save` again would create a new version
+/// and leave the old one superseded, which says the content changed when
+/// only its standing did — and it would lose the original's date.
+///
+/// It is deliberately not restricted to active memories. A superseded one
+/// can be marked too: whoever walks `mem history` to see what a topic used
+/// to say is better served knowing which of those versions had been
+/// confirmed.
+pub fn verify(conn: &Connection, id: i64, on: bool) -> Result<()> {
+    let n = conn.execute("update memories set verified=?2 where id=?1",
+        params![id, if on { 1 } else { 0 }])?;
+    if n == 0 {
+        anyhow::bail!("there is no memory with id:{id}");
+    }
+    Ok(())
+}
+
 /// Promotes a received memory from `draft` to `active`, which is what makes
 /// it visible to search.
 ///
