@@ -36,6 +36,14 @@ live in the database, not in the binary.
   not the operation it stands for is worth less than its number suggests, and
   that is in `docs/search.md` next to the table.
 
+  On the public corpus it does nothing: LongMemEval, 23,781 memories and 94
+  questions, gives recall@5 unmoved at 91.5% with two gained and two lost,
+  while recall@50 drops from 97.9% to 96.8% and MRR from 0.867 to 0.838.
+  Collapsing surface forms costs the index some of its ability to tell
+  documents apart, and that shows in the ordering. The two corpora disagree
+  because one is English and the other half Spanish — a stemmer is worth more
+  the more inflected the writing — but neither says it is worth much.
+
 ### Changed
 
 - **Query expansion was measured and is not being shipped.** `docs/search.md`

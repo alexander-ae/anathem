@@ -178,6 +178,26 @@ whole thing started from is gone — `registro` reaches `registros` in a
 database with no pack at all. What is not: the paraphrastic subset goes
 *down* by one, which is the half this was supposed to help.
 
+And on the public corpus it does nothing at all. LongMemEval, 23,781
+memories and 94 questions — thirty-four times the corpus above and almost
+twice the questions:
+
+| LongMemEval | recall@5 | recall@50 | MRR |
+|---|---|---|---|
+| no stemming | 91.5% | **97.9%** | **0.867** |
+| stemming | 91.5% | 96.8% | 0.838 |
+
+Two gained, two lost, net zero. `recall@5` does not move at all, and both
+`recall@50` and MRR go **down**: collapsing surface forms into one token
+lowers how well the index tells documents apart, and that costs ordering.
+
+The two corpora disagree in a way that is worth understanding rather than
+averaging. LongMemEval is written almost entirely in English, which has
+little morphology; the corpus above is half Spanish, which has a great deal
+of it. A stemmer is therefore worth more the more inflected the writing is,
+and the public benchmark is close to the case where it is worth least. What
+both agree on is that it is not worth much.
+
 So it ships **off**, and turning it on is `mem reindex --stem on` — one
 second over 785 memories. The setting lives in the database and not in
 `config.json`, because it describes how the rows were written rather than
