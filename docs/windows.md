@@ -2,17 +2,20 @@
 
 **Status: it compiles and passes the suite in CI; it still has to be tried by
 hand.** Every push compiles with MSVC on a `windows-latest` runner and runs
-249 tests (one stays ignored: the POSIX permissions one, which does not apply
-on Windows), plus a run through `init`, `save`, `search` and `doctor`. Before
-that, nobody had ever compiled it on Windows.
+the full suite — one test stays ignored, the POSIX permissions one, which
+does not apply here — plus a run through `init`, `save`, `search` and
+`doctor`. Before that, nobody had ever compiled it on Windows.
 
 What CI **cannot** cover is further down, under "What to test": CI runs
 everything under a single shell, so it does not compare the default path
 between `cmd.exe` and Git Bash, which is the point where a misplaced
 precedence would leave two different databases without saying anything.
 
-For reference: Linux passes 251 and macOS 250 (the missing one reads `/proc`,
-which only exists on Linux).
+Two more tests are skipped elsewhere for the same kind of reason: the one
+that reads `/proc` runs only on Linux, and the POSIX permissions one does
+not run here. The counts themselves are deliberately not written down — a
+number that changes on every commit is a line of documentation that is wrong
+more often than it is right.
 
 ## What had to be fixed
 
@@ -89,6 +92,7 @@ single process.
 
 `replace_file` leaves a sidecar file — `{name}.anathem-pack.reemplazando-{pid}`
 — if the process dies between moving the target aside and finishing. It is
-inert garbage: it was verified that no production function enumerates
-the packs directory by pattern, so it confuses neither path resolution nor the pack's
-identity guard. It can be deleted by hand with no consequences.
+inert: nothing resolving a pack path or checking a pack's identity looks at
+it, so it confuses neither. `mem doctor` does look, on purpose, and lists any
+it finds as leftovers from an interrupted install; they can be deleted by
+hand with no consequences.
