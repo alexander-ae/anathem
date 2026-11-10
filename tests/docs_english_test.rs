@@ -74,7 +74,20 @@ fn no_doc_teaches_something_that_no_longer_exists() {
 fn no_spanish_left_in_the_docs() {
     let mut offenders = Vec::new();
     for f in living_docs() {
+        // Fenced blocks are skipped. They hold samples, not prose: a corpus
+        // that is half in Spanish produces Spanish output, and a guard that
+        // cannot tell a measurement from a paragraph would force the
+        // documents to misquote their own data to stay green. Prose is
+        // never inside a fence, so nothing this test exists for escapes.
+        let mut dentro_de_bloque = false;
         for (n, line) in std::fs::read_to_string(&f).unwrap().lines().enumerate() {
+            if line.trim_start().starts_with("```") {
+                dentro_de_bloque = !dentro_de_bloque;
+                continue;
+            }
+            if dentro_de_bloque {
+                continue;
+            }
             // A document is prose all the way through, so there is no need
             // to separate strings from comments as in `src/`: any paragraph
             // in Spanish carries an accent somewhere.

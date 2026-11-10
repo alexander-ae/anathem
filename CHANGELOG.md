@@ -10,6 +10,39 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Changed
+
+- **Query expansion was measured and is not being shipped.** `docs/search.md`
+  had named two levers for the retrieval gap — "a vector layer or query
+  expansion" — and only one of them had ever been tried. Expanding a query
+  is adding terms to it and `to_match` already joins them with `OR`, so the
+  whole experiment ran on an expanded evalset with no production code at all.
+
+  It is not noise: expanding with the same number of words drawn at random
+  from the same vocabulary is consistently *worse* than not expanding (24, 22
+  and 23 of 50 against a baseline of 26), while the pack's neighbours reach
+  30. The semantics are doing the work.
+
+  It still closes, by the rule fixed before the run: `recall@50` never moves
+  (41, 42, 41, 40), so nothing new is retrieved, and the paraphrastic subset
+  goes from 2 to 3 of sixteen, which is one case. The net is unstable in *k*
+  — +1, +4, +1 — with eleven cases changing in both directions at k=5 for a
+  net of one.
+
+  What it turned up instead is a different gap: three of the five queries it
+  wins are *lexical*, and they are won by morphological variants and
+  translations. The index has no stemmer, so `registro` does not match
+  `registros` at all — not ranked low, absent. That is written next to the
+  numbers.
+
+- **The documentation guard tells a sample from a paragraph.** `no_spanish_
+  left_in_the_docs` flagged any line with an accent, including inside fenced
+  blocks. A corpus half in Spanish produces Spanish output, so a guard that
+  cannot tell a measurement from prose would force the documents to misquote
+  their own data to stay green. Fences are skipped; prose is never in one, so
+  nothing the test exists for escapes, and that was checked by putting a
+  Spanish sentence outside a fence and watching it fail.
+
 ## [0.8.0] - 2026-11-08
 
 ### Added
