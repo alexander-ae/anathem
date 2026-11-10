@@ -390,6 +390,52 @@ mem search "por que fallo el deploy" --explain
   7. [p] a note about something else            (bm25=-4.717, 1/3 words)
 ```
 
+### Does an agent stop when the memory is not there?
+
+The tool description ends by telling the reader not to conclude a memory does
+not exist after one empty search, and to try two or three genuinely different
+wordings. That advice rests on a measurement — one phrasing finds the memory
+about a third of the time, three find it almost always — taken over questions
+**whose answer exists**. It has no stop condition, and "usually there" is not
+"always there", so it was worth checking the other half: on a question whose
+answer was never saved, does the agent stop, or does it rephrase until the
+question drifts into one that does have an answer?
+
+Twelve questions with no answer in a 737-memory corpus — subjects never
+written down (Kafka, Terraform, LDAP, an on-call rotation) and near-misses
+where the corpus holds the vocabulary but not the fact (an S3 bucket but no
+retention policy, feature flags but no beta checkout, Redis but no Memcached).
+Each one run by three models, 36 runs, with no hint that stopping was an
+option.
+
+| | searches, mean | within 3 | said it is not there | answered as if found |
+|---|---|---|---|---|
+| small model | 4.2 | 3 / 12 | 12 / 12 | **0** |
+| medium | 2.3 | 11 / 12 | 12 / 12 | **0** |
+| large | 3.0 | 12 / 12 | 12 / 12 | **0** |
+
+**The failure the text risks did not happen once.** In 36 of 36 runs the agent
+said the fact is not in memory. None answered the question anyway, and none
+kept calling the tool without end. In 9 of 36 the agent then named the nearest
+note it had found — the naming convention that is a practice rather than a
+rule, the incident note that is not a postmortem — and in every one of those
+the disclaimer came first, so the reader is told what they are being given.
+The largest model stopped at exactly three searches in 12 runs out of 12,
+which is the bound the sentence names, and twice it went further and
+questioned the premise of the question instead of answering it.
+
+What the ≤3 bound does not survive is the smallest model, which takes four or
+five searches before stopping. That is a token cost, not a wrong answer, and
+it is the direction the advice was written to push.
+
+A control of six questions whose answers **are** in the corpus: 6 of 6
+answered correctly, each citing the id it came from, in one to three searches.
+
+So the sentence stays as it is. Adding "after three wordings, stop" would buy
+nothing measurable here and would cost ~30 tokens on every request, in the
+tool list, forever. It is worth re-running on a corpus an order of magnitude
+larger, where the near-miss rate is higher.
+
 ## Verified, and merely written down
 
 A fact somebody checked and a hunch somebody typed used to be
@@ -512,6 +558,36 @@ compares against `created_ts`** (what has happened around here lately, the
 question `mem recent` answers). Without that split, `--until 2026-09-01` over
 a freshly migrated corpus would answer "nothing", about a corpus made
 entirely of older memories.
+
+### Capping candidates per topic: measured, and not built
+
+The idea was that twenty candidates drawn from several topics should beat
+twenty drawn from one, at the same token cost, on the questions that need
+several facts. It is a real finding in the literature. It cannot happen here,
+and the reason is in the schema rather than in the ranking.
+
+A topic key has **at most one active memory per project**, and
+`idx_mem_topic_activa` is the unique index that enforces it. Search filters
+`status = 'active'`. So two candidates in one project can never share a topic
+key, and a cap on how many candidates one key may contribute has nothing to
+cap. The only collision the schema permits is two *different* projects using
+the same key, in a search that spans projects.
+
+Measured, rather than assumed:
+
+- The author's corpus: 737 active memories, 83 of them with a key, 84
+  distinct keys. Largest group of active memories sharing one `(project,
+  topic)`: **1**. Keys used by more than one project: **0**.
+- LongMemEval, the benchmark the experiment named: **0** of 2,491, **0** of
+  6,475 and **0** of 23,781 memories carry a topic key at all, because the
+  converter assigns none. The cap is provably a no-op there, so the run would
+  have reported the baseline and called it a result.
+
+A configuration key that cannot change an answer is worse than no key: it
+reads as a knob somebody could turn. So none was added, and the hypothesis is
+recorded here with its numbers instead. What would make it live is a corpus
+where many memories carry keys and several keys answer one question — if the
+schema's one-active-per-key rule ever loosens, this is worth re-asking.
 
 ## Per-project isolation
 
