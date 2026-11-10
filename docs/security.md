@@ -130,7 +130,18 @@ filter.
   saved it. Anything carrying an agent's name was written by a model, not by
   you.
 - **`mem forget <id>`** takes a memory out of search without deleting it, and
-  `mem supersede` replaces it. Both are reversible.
+  `mem supersede` replaces it. Both are reversible — which is the same thing
+  as saying that neither removes anything: `mem show <id>` still prints a
+  forgotten memory whole, and `mem export` still writes it out.
+- **`mem delete <id>`** is the one that removes: the row, its chunks, their
+  entries in the search index, its tags, its refs and its vectors, with the
+  freed pages overwritten rather than left legible. It cannot be undone, it
+  refuses while another memory supersedes the one named, and it says what it
+  cannot reach — the `search_log` keeps the id (it holds ids and queries, not
+  bodies, and erasing it would hide that a search happened), and an export
+  taken earlier still has the memory. There is no MCP tool for it, and that
+  is deliberate: an irreversible delete is not a decision to hand to a model
+  mid-session.
 - **Lower or turn off the handoff** if you do not want it in the system
   prompt: `"handoff_items": 0` in `config.json`. The `recent_memories` tool
   stays available for when the agent asks for it.

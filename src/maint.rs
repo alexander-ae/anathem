@@ -21,6 +21,164 @@ pub fn forget(conn: &Connection, id: i64) -> Result<()> {
     Ok(())
 }
 
+/// What deleting a memory takes with it, and what it leaves behind.
+///
+/// Read before the delete and printed whether or not the delete goes ahead,
+/// because the point of the command is that somebody sees the cost before
+/// paying it. `--force` prints the same thing; it does not quieten it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeleteImpact {
+    pub id: i64,
+    pub project: String,
+    pub title: String,
+    pub status: String,
+    pub topic: Option<String>,
+    /// The older memory this one supersedes, if any. After the delete it
+    /// stays where it is, with nothing left pointing at it.
+    pub supersedes: Option<i64>,
+    /// The memories whose `supersedes_id` points here. These are what the
+    /// refusal is about: deleting leaves them pointing at an id that no
+    /// longer exists, and `mem history` stops at the hole.
+    pub superseded_by: Vec<i64>,
+    pub chunks: i64,
+    pub tags: i64,
+    pub refs: i64,
+    /// Rows in `search_log` that name this id. They are not deleted — see
+    /// `delete`.
+    pub log_rows: i64,
+}
+
+impl DeleteImpact {
+    /// Whether anything points at this memory, which is what makes the plain
+    /// `delete` refuse.
+    pub fn is_referenced(&self) -> bool {
+        !self.superseded_by.is_empty()
+    }
+}
+
+/// What `delete` would do to this memory, without doing any of it.
+pub fn delete_impact(conn: &Connection, id: i64) -> Result<Option<DeleteImpact>> {
+    let row: Option<(String, String, String, Option<String>, Option<i64>)> = conn
+        .query_row(
+            "select project, title, status, topic, supersedes_id from memories where id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+        )
+        .optional()?;
+    let Some((project, title, status, topic, supersedes)) = row else {
+        return Ok(None);
+    };
+    let superseded_by = conn
+        .prepare("select id from memories where supersedes_id = ?1 order by id")?
+        .query_map([id], |r| r.get::<_, i64>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let count = |sql: &str| -> Result<i64> { Ok(conn.query_row(sql, [id], |r| r.get(0))?) };
+    Ok(Some(DeleteImpact {
+        id,
+        project,
+        title,
+        status,
+        topic,
+        supersedes,
+        superseded_by,
+        chunks: count("select count(*) from chunks where memory_id = ?1")?,
+        tags: count("select count(*) from memory_tags where memory_id = ?1")?,
+        refs: count("select count(*) from memory_refs where memory_id = ?1")?,
+        // The log stores ids in a comma-separated list, so this is a
+        // substring match with the separators written in to keep `1` from
+        // matching `12`. It is a count for a sentence, not a filter.
+        log_rows: conn.query_row(
+            "select count(*) from search_log
+              where ',' || returned_ids || ',' like '%,' || ?1 || ',%'
+                 or followed_up_id = ?1",
+            [id],
+            |r| r.get(0),
+        )?,
+    }))
+}
+
+/// Really deletes a memory: the row, its chunks and their index entries, its
+/// tags, its refs and its vectors.
+///
+/// This is not `forget`, and the two are different promises. `forget` sets a
+/// status, which takes the memory out of search and leaves the body readable
+/// by id, in `mem show` and in `mem export`. That is an audit trail, and it
+/// is the right default. It is not an answer to somebody who asks that
+/// something stop existing here, and until this command there was no answer
+/// to give them but "delete the database".
+///
+/// Three things it does **not** do, each on purpose:
+///
+/// - **It does not touch `search_log`.** The log holds ids and queries, not
+///   bodies, and rewriting it would hide that a search happened. The id
+///   stays there, pointing at nothing.
+/// - **It does not reach copies.** A `mem export` taken earlier still
+///   contains the memory, and so does any machine it was sent to.
+/// - **It does not vacuum.** The pages are zeroed (see `secure_delete`
+///   below), not handed back to the filesystem.
+///
+/// The order of the deletes matters, and not for tidiness. `chunks` has
+/// `on delete cascade`, so dropping the memory row would take the chunks
+/// with it — but SQLite only fires triggers for cascaded deletes when
+/// `recursive_triggers` is on, and it is off. The `chunks_ad` trigger is
+/// what removes the terms from `chunks_fts`, so a cascaded delete would
+/// leave the body's words in the index. Deleting the chunks explicitly, and
+/// first, fires it.
+pub fn delete(conn: &Connection, id: i64, force: bool) -> Result<DeleteImpact> {
+    let Some(impact) = delete_impact(conn, id)? else {
+        anyhow::bail!("there is no memory with id:{id}");
+    };
+    if impact.is_referenced() && !force {
+        let who: Vec<String> = impact.superseded_by.iter().map(|i| i.to_string()).collect();
+        anyhow::bail!(
+            "memory id:{id} is superseded by {}, which would be left pointing at an id that \
+             no longer exists; `mem delete {id} --force` deletes it anyway",
+            who.join(", ")
+        );
+    }
+
+    // Overwrites the freed pages with zeros instead of leaving the body
+    // legible in them. It is per-connection and set here rather than in
+    // `db::open` so only this command pays for it: every other write would
+    // be doing the extra work to protect content it is not removing.
+    conn.pragma_update(None, "secure_delete", true)?;
+
+    let tx = conn.unchecked_transaction()?;
+    if force {
+        // Not a cascade: whatever superseded this one is a memory somebody
+        // still wants, and deleting it would be deleting far more than was
+        // asked — the failure the unlearning benchmarks measure as often as
+        // the opposite one.
+        tx.execute("update memories set supersedes_id = null where supersedes_id = ?1", [id])?;
+    }
+    tx.execute(
+        "delete from chunk_vectors where chunk_id in (select id from chunks where memory_id = ?1)",
+        [id],
+    )?;
+    tx.execute("delete from chunks where memory_id = ?1", [id])?;
+    tx.execute("delete from memory_tags where memory_id = ?1", [id])?;
+    tx.execute("delete from memory_refs where memory_id = ?1", [id])?;
+    tx.execute("delete from memories where id = ?1", [id])?;
+    // The trigger above takes the memory *out of the answers* — a MATCH for
+    // one of its words returns nothing. It does not take the words out of
+    // the file: FTS5 records a deletion as a marker in a new segment and
+    // leaves the old segment, terms and all, until something merges them.
+    // For an ordinary edit that is a reasonable trade and `edit.rs` makes
+    // the same call for the same reason; for a command whose whole promise
+    // is that the content is gone, a readable copy in the index is the
+    // promise broken. Rebuilding re-reads `chunks`, which no longer has the
+    // row, and the old segments are freed — zeroed, by the pragma above.
+    tx.execute_batch("insert into chunks_fts(chunks_fts) values ('rebuild');")?;
+    tx.commit()?;
+
+    // Without this the zeroed pages sit in the write-ahead log until some
+    // later connection checkpoints it, and the old bytes stay in `mem.db`
+    // meanwhile. A delete whose guarantee arrives at an unspecified time is
+    // not the guarantee that was asked for.
+    conn.execute_batch("pragma wal_checkpoint(truncate);")?;
+    Ok(impact)
+}
+
 /// Sets or clears a memory's `pinned` flag. See `forget` on why the
 /// affected-row count is checked instead of trusting that `execute` returned
 /// no error.

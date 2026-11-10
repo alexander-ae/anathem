@@ -26,6 +26,12 @@ delete; leaving them out would turn every migration into a silent loss of
 data. They come with `status: forgotten` so whoever reads the export can
 filter them.
 
+**`mem delete` is the other command, and it is the one that removes.** What
+it deletes is not in the export, because the row is not in the database any
+more. The reverse does not hold and is worth saying plainly: an export taken
+*before* a delete still contains the memory, with its body, and deleting here
+reaches no copy that already left.
+
 ## Fields
 
 Always present:
