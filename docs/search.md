@@ -433,6 +433,21 @@ it reports rather than merges: which of two overlapping notes is the keeper
 needs judgement about what they are for, and merging destroys the loser.
 `mem supersede <new> <old>` keeps one, `mem forget <id>` retires the other.
 
+Each pair is printed with the command already filled in, newer id first:
+
+```
+  id:84 and id:71 in anathem share 86% of their words
+    mem supersede 84 71   # if they are one fact: 71 stops appearing in searches
+```
+
+The order follows the date each memory carries and not the ids. They
+usually agree; where they do not it is because the memories came from
+somewhere else, and `mem import` assigns ids in whatever order the file
+listed them — so comparing ids would confidently name the older note as the
+correction. The `if` is not politeness either: whether two notes are two
+versions of one fact or two facts that happen to share their vocabulary is
+exactly what a word count cannot tell you, and nothing in `doctor` writes.
+
 The scale it was built for: near-duplicate pairs came to **0.21 %** of all
 pairs over a real 682-memory corpus. That number is why nothing automatic
 exists. The first run of the check over a 688-memory corpus found one pair

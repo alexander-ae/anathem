@@ -98,3 +98,81 @@ fn nothing_to_compare_is_not_a_failure() {
     save(&c, "p", "a", LARGO);
     assert!(dupes::find(&c).unwrap().is_empty());
 }
+
+// ------------------------------- what `mem doctor` does with the pairs
+
+fn mem(dir: &std::path::Path, args: &[&str]) -> (bool, String) {
+    let o = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
+        .arg("--db")
+        .arg(dir.join("t.db"))
+        .args(args)
+        .output()
+        .unwrap();
+    (
+        o.status.success(),
+        String::from_utf8_lossy(&o.stdout).to_string() + &String::from_utf8_lossy(&o.stderr),
+    )
+}
+
+/// The report says the line somebody can run, not the two ids and the
+/// homework of working out which way round the command goes.
+///
+/// It is still only a report. Which of two overlapping notes is the keeper
+/// needs judgement about what they are for, and the literature is explicit
+/// that automating this is where these systems lose: an obsolete statement
+/// left beside the current one is the dominant failure, and an automatic
+/// merge is the other one.
+#[test]
+fn doctor_offers_the_command_instead_of_leaving_the_arithmetic() {
+    let (d, c) = conn();
+    save(&c, "p", "first", LARGO);
+    save(&c, "p", "second", &format!("{LARGO} and it also skipped the retries"));
+    // The second is a day newer, which is what decides the order of the
+    // arguments — not the fact that it was inserted second.
+    c.execute("update memories set created = '2026-11-07' where ext_id = 'second'", []).unwrap();
+    drop(c);
+
+    let (ok, out) = mem(d.path(), &["doctor"]);
+    assert!(ok, "duplicar no es una falla, el código de salida sigue en 0:\n{out}");
+    assert!(out.contains("mem supersede 2 1"), "falta la línea lista para correr:\n{out}");
+    assert!(out.contains("if they are one fact"), "no puede sonar a orden:\n{out}");
+    assert!(out.contains("All good."), "{out}");
+}
+
+/// The order of the arguments follows the date the memory carries, not the
+/// id. They usually agree; where they do not it is because the memories came
+/// from somewhere else, and `mem import` assigns ids in whatever order the
+/// file listed them — so an id comparison would confidently name the older
+/// note as the correction.
+#[test]
+fn the_newer_one_goes_first_even_when_the_ids_disagree() {
+    let (d, c) = conn();
+    save(&c, "p", "imported-later", LARGO);
+    save(&c, "p", "imported-first", &format!("{LARGO} and it also skipped the retries"));
+    c.execute("update memories set created = '2026-10-02' where ext_id = 'imported-first'", [])
+        .unwrap();
+    c.execute("update memories set created = '2026-10-01' where ext_id = 'imported-later'", [])
+        .unwrap();
+    drop(c);
+
+    let (ok, out) = mem(d.path(), &["doctor"]);
+    assert!(ok, "{out}");
+    assert!(out.contains("mem supersede 2 1"), "{out}");
+}
+
+/// Nothing is superseded by looking at the report.
+#[test]
+fn reporting_a_pair_changes_no_status() {
+    let (d, c) = conn();
+    save(&c, "p", "first", LARGO);
+    save(&c, "p", "second", &format!("{LARGO} and it also skipped the retries"));
+    drop(c);
+
+    assert!(mem(d.path(), &["doctor"]).0);
+
+    let c = db::open(&d.path().join("t.db")).unwrap();
+    let active: i64 = c
+        .query_row("select count(*) from memories where status = 'active'", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(active, 2, "el reporte no puede haber jubilado a ninguna");
+}

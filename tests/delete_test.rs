@@ -82,7 +82,7 @@ fn the_body_is_gone_from_everywhere_that_could_show_it() {
     assert!(found.is_empty(), "el export todavía lo trae: {found:?}");
     // And the export is not empty, so the assertion above is about the
     // delete and not about an export that wrote nothing.
-    assert!(walk(&out_dir).len() >= 1, "el export no escribió nada");
+    assert!(!walk(&out_dir).is_empty(), "el export no escribió nada");
 }
 
 #[test]
