@@ -464,6 +464,40 @@ on BM25 and 6.0 on hybrid when the distractors are cut to a quarter. The
 method, the rule fixed before the run and what the number does **not** prove
 are in [`benchmarks.md`](benchmarks.md).
 
+### Narrowing by when
+
+`--since` and `--until` bound a search in time, and `search_memory` takes the
+same two:
+
+```bash
+mem search "payment provider" --until 2026-09-01
+mem search "schema" --since 7d
+```
+
+Both accept a window (`7d`, `6h`, `90m`), a date (`2026-09-01`) or a full
+timestamp, and `all` means no bound. `--until` includes the day it names:
+`--until 2026-09-01` reads as "up to and including the first of September".
+A value neither can read is an error, for the same reason an unknown scope
+key is: a dropped date filter answers about the wrong era and looks like it
+worked.
+
+This exists because relevance alone answers a question about the past
+wrongly. Asked what was decided about the payments provider *before* the
+migration, the newest note on the subject is the most relevant candidate and
+the one that does not answer the question.
+
+One detail worth knowing, because it decides what the filter means. A memory
+carries two dates: `created`, the date the memory is from, and `created_ts`,
+the instant the row was written here. For anything saved in this machine they
+are the same day; for anything that arrived from somewhere else they are not
+— `mem migrate` keeps the original date in `created` and stamps `created_ts`
+with the moment of the migration. So **a date bound compares against
+`created`** (which era this memory is from) and **a window like `6h`
+compares against `created_ts`** (what has happened around here lately, the
+question `mem recent` answers). Without that split, `--until 2026-09-01` over
+a freshly migrated corpus would answer "nothing", about a corpus made
+entirely of older memories.
+
 ## Per-project isolation
 
 Every memory belongs to a project, and `search --project` filters by it. If

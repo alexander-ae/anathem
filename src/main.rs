@@ -42,6 +42,20 @@ enum Cmd {
         /// know is an error, never a filter quietly ignored.
         #[arg(long = "scope", value_name = "KEY:VALUE")]
         scope: Vec<String>,
+        /// Only memories written since then: a window (`7d`, `6h`, `90m`), a
+        /// date (`2026-09-01`) or a full timestamp
+        ///
+        /// Relevance alone answers a question about the past wrongly: the
+        /// newest note on a subject is the most relevant and, when the
+        /// question is what was decided *before* something, the least
+        /// correct. A value it cannot read is an error, never a filter
+        /// quietly dropped.
+        #[arg(long, value_name = "WHEN")]
+        since: Option<String>,
+        /// Only memories written up to then, the date included. Same forms
+        /// as `--since`
+        #[arg(long, value_name = "WHEN")]
+        until: Option<String>,
         #[arg(long, default_value_t = 10)]
         limit: usize,
         /// Shows the raw bm25 score next to each result
@@ -516,7 +530,7 @@ fn run(cli: Cli) -> Result<()> {
             }
             sync_after_write(&conn, &dir);
         }
-        Cmd::Search { query, project, tag, scope, limit, explain, budget } => {
+        Cmd::Search { query, project, tag, scope, since, until, limit, explain, budget } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new("."));
             let cfg = anathem::config::load(dir)?;
@@ -532,6 +546,16 @@ fn run(cli: Cli) -> Result<()> {
                 // token budget for it.
                 excerpt: None,
                 outline: false,
+                since: since
+                    .as_deref()
+                    .map(anathem::search::since_bound)
+                    .transpose()?
+                    .flatten(),
+                until: until
+                    .as_deref()
+                    .map(anathem::search::until_bound)
+                    .transpose()?
+                    .flatten(),
             };
             let q = scopes.onto(q)?;
             let hits = anathem::search::run_explained(&conn, &q, &ctx)?;
