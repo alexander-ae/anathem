@@ -10,6 +10,8 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-10
+
 ### Added
 
 - **Nineteen seconds of it working, in the README.** `demo.cast` records an
@@ -19,8 +21,6 @@ live in the database, not in the binary.
   it records, so the recording can be made again when the output changes —
   and it already changed once while being written, which is the reason it is
   a script and not a list of commands in an issue.
-
-### Added
 
 - **`mem reindex --stem on` makes `registro` find `registros`.** The index
   is `unicode61` with no stemming, so a singular against a plural was not a
@@ -878,7 +878,8 @@ First release with prebuilt binaries.
 - The project lives on GitLab. GitHub remains only as the macOS builder, since
   GitLab's macOS runners are Premium and Ultimate only.
 
-[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v0.8.0...main
+[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v0.9.0...main
+[0.9.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.8.0...v0.9.0
 [0.8.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.7.1...v0.8.0
 [0.7.1]: https://gitlab.com/__alexander__/anathem/-/compare/v0.7.0...v0.7.1
 [0.7.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.6.0...v0.7.0
