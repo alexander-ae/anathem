@@ -39,6 +39,11 @@ pub fn candidates(conn: &Connection, body: &str, project: &str, k: usize) -> Res
         // an outline would hide the text being compared.
         excerpt: None,
         outline: false,
+        // No date bound: what is being looked for is the older version of
+        // this fact, and bounding the search by when would be a way of not
+        // finding it.
+        since: None,
+        until: None,
     };
     // Called right after an insert, when the vector for the just-saved
     // memory may not be synced yet: the vector index would be incomplete in

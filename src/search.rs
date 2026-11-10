@@ -60,6 +60,12 @@ pub struct Query {
     /// whole memory. Off by default, and below `OUTLINE_THRESHOLD`
     /// characters it changes nothing at all. See `outline`.
     pub outline: bool,
+    /// Lower bound on when the memory was written. Like the other filters,
+    /// it narrows the candidates and does not touch the ranking.
+    pub since: Option<DateBound>,
+    /// Upper bound on when the memory was written, exclusive at the instant
+    /// it names — a bare date names the whole day, so the day is included.
+    pub until: Option<DateBound>,
 }
 
 impl Default for Query {
@@ -73,8 +79,121 @@ impl Default for Query {
             budget_tokens: DEFAULT_BUDGET_TOKENS,
             excerpt: None,
             outline: false,
+            since: None,
+            until: None,
         }
     }
+}
+
+/// A bound on when a memory was written: what the person typed, and the
+/// string SQL compares the stored timestamp against.
+///
+/// Both halves are kept because both are needed. The comparison string is
+/// what the query runs on; the text is what a message about an empty window
+/// has to say back, and `since:2026-11-03T09:12:44-05:00` is not an answer to
+/// somebody who typed `7d`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DateBound {
+    /// As it was written: `7d`, `2026-09-01`, a full timestamp.
+    pub text: String,
+    /// The value the stored date is compared against.
+    pub at: String,
+    /// The SQL the comparison runs on. See `WHEN_IT_IS_FROM` and
+    /// `WHEN_IT_ARRIVED` for why there are two of them.
+    column: &'static str,
+}
+
+/// The date the memory itself claims.
+///
+/// What a date bound asks about. The two columns are not two precisions of
+/// one fact: `created` is the date the memory is from and `created_ts` is
+/// when the row was written here, and for anything that came from somewhere
+/// else those are different days. `mem migrate` stamps `created_ts` with the
+/// instant of the migration while keeping the original date in `created`, so
+/// a whole imported corpus reads as "written today" through the timestamp —
+/// and `mem search --until 2026-09-01` over it would answer "nothing", which
+/// is the one answer a question about the past must not get wrong.
+const WHEN_IT_IS_FROM: &str = "m.created";
+
+/// When the row was written here, to the second.
+///
+/// What a window like `6h` or `90m` asks about: not "which era is this
+/// memory from" but "what has happened around here lately", which is the
+/// same question `mem recent` answers and the same expression it orders by.
+/// `created_ts` is null for everything saved before the column existed and
+/// for everything `mem import` brought in, hence the coalesce.
+const WHEN_IT_ARRIVED: &str = "coalesce(m.created_ts, m.created)";
+
+/// A moment named as a window back from now, as a date, or as a timestamp.
+enum Moment {
+    /// A whole day. Its start is what `--since` means by it and the start of
+    /// the next day is what `--until` means, so that `--until 2026-09-01`
+    /// includes the first of September rather than stopping at its midnight.
+    Day(chrono::NaiveDate),
+    /// An exact instant, already in the format the stored timestamps use.
+    Instant(String),
+}
+
+/// Reads `7d`, `2026-09-01` or a full RFC 3339 timestamp.
+///
+/// One parser for both ends on purpose: somebody who learns `--since 7d`
+/// should not find out that `--until 7d` is a usage error, and the other way
+/// round. A value it cannot read is an error and never a filter quietly
+/// dropped — a dropped date filter answers with the wrong era and looks like
+/// it worked, which is the same reasoning `parse_scopes` follows.
+fn moment(text: &str) -> Result<Moment> {
+    let t = text.trim();
+    if let Ok(d) = chrono::NaiveDate::parse_from_str(t, "%Y-%m-%d") {
+        return Ok(Moment::Day(d));
+    }
+    if let Ok(ts) = chrono::DateTime::parse_from_rfc3339(t) {
+        return Ok(Moment::Instant(ts.to_rfc3339()));
+    }
+    let seconds = crate::recent::duration_in_seconds(t).map_err(|_| {
+        anyhow::anyhow!(
+            "cannot read the date «{text}»; try a window like 7d, 6h or 90m, \
+             a date like 2026-09-01, or a full timestamp"
+        )
+    })?;
+    Ok(Moment::Instant(crate::recent::since(seconds)))
+}
+
+/// The keys that mean "no bound at all", the same two `mem recent` accepts.
+const UNBOUNDED: [&str; 2] = ["all", "todo"];
+
+/// The lower bound `--since` names, or `None` when it names no bound.
+pub fn since_bound(text: &str) -> Result<Option<DateBound>> {
+    let t = text.trim();
+    if UNBOUNDED.iter().any(|k| t.eq_ignore_ascii_case(k)) {
+        return Ok(None);
+    }
+    let (at, column) = match moment(t)? {
+        Moment::Day(d) => (d.format("%Y-%m-%d").to_string(), WHEN_IT_IS_FROM),
+        Moment::Instant(s) => (s, WHEN_IT_ARRIVED),
+    };
+    Ok(Some(DateBound { text: t.to_string(), at, column }))
+}
+
+/// The upper bound `--until` names, exclusive, or `None` for no bound.
+pub fn until_bound(text: &str) -> Result<Option<DateBound>> {
+    let t = text.trim();
+    if UNBOUNDED.iter().any(|k| t.eq_ignore_ascii_case(k)) {
+        return Ok(None);
+    }
+    let (at, column) = match moment(t)? {
+        // The start of the next day, so the day that was named is inside the
+        // window. `--until 2026-09-01` is read as "up to and including the
+        // first of September", which is what it says out loud.
+        Moment::Day(d) => (
+            d.succ_opt()
+                .ok_or_else(|| anyhow::anyhow!("the date «{text}» has no next day"))?
+                .format("%Y-%m-%d")
+                .to_string(),
+            WHEN_IT_IS_FROM,
+        ),
+        Moment::Instant(s) => (s, WHEN_IT_ARRIVED),
+    };
+    Ok(Some(DateBound { text: t.to_string(), at, column }))
 }
 
 /// Below this many characters a memory is its own summary, and an outline
@@ -331,6 +450,14 @@ pub(crate) fn filters_for(q: &Query, params: &mut Vec<Value>) -> String {
         params.push(Value::Text(t.clone()));
         sql.push_str(&format!(" and m.topic = ?{}", params.len()));
     }
+    if let Some(b) = &q.since {
+        params.push(Value::Text(b.at.clone()));
+        sql.push_str(&format!(" and {} >= ?{}", b.column, params.len()));
+    }
+    if let Some(b) = &q.until {
+        params.push(Value::Text(b.at.clone()));
+        sql.push_str(&format!(" and {} < ?{}", b.column, params.len()));
+    }
     sql
 }
 
@@ -433,6 +560,17 @@ pub fn describe_scope(q: &Query) -> String {
     }
     if let Some(t) = &q.topic {
         parts.push(format!("topic:{t}"));
+    }
+    // Not `--scope` keys, but filters all the same, and the message this
+    // builds exists to name what came back empty. A window with nothing in
+    // it is the likeliest reason an otherwise good query finds nothing, so
+    // leaving it out would send somebody rephrasing a query that was never
+    // the problem.
+    if let Some(b) = &q.since {
+        parts.push(format!("since:{}", b.text));
+    }
+    if let Some(b) = &q.until {
+        parts.push(format!("until:{}", b.text));
     }
     parts.join(", ")
 }

@@ -385,6 +385,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         budget_tokens: 10_000,
         excerpt: None,
         outline: false,
+        ..Default::default()
     };
     let r = anathem::vecstore::search_vectors(&conn, &query_, &with_project, 50).unwrap();
     assert_eq!(r.len(), 1, "el filtro de proyecto tiene que valer también acá: {r:?}");
@@ -398,6 +399,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         budget_tokens: 10_000,
         excerpt: None,
         outline: false,
+        ..Default::default()
     };
     let r = anathem::vecstore::search_vectors(&conn, &query_, &with_tag, 50).unwrap();
     assert_eq!(r.len(), 1, "el filtro de tags tiene que valer también acá: {r:?}");
@@ -412,6 +414,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         budget_tokens: 10_000,
         excerpt: None,
         outline: false,
+        ..Default::default()
     };
     let r = anathem::vecstore::search_vectors(&conn, &query_, &sin, 50).unwrap();
     assert_eq!(r.len(), 2, "sin filtros tienen que venir las dos: {r:?}");
@@ -427,9 +430,24 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         budget_tokens: 10_000,
         excerpt: None,
         outline: false,
+        ..Default::default()
     };
     let r = anathem::vecstore::search_vectors(&conn, &query_, &with_topic, 50).unwrap();
     assert_eq!(r.len(), 1, "el filtro de topic tiene que valer también acá: {r:?}");
+
+    // And the date bounds. The vector side is the one that answers whatever
+    // the query, since it orders the whole corpus by distance: a date filter
+    // it ignored would be a date filter that only works until somebody
+    // installs a vocabulary pack.
+    conn.execute("update memories set created = '2026-03-01' where project = 'uno'", []).unwrap();
+    conn.execute("update memories set created = '2026-09-01' where project = 'dos'", []).unwrap();
+    let old = anathem::search::Query {
+        text: "nota".into(),
+        until: anathem::search::until_bound("2026-06-01").unwrap(),
+        ..Default::default()
+    };
+    let r = anathem::vecstore::search_vectors(&conn, &query_, &old, 50).unwrap();
+    assert_eq!(r.len(), 1, "el filtro de fecha tiene que valer también acá: {r:?}");
 }
 
 #[test]

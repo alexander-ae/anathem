@@ -80,6 +80,8 @@ pub fn tool_defs() -> Value {
           "tags": {"type": "array", "items": {"type": "string"}},
           "scope": {"type": "array", "items": {"type": "string"}, "description": "Narrows the search, as `key:value` strings combined with AND. The keys are `project`, `tag` and `topic`, e.g. [\"project:api\", \"tag:decision\"] or [\"topic:branching-policy\"]. An unrecognised key is an error rather than a filter ignored, so a scope that comes back explained can be corrected and retried. Use it when you already know where the answer lives. It is for narrowing further; to look past this project use `all_projects`."},
           "all_projects": {"type": "boolean", "description": "Search every project instead of only the one this session is in. False by default. Use it when the answer could have been saved while working somewhere else — a decision, a preference, something about the person rather than about this repository."},
+          "since": {"type": "string", "description": "Only memories written since then. A window (`7d`, `6h`, `90m`), a date (`2026-09-01`) or a full timestamp. Use it when the question is about a period and not only about a subject: the newest note on a subject is the most relevant one and, for a question about what was true BEFORE something, the wrong one. A value that cannot be read comes back explained rather than ignored, so it can be corrected and retried."},
+          "until": {"type": "string", "description": "Only memories written up to then, the date itself included. Same forms as `since`. `until: \"2026-09-01\"` answers \"what did we decide about this before September\"; combine the two for a window."},
           "budget": {"type": "integer", "description": "Token budget; the `budget` setting by default, 1200 unless it was changed"},
           "limit": {"type": "integer", "description": "How many candidates at most; 20 by default. Each one carries only a short excerpt: for the full body of one, use get_memory with its id."}}}},
       {"name": "save_memory",
@@ -212,10 +214,31 @@ fn call_tool(
                 chosen
             };
 
+            // A date that cannot be read comes back as text the model can
+            // act on, for the same reason an unusable scope does: a filter
+            // dropped in silence answers about the wrong era and looks like
+            // it worked.
+            let bound = |key: &str, f: fn(&str) -> anyhow::Result<Option<search::DateBound>>| {
+                match args[key].as_str() {
+                    None => Ok(None),
+                    Some(s) => f(s).map_err(|e| format!("Invalid {key}: {e}")),
+                }
+            };
+            let since = match bound("since", search::since_bound) {
+                Ok(v) => v,
+                Err(e) => return Ok(text_result(e)),
+            };
+            let until = match bound("until", search::until_bound) {
+                Ok(v) => v,
+                Err(e) => return Ok(text_result(e)),
+            };
+
             let q = search::Query {
                 text: text.clone(), project: project.clone(),
                 tags: tags_arg,
                 topic: None,
+                since,
+                until,
                 // `limit` can still override `cfg.candidates` (20) per
                 // call, just as it used to override the fixed 10.
                 limit: args["limit"].as_u64().map(|l| l as usize)
