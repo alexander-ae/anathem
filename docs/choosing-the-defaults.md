@@ -142,6 +142,5 @@ measured, and it suits prose. The tables are in the `bm25_weight` section of
 ## Isolation
 
 Both measurements ran on copies, outside the repository, against
-`~/anathem-bench/`. The personal database was left untouched and checked
-afterwards: md5 `fe6c78006c8cf99f51bd9ed9e7da5dbc`, 171 memories, identical
-to the fingerprint taken before starting.
+`~/anathem-bench/`, and the personal database was fingerprinted before and
+after and left untouched.
