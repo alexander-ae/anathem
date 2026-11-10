@@ -387,7 +387,7 @@ labelled rather than headlined, and why it is here rather than left out.
 - Measuring retrieval against a public dataset: [`docs/benchmarks.md`](docs/benchmarks.md)
 - Why `bm25_weight` and the pack size are what they are: [`docs/choosing-the-defaults.md`](docs/choosing-the-defaults.md)
 - The export format, which is complete enough to rebuild the database elsewhere: [`docs/export-format.md`](docs/export-format.md)
-- Windows, and what is still unverified there: [`docs/windows.md`](docs/windows.md)
+- Windows: what the operating system forced to change, and why: [`docs/windows.md`](docs/windows.md)
 - Compared with [supermemory](docs/comparison-with-supermemory.md), [Engram](docs/comparison-with-engram.md) and [OpenViking](docs/comparison-with-openviking.md)
 - What changed in each version: [`CHANGELOG.md`](CHANGELOG.md)
 - Where the tests run: on the GitHub mirror, through

@@ -1,21 +1,18 @@
 # anathem on Windows
 
-**Status: it compiles and passes the suite in CI; it still has to be tried by
-hand.** Every push compiles with MSVC on a `windows-latest` runner and runs
-the full suite — one test stays ignored, the POSIX permissions one, which
-does not apply here — plus a run through `init`, `save`, `search` and
-`doctor`. Before that, nobody had ever compiled it on Windows.
+The release publishes an `x86_64-pc-windows-msvc` binary, and every push
+compiles with MSVC on a `windows-latest` runner and runs the full suite plus
+a pass through `init`, `save`, `search` and `doctor`. One test is skipped
+here, the POSIX permissions one, for the reason its name gives; the one that
+reads `/proc` runs only on Linux. The counts are deliberately not written
+down — a number that changes on every commit is a line of documentation that
+is wrong more often than it is right.
 
-What CI **cannot** cover is further down, under "What to test": CI runs
-everything under a single shell, so it does not compare the default path
-between `cmd.exe` and Git Bash, which is the point where a misplaced
-precedence would leave two different databases without saying anything.
-
-Two more tests are skipped elsewhere for the same kind of reason: the one
-that reads `/proc` runs only on Linux, and the POSIX permissions one does
-not run here. The counts themselves are deliberately not written down — a
-number that changes on every commit is a line of documentation that is wrong
-more often than it is right.
+What CI cannot cover is anything that depends on which shell you start from,
+because it runs everything under one. Those checks, and one question about
+file mappings that cannot be answered from Linux at all, are in
+[issue #57](https://gitlab.com/__alexander__/anathem/-/issues/57). The rest
+of this document is what is settled.
 
 ## What had to be fixed
 
@@ -56,37 +53,6 @@ A C toolchain is needed, just as on Linux: the project compiles SQLite
 With MSVC you need the *Build Tools for Visual Studio* with the C++ workload.
 If `cargo build` fails in `libsqlite3-sys` or in `onig_sys`, that is what it
 is, not anathem's code.
-
-## What to test, in this order
-
-1. ~~**That it compiles.**~~ Done: CI compiles with MSVC on every push. It was
-   the only thing that could not be verified in any way from Linux.
-2. **The default path.** Run `mem init` from `cmd.exe` and then from Git Bash,
-   and check that both print **the same** path. If they differ, the variable
-   precedence is wrong and you are going to end up with two databases.
-3. **`mem model install` over an already installed pack.** This is the case
-   that failed on Windows with the original `rename`. It has to reinstall
-   without an error and leave the pack file intact and complete — along with
-   the `.sha256` the install now writes beside it, which is what lets a
-   reinstall from the packs directory be verified at all.
-4. **The unresolved critical scenario, below.**
-5. **`mem edit` with no `$EDITOR` defined.** It should open `notepad`.
-
-## What is NOT resolved and has to be measured first
-
-**Reinstalling the pack while the MCP server is running.** The server lives
-for hours with the pack file mapped into memory. If `mem model install` of the
-same pack is run from another terminal, the installing process drops *its*
-`Pack`, but it cannot drop the server's. On Windows, if the other process's
-mapping blocks the rename, the installation would fail — and that is a use the
-design claims to support, not an edge case.
-
-It depends on which sharing flags `memmap2` opens the file with, something
-that cannot be determined without running it. **It is the first experiment to
-run**: start `mem serve`, and from another terminal reinstall the same pack.
-If it fails, the likely fix is for the server to drop and reopen the mapping
-when it detects the change, which is what `reconcile` already does within a
-single process.
 
 ## Known minor debt
 
