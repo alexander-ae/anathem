@@ -8,7 +8,8 @@ fn rechunk(conn: &Connection, memory_id: i64, body: &str) -> Result<()> {
     for (ord, c) in chunk::split(body, ingest::CHUNK_SIZE, ingest::CHUNK_STEP).iter().enumerate() {
         conn.execute(
             "insert into chunks (memory_id, ord, body, fts_body) values (?1, ?2, ?3, ?4)",
-            params![memory_id, ord as i64, c, chunk::segment_cjk(c)],
+            params![memory_id, ord as i64, c,
+                    crate::stem::indexed_form(c, crate::stem::enabled(conn))],
         )?;
     }
     Ok(())

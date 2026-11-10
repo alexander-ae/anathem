@@ -184,7 +184,7 @@ nothing to learn by heart.
 | `why <id>` | Which logged searches returned that memory, in what position, and whether it was the one opened | `mem why 42` |
 | `export --out <dir>` | Exports everything to markdown with frontmatter, one file per memory, losing nothing ([format](docs/export-format.md)) | `mem export --out export/` |
 | `import --from <dir>` | Reads what `export` wrote: restoring a backup, moving the memory to another machine, or syncing two computers by hand with git. It demands an empty database unless you pass `--merge`, which adds only what is missing | `mem import --from export/` |
-| `reindex` | Rebuilds the chunks and the FTS5 index from `memories.body` | `mem reindex` |
+| `reindex [--stem on\|off]` | Rebuilds the chunks and the FTS5 index from `memories.body`. `--stem on` makes `registro` reach `registros`, in both English and Spanish and without a pack; it is off by default and lives in the database rather than in `config.json`, because changing it *is* rewriting every chunk. Measured gain on the author's corpus: three queries of fifty, with one lost — see [`docs/search.md`](docs/search.md) | `mem reindex --stem on` |
 | `supersede <new> <old>` | Marks `old` as replaced by `new`; it stops showing up in searches | `mem supersede 42 43` |
 | `pin <id>` | Pins a memory so it survives the search's trimming of candidates | `mem pin 17` |
 | `unpin <id>` | Removes the pin | `mem unpin 17` |

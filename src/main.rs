@@ -92,7 +92,13 @@ enum Cmd {
         out: PathBuf,
     },
     /// Rebuilds chunks and the FTS5 index from memories.body
-    Reindex,
+    Reindex {
+        /// Turn stemming on or off for this database. Changing it IS
+        /// rewriting every chunk, which is why it lives here and not in
+        /// `config.json`: the index and the query have to agree
+        #[arg(long, value_name = "on|off")]
+        stem: Option<String>,
+    },
     /// What the search log says about whether this is earning its place
     Stats {
         /// How far back: 7d, 30d, 6h. Everything, by default.
@@ -702,9 +708,20 @@ fn run(cli: Cli) -> Result<()> {
             let n = anathem::export::to_markdown(&conn, &out)?;
             println!("exported {n} memories to {}", out.display());
         }
-        Cmd::Reindex => {
+        Cmd::Reindex { stem } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+            if let Some(v) = stem.as_deref() {
+                let on = match v {
+                    "on" => true,
+                    "off" => false,
+                    otro => anyhow::bail!("--stem takes `on` or `off`, not «{otro}»"),
+                };
+                // Set before rebuilding, because `rechunk` reads it: the
+                // setting and the rows it describes are written in one go.
+                anathem::stem::set(&conn, on)?;
+                println!("stemming {}", if on { "on" } else { "off" });
+            }
             let n = anathem::edit::reindex(&conn)?;
             println!("reindexed {n} memories");
             sync_after_write(&conn, &dir);

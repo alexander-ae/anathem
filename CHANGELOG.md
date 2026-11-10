@@ -10,6 +10,32 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Added
+
+- **`mem reindex --stem on` makes `registro` find `registros`.** The index
+  is `unicode61` with no stemming, so a singular against a plural was not a
+  result ranked low — it was no result at all, in a corpus that writes the
+  same noun both ways. Snowball for English and Spanish, applied to the index
+  and to the query by one function, with identifiers left exactly as written:
+  anything carrying a digit or an interior capital, so `n+1`, `OP-204`,
+  `RateLimitable` and a SHA are untouched.
+
+  **Off by default, and the setting lives in the database rather than in
+  `config.json`.** It describes how the rows were written, not how anyone
+  likes things, and a query stemmed against an index that is not matches
+  nothing — silently, with no exception to notice it by. Changing it *is*
+  rewriting every chunk, so the command that rewrites them is the only way to
+  change it. One second over 785 memories.
+
+  **Measured, and smaller than it looked.** Three queries of fifty gained,
+  one lost; lexical recall@5 goes 24/34 to 27/34 and the paraphrastic subset
+  goes *down* by one. The experiment that motivated it had predicted eight,
+  because it simulated stemming by adding surface forms to the query — and
+  adding `deployment`, `deploying` and `deployed` as three `OR` branches
+  scores differently from collapsing them to one token. A simulation that is
+  not the operation it stands for is worth less than its number suggests, and
+  that is in `docs/search.md` next to the table.
+
 ### Changed
 
 - **Query expansion was measured and is not being shipped.** `docs/search.md`

@@ -552,7 +552,18 @@ pub fn run_explained(
     q: &Query,
     ctx: &SearchContext,
 ) -> Result<Vec<Explained>> {
-    let m = to_match(&q.text);
+    // The query goes through the same transformation the index did, or the
+    // two sides tokenize differently and nothing ever matches. Which
+    // transformation that was is recorded in the database, not in a
+    // configuration file, precisely so the two cannot drift apart.
+    let texto_indexado;
+    let texto = if crate::stem::enabled(conn) {
+        texto_indexado = crate::stem::augment(&q.text);
+        &texto_indexado
+    } else {
+        &q.text
+    };
+    let m = to_match(texto);
 
     // --- recuperación léxica: idéntica a como era ---
     let mut best: HashMap<i64, (SearchHit, i64)> = HashMap::new();
@@ -704,7 +715,7 @@ pub fn run_explained(
     // Counted once the list is final, so the work is proportional to what
     // is returned and not to the candidate pool.
     let ids: Vec<i64> = out.iter().map(|e| e.hit.memory_id).collect();
-    let (words_total, per) = word_evidence(conn, &match_terms(&q.text), &ids)?;
+    let (words_total, per) = word_evidence(conn, &match_terms(texto), &ids)?;
     for e in out.iter_mut() {
         e.words_total = words_total;
         e.words_matched = per.get(&e.hit.memory_id).copied().unwrap_or(0);
