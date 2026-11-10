@@ -88,6 +88,8 @@ macOS (both architectures) and Windows x86_64, and on anything else it
 compiles from source.
 
 Check it with `mem doctor`, which has to end in `All good.` and exit 0.
+`sh scripts/demo.sh` runs a short tour over a throwaway corpus in a
+temporary directory, touching nothing of yours.
 
 Or hand it to an agent. Paste this into Claude Code, opencode or any agent
 that can read a URL, and it follows the same steps — including the ones the
