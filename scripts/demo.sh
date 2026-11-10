@@ -40,7 +40,7 @@ run 'mem save "PAY-18 took production down: the migration held a lock on users f
 "$MEM" --db "$DB" save "the payments service retries 3 times with backoff, then drops to the dead letter queue" >/dev/null
 "$MEM" --db "$DB" save "staging is restored from prod every Sunday at 03:00 UTC" >/dev/null
 
-say "a week later, in a new session, asked a different way"
+say "in another session, asked a different way"
 run 'mem search "what took production down"' search "what took production down" --limit 2
 
 say "it turns out the cause was something else. corrections are explicit"
