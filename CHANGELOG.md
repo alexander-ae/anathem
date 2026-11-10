@@ -12,6 +12,16 @@ live in the database, not in the binary.
 
 ### Added
 
+- **Nineteen seconds of it working, in the README.** `demo.cast` records an
+  agent saving what it worked out, a later session finding it asked a
+  different way, the fact turning out to be wrong, and the correction
+  replacing it without the old version being lost. `scripts/demo.sh` is what
+  it records, so the recording can be made again when the output changes —
+  and it already changed once while being written, which is the reason it is
+  a script and not a list of commands in an issue.
+
+### Added
+
 - **`mem reindex --stem on` makes `registro` find `registros`.** The index
   is `unicode61` with no stemming, so a singular against a plural was not a
   result ranked low — it was no result at all, in a corpus that writes the
