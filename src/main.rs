@@ -161,9 +161,23 @@ enum Cmd {
     Unpin {
         id: i64,
     },
-    /// Takes a memory out of search without deleting it
+    /// Takes a memory out of search. It is NOT a delete: the body stays
+    /// readable with `mem show <id>` and goes into `mem export`
     Forget {
         id: i64,
+    },
+    /// Really deletes a memory: the row, its chunks, its index entries, its
+    /// tags, its refs and its vectors
+    ///
+    /// Different from `forget`, which only hides it from search. This one
+    /// cannot be undone, it refuses while another memory supersedes this
+    /// one, and it reaches no copy: an export taken earlier still has it.
+    Delete {
+        id: i64,
+        /// Delete even though another memory supersedes this one. It prints
+        /// the same warning; it does not suppress it
+        #[arg(long)]
+        force: bool,
     },
     /// Memories nobody has opened, to start a review pass from
     Stale {
@@ -1011,6 +1025,51 @@ every other key the file has, or put it in {} yourself:",
             let conn = anathem::db::open(&path)?;
             anathem::maint::forget(&conn, id)?;
             println!("memory {id} forgotten (still in the database, out of search)");
+            println!("  this is not a delete: `mem show {id}` still prints the body, and so");
+            println!("  does `mem export`. To really remove it, `mem delete {id}`.");
+        }
+        Cmd::Delete { id, force } => {
+            let conn = anathem::db::open(&path)?;
+            // Said before anything is removed, and said again by `--force`:
+            // the whole value of this command over `delete from memories` is
+            // that somebody reads what it costs while it is still a choice.
+            let Some(before) = anathem::maint::delete_impact(&conn, id)? else {
+                anyhow::bail!("there is no memory with id:{id}");
+            };
+            println!("[{}] {} (id:{}, {})", before.project, before.title, before.id, before.status);
+            if let Some(t) = &before.topic {
+                println!("  topic key `{t}`; its history loses this version");
+            }
+            if let Some(prev) = before.supersedes {
+                println!("  it supersedes id:{prev}, which stays where it is with nothing");
+                println!("  left pointing at it");
+            }
+            if before.is_referenced() {
+                let who: Vec<String> =
+                    before.superseded_by.iter().map(|i| i.to_string()).collect();
+                println!(
+                    "  superseded by {}: after this, `mem history` for {} stops here instead",
+                    who.join(", "),
+                    who.join(" and ")
+                );
+                println!("  of reaching further back");
+            }
+            if before.log_rows > 0 {
+                let rows = before.log_rows;
+                let plural = if rows == 1 { "search" } else { "searches" };
+                println!("  {rows} logged {plural} name this id and are kept: the log holds ids");
+                println!("  and queries, not bodies, and erasing it would hide that a search");
+                println!("  happened");
+            }
+            println!("  an export taken earlier still contains it, and so does any machine");
+            println!("  it was sent to; this deletes here and nowhere else");
+
+            let gone = anathem::maint::delete(&conn, id, force)?;
+            println!(
+                "deleted: 1 memory, {} chunk(s) and their index entries, {} tag(s), {} ref(s)",
+                gone.chunks, gone.tags, gone.refs
+            );
+            println!("  the freed pages are overwritten with zeros, not returned to the disk");
         }
         Cmd::Topics => {
             let conn = anathem::db::open(&path)?;

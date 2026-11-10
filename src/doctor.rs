@@ -519,11 +519,44 @@ fn near_duplicates(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
             pair.project,
             pair.overlap * 100.0
         ));
+        // The line somebody can run, rather than the two ids and the
+        // homework of working out which way round the command goes. It is
+        // still a suggestion: nothing here writes, and whether these two
+        // are versions of one fact or two facts that happen to share their
+        // vocabulary is the judgement a word count cannot make.
+        //
+        // No guard against the two sharing a topic key is needed: a key has
+        // at most one active memory per project, enforced by a unique
+        // index, and `find` only ever pairs active memories.
+        let (newer, older) = newer_first(conn, pair.a, pair.b)?;
+        s.info(format!(
+            "    mem supersede {newer} {older}   # if they are one fact: {older} stops \
+             appearing in searches"
+        ));
     }
     if pairs.len() > shown {
         s.info(format!("  and {} more", pairs.len() - shown));
     }
     Ok(())
+}
+
+/// The two ids, newer first, which is the order `mem supersede` wants.
+///
+/// Ordered by the date the memory carries and not by id. The two usually
+/// agree, and where they do not it is because the memories came from
+/// somewhere else: `mem import` and `mem migrate` assign ids in the order
+/// the file happened to list them, so an id comparison would confidently
+/// name the wrong one as the correction. `created_ts` breaks a tie within
+/// the same day, and the id breaks what is left.
+fn newer_first(conn: &Connection, a: i64, b: i64) -> anyhow::Result<(i64, i64)> {
+    let key = |id: i64| -> anyhow::Result<(String, String, i64)> {
+        Ok(conn.query_row(
+            "select created, coalesce(created_ts, created) from memories where id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, id)),
+        )?)
+    };
+    Ok(if key(a)? >= key(b)? { (a, b) } else { (b, a) })
 }
 
 fn counts(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
