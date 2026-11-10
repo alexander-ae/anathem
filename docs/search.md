@@ -88,6 +88,73 @@ diagnosis — finding and ordering are different problems, and this change
 attacked only one of them. **The reranker is still pending, and it is now
 the binding constraint.**
 
+### Query expansion, measured and not shipped
+
+The sentence above names two levers for retrieval, "a vector layer or query
+expansion". The layer was built; expansion was the one named in the docs with
+no experiment behind it. It has one now.
+
+The experiment needed no production code: expanding a query is adding terms
+to it, and `to_match` already joins them with `OR`, so an evalset with
+expanded queries measures exactly the effect. Terms came from the installed
+pack — the nearest vocabulary entries to each query word, at most *k* per
+word, skipping terms too rare (bm25 already answers those) or too common
+(they discriminate nothing), which is the rule `search::word_evidence`
+already uses.
+
+Over the author's 50 queries:
+
+| | recall@5 | recall@50 | paraphrastic recall@5 |
+|---|---|---|---|
+| no expansion | 26/50 | 41/50 | 2/16 |
+| k=1 | 27/50 | 42/50 | 3/16 |
+| **k=3** | **30/50** | 41/50 | 3/16 |
+| k=5 | 27/50 | 40/50 | 4/16 |
+
+**It is not noise.** The control settles that: expanding with the same number
+of words drawn at random from the same vocabulary gives 24, 22 and 23 of 50
+across three seeds — consistently *worse* than not expanding. The pack's
+neighbours beat random by about seven cases. What moves the number is the
+semantics and not the extra terms.
+
+**But it does not do what it was proposed for.** `recall@50` is flat (41, 42,
+41, 40), so nothing new is being retrieved — the documents were already
+findable and expansion only reordered them. The paraphrastic subset moves
+from 2 to 3 of sixteen, which is one case. And the net is unstable in *k*:
++1, +4, +1, with eleven cases changing in both directions at k=5 for a net of
+one.
+
+**What it actually fixes is something else.** Of the five queries that gain
+at k=3, three are *lexical*, and the terms that win them are morphological
+variants and translations:
+
+```
+q12   registros, registrar, registra        plural and conjugation
+q35   deployment, deploying, deployed        morphology
+q21   número -> number                       translation
+q37   alineación, líneas, lignes             both
+```
+
+The index is `unicode61` with no stemmer, by a decision recorded above, so
+`registro` does not match `registros` at all — not ranked low, absent:
+
+```
+save   "los registros de auditoría quedaron incompletos"
+search "registros"   ->  1 result
+search "registro"    ->  No results
+```
+
+So expansion from a static pack works here as a stemmer-and-translator
+bolted onto BM25, which is a real gap and not the one the lever was aimed
+at. Measured against its own decision rule — paraphrastic `recall@5`
+unmoved, `recall@50` unmoved — expansion closes. What it leaves behind is
+the question of whether the missing stemmer costs more than it saves, which
+is a different experiment on a different lever.
+
+One limitation worth stating: this was measured on the author's corpus only.
+LongMemEval was not re-run, so the figures above describe a 697-memory
+bilingual corpus and nothing larger.
+
 Where the layer does change things in a big way is across languages, which
 is what it was built for: querying in English a corpus written in Spanish,
 recall@5 goes from 34% to 58% (n=50). See
