@@ -75,6 +75,13 @@ compiles from source.
 
 Check it with `mem doctor`, which has to end in `All good.` and exit 0.
 
+Or hand it to an agent. Paste this into Claude Code, opencode or any agent
+that can read a URL, and it follows the same steps — including the ones the
+script cannot do on its own, like registering the server when the `claude`
+command is not on the `PATH`:
+
+> Install anathem from https://gitlab.com/__alexander__/anathem/-/raw/main/AGENTS.md and follow its setup flow for my current project.
+
 Inside Claude Code, the repository is its own marketplace, so there is no
 JSON to edit:
 
