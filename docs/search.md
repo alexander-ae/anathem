@@ -151,6 +151,66 @@ unmoved, `recall@50` unmoved — expansion closes. What it leaves behind is
 the question of whether the missing stemmer costs more than it saves, which
 is a different experiment on a different lever.
 
+### And then the stemmer itself, which did much less
+
+The expansion above suggested that morphology was the lever: restricted to
+neighbours sharing a root, it reached 33/50 from a baseline of 26, gaining
+eight cases and losing one. `mem reindex --stem on` builds that properly —
+Snowball for English and Spanish, applied to the index and to the query by
+the same function — and over the same 50 queries it gives:
+
+| with the pack | recall@5 | recall@50 | lexical | paraphrastic |
+|---|---|---|---|---|
+| no stemming | 26/50 | 41/50 | 24/34 | 2/16 |
+| stemming | 28/50 | 40/50 | **27/34** | 1/16 |
+
+Three gained, one lost. **Not eight.**
+
+**The simulation was not a proxy for the thing it simulated**, and that is
+the finding worth keeping. Expansion put `deployment`, `deploying` and
+`deployed` into the query as three `OR` branches, each carrying its own IDF
+into the score. A stemmer collapses all three to one token that matches
+once. Adding surface forms and removing them are different operations, and
+only one of them was ever going to be built.
+
+What is real: lexical queries go from 24/34 to 27/34, and the defect the
+whole thing started from is gone — `registro` reaches `registros` in a
+database with no pack at all. What is not: the paraphrastic subset goes
+*down* by one, which is the half this was supposed to help.
+
+And on the public corpus it does nothing at all. LongMemEval, 23,781
+memories and 94 questions — thirty-four times the corpus above and almost
+twice the questions:
+
+| LongMemEval | recall@5 | recall@50 | MRR |
+|---|---|---|---|
+| no stemming | 91.5% | **97.9%** | **0.867** |
+| stemming | 91.5% | 96.8% | 0.838 |
+
+Two gained, two lost, net zero. `recall@5` does not move at all, and both
+`recall@50` and MRR go **down**: collapsing surface forms into one token
+lowers how well the index tells documents apart, and that costs ordering.
+
+The two corpora disagree in a way that is worth understanding rather than
+averaging. LongMemEval is written almost entirely in English, which has
+little morphology; the corpus above is half Spanish, which has a great deal
+of it. A stemmer is therefore worth more the more inflected the writing is,
+and the public benchmark is close to the case where it is worth least. What
+both agree on is that it is not worth much.
+
+So it ships **off**, and turning it on is `mem reindex --stem on` — one
+second over 785 memories. The setting lives in the database and not in
+`config.json`, because it describes how the rows were written rather than
+how anyone likes things: a query stemmed against an index that is not
+matches nothing, silently, and there is no exception to notice that by.
+Changing it *is* rewriting every chunk, so the only way to change it is the
+command that does.
+
+Identifiers are never stemmed — anything carrying a digit or an interior
+capital, so `n+1`, `OP-204`, `RateLimitable`, `v0.8.0` and a SHA reach the
+index exactly as written. That is what the lexical half of the eval set is
+made of, and at 88% recall@5 it has the most to lose.
+
 One limitation worth stating: this was measured on the author's corpus only.
 LongMemEval was not re-run, so the figures above describe a 697-memory
 bilingual corpus and nothing larger.

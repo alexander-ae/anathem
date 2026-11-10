@@ -224,7 +224,8 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
         {
             tx.execute(
                 "insert into chunks (memory_id, ord, body, fts_body) values (?1, ?2, ?3, ?4)",
-                params![new_id, ord as i64, body, crate::chunk::segment_cjk(body)],
+                params![new_id, ord as i64, body,
+                        crate::stem::indexed_form(body, crate::stem::enabled(&tx))],
             )?;
         }
         for t in &m.tags {

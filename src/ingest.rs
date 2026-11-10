@@ -44,7 +44,8 @@ fn insert_row(tx: &Connection, m: &NewMemory, agent: Option<&str>) -> Result<i64
     for (ord, body) in chunk::split(&m.body, CHUNK_SIZE, CHUNK_STEP).iter().enumerate() {
         tx.execute(
             "insert into chunks (memory_id, ord, body, fts_body) values (?1, ?2, ?3, ?4)",
-            params![id, ord as i64, body, chunk::segment_cjk(body)],
+            params![id, ord as i64, body,
+                    crate::stem::indexed_form(body, crate::stem::enabled(tx))],
         )?;
     }
     for t in &m.tags {
