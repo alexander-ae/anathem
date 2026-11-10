@@ -58,11 +58,19 @@ impl DeleteImpact {
 
 /// What `delete` would do to this memory, without doing any of it.
 pub fn delete_impact(conn: &Connection, id: i64) -> Result<Option<DeleteImpact>> {
-    let row: Option<(String, String, String, Option<String>, Option<i64>)> = conn
+    let row = conn
         .query_row(
             "select project, title, status, topic, supersedes_id from memories where id = ?1",
             [id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, Option<String>>(3)?,
+                    r.get::<_, Option<i64>>(4)?,
+                ))
+            },
         )
         .optional()?;
     let Some((project, title, status, topic, supersedes)) = row else {
