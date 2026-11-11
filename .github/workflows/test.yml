@@ -35,7 +35,15 @@ jobs:
           - name: windows
             runner: windows-latest
           - name: macos
-            runner: macos-14
+            # `macos-latest` and not a pinned image, for the third time.
+            # `release.yml` learned this on 2026-11-06 — "the macOS runner
+            # label floats, because pinning it has broken twice" — and the
+            # fix was applied there and not here. A pinned label that GitHub
+            # retires does not fail the job: it never schedules it, so the
+            # job is cancelled with zero steps and the run reports
+            # `cancelled` rather than red. macOS went untested for at least a
+            # day and nothing said so.
+            runner: macos-latest
     steps:
       - uses: actions/checkout@v4
 
