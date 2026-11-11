@@ -10,6 +10,85 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-11
+
+**What 1.0 promises: a database and an export written by any 1.x can be read
+by any later 1.x, the five MCP tools keep their names and their required
+parameters, and the commands and flags the README documents keep working.
+Breaking any of those costs a major.** Four tests hold those four promises,
+each against a fixture committed to the repository, so the promise is checked
+and not merely stated.
+
+What it does **not** promise: a number. The benchmarks, the defaults and the
+resource figures are measurements of a moment, documented with their method,
+and they move when the measurement does.
+
+The version changes because the guarantee does. `0.x` says that anything may
+break at any time, which stopped being true a while ago — the database has
+migrated itself through every schema change since the first release, and the
+export has round-tripped through all of them. Saying `0.x` to somebody
+deciding whether to trust this with two years of notes was false in the
+direction nobody warns you about.
+
+### Added
+
+- **`mem save --external --ext-id <value>`, so a retried delivery is one
+  draft.** Anything delivering messages does it at least once: a sender that
+  pipes a note in and loses the connection before learning it arrived cannot
+  tell whether to send it again. The value is the sender's own id for the
+  message; a second delivery with the same one writes nothing, reports the
+  memory that already holds it, and exits 0. It reuses `memories.ext_id`, the
+  unique column `migrate` has always used for exactly this, and runs in an
+  `Immediate` transaction so two deliveries arriving at once cannot both
+  write. If two senders ever choose the same value the second message is not
+  stored, so the output names who sent the one already there and says plainly
+  that a collision is dropping somebody's message — a silent drop being worse
+  than the duplicate the flag exists to prevent.
+- **The greeting says how many received memories are waiting.** A draft is
+  invisible until somebody accepts it, which is the gate and stays the gate;
+  what was missing is that the gate never said it had anything behind it, so a
+  mailbox fills up and nobody empties it. One line, a count and a command, and
+  not one character more: no title, no sender, no id, no body, because that is
+  text another machine sent. It costs 22 tokens and only when drafts exist.
+- **`docs/research.md`**, twenty-one papers with what each claims, its figure
+  and what it changed here — including the five that argue against this
+  project or the category it belongs to, which come first on the page. Every
+  figure was checked against the paper before being written down, and three
+  did not survive the check in the form they were proposed.
+
+### Changed
+
+- **`mem recent --external` no longer reports an empty window when the mail is
+  in another project.** It filters by the project of the directory you are
+  standing in, and a mailbox files each note under the project the *sender*
+  named, so standing elsewhere is the ordinary case — and until now it printed
+  the same line as an empty mailbox. Now it counts what is elsewhere and gives
+  the command, only when the project was not asked for.
+- **The install documentation says what the operating system will say.**
+  SmartScreen and Gatekeeper warn about this binary because it is unsigned and
+  has no download reputation, which describes every project this size and says
+  nothing about the file. The marker that triggers the check is attached by
+  browsers and not by `curl`, so the one-line install avoids it — a difference
+  somebody can verify rather than take on faith.
+
+### Fixed
+
+- **`scripts/sign-release.sh` mistook a rate limit for a missing file.** Run
+  against a complete release, it reported four of five assets absent because
+  GitLab answered 429 and `curl -fsSL` collapses every HTTP error into one exit
+  code. Downloads now read the status: 404 is the only thing that means absent.
+
+### Documentation
+
+- The greeting's cost table states its method and gives two real corpora
+  instead of one number. Measuring it showed that its stated ceiling of 470
+  tokens was not a ceiling: the bound is in characters, and the same bounded
+  block costs 0.278 to 0.348 tokens per character depending on the language, so
+  one real project already exceeded it.
+- Three subjects written down twice now have one owner each, and a test
+  compares the two MCP snippets `AGENTS.md` keeps on purpose against
+  `installation.md`.
+
 ## [0.10.0] - 2026-11-10
 
 ### Added
@@ -951,7 +1030,8 @@ First release with prebuilt binaries.
 - The project lives on GitLab. GitHub remains only as the macOS builder, since
   GitLab's macOS runners are Premium and Ultimate only.
 
-[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v0.10.0...main
+[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v1.0.0...main
+[1.0.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.10.0...v1.0.0
 [0.10.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.9.0...v0.10.0
 [0.9.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.8.0...v0.9.0
 [0.8.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.7.1...v0.8.0
