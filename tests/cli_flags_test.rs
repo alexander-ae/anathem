@@ -84,3 +84,47 @@ fn the_unbounded_window_keyword_is_the_one_the_help_advertises() {
     // Y la forma vieja se sigue aceptando, como con las banderas.
     assert!(mem(&db, &["recent", "--since", "todo"]).1, "`todo` seguía andando y no se rompe");
 }
+
+/// Somebody can hold this binary without ever having seen the repository —
+/// an agent ran the installer for them. `--help` is where they look to find
+/// out what it is, so the URL is there; `doctor` is where they look when
+/// something is wrong, so it is there too.
+///
+/// Taken from `Cargo.toml` rather than written out, so it cannot drift from
+/// what crates.io and the release publish.
+#[test]
+fn the_help_and_doctor_say_where_the_project_lives() {
+    let url = env!("CARGO_PKG_REPOSITORY");
+    assert!(url.starts_with("https://"), "el repositorio tiene que ser una URL: {url}");
+
+    let salida = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
+        .arg("--help")
+        .output()
+        .unwrap();
+    let ayuda = String::from_utf8_lossy(&salida.stdout);
+    assert!(ayuda.contains(url), "`mem --help` no dice dónde vive el proyecto:\n{ayuda}");
+
+    let d = tempfile::tempdir().unwrap();
+    let salida = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
+        .arg("--db")
+        .arg(d.path().join("mem.db"))
+        .arg("doctor")
+        .output()
+        .unwrap();
+    let doctor = String::from_utf8_lossy(&salida.stdout);
+    assert!(doctor.contains(url), "`mem doctor` tampoco lo dice:\n{doctor}");
+}
+
+/// And `--version` does not, because its output is parsed: `mem update`
+/// compares against it and the installer reads it. A URL there buys no
+/// discoverability that `--help` does not already give, and costs a parser.
+#[test]
+fn the_version_stays_machine_readable() {
+    let salida = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
+        .arg("--version")
+        .output()
+        .unwrap();
+    let v = String::from_utf8_lossy(&salida.stdout);
+    assert!(!v.contains("http"), "--version tiene que seguir siendo una línea sin URL: {v}");
+    assert!(v.starts_with("mem "), "{v}");
+}

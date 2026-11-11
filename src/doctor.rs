@@ -47,6 +47,16 @@ pub const COMMIT: &str = env!("ANATHEM_COMMIT");
 /// commit there is no parenthesis to print — see the comment there.
 pub const FULL_VERSION: &str = env!("ANATHEM_VERSION_FULL");
 
+/// Where the project lives, taken from `Cargo.toml` so it cannot drift from
+/// what is published.
+///
+/// Somebody can end up holding this binary without ever having seen the
+/// repository: an agent ran the installer for them, or it arrived with a
+/// machine they inherited. `--help` and `doctor` are the two places they
+/// look — the first to find out what this is, the second when something is
+/// wrong and they want somewhere to report it.
+pub const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
+
 /// `mem doctor`'s exit code when it found problems.
 pub const EXIT_PROBLEMS: i32 = 1;
 
@@ -191,6 +201,7 @@ pub fn diagnose(db: &Path) -> Informe {
 fn binary_section() -> Section {
     let mut s = Section::new("Binary");
     s.bien(format!("mem {VERSION}"));
+    s.info(REPOSITORY);
     if COMMIT == "unknown" {
         // Information and not a warning. This is what every install from a
         // published crate or a source tarball looks like: there was no
