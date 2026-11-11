@@ -278,10 +278,15 @@ pub fn handoff_instructions(
     if items == 0 {
         return None;
     }
+    // Two independent things can want to be said: what was saved lately,
+    // and that something is waiting at the door. Either can be absent, so
+    // neither early-returns on behalf of the other — which is what the old
+    // `return None` here did to the drafts.
+    let waiting = drafts_waiting(conn).unwrap_or(0);
     let seconds = duration_in_seconds(window).ok()?;
     let items = list_recent(conn, Some(project), Some(seconds), items, 140).ok()?;
     if items.is_empty() {
-        return None;
+        return waiting_line(waiting);
     }
     // What this same agent saved is not news to it, but it is to the others,
     // so it is not filtered out: it is labelled. And an agent coming back in
@@ -330,5 +335,44 @@ pub fn handoff_instructions(
     s.push_str(CLOSE_TAG);
     s.push_str("\nFor the full body of any of them, `get_memory` with its id; to look further back, \
          `recent_memories`.");
+    if let Some(l) = waiting_line(waiting) {
+        s.push('\n');
+        s.push_str(&l);
+    }
     Some(s)
+}
+
+/// How many memories are waiting to be accepted, anywhere in the database.
+///
+/// Not scoped to the project, deliberately: the command this announces is
+/// `mem recent --all --external`, and a draft filed under the sender's
+/// project name is precisely the one nobody is standing in front of.
+fn drafts_waiting(conn: &Connection) -> Result<i64> {
+    Ok(conn.query_row(
+        "select count(*) from memories where status = 'draft'",
+        [],
+        |r| r.get(0),
+    )?)
+}
+
+/// One line saying that something arrived, or nothing.
+///
+/// A count and the command, and not one character more. The bodies of those
+/// drafts are text another machine sent; putting any of it here would walk
+/// it into the system prompt before anybody agreed to let it in, which is
+/// the entire reason a received memory is a draft in the first place. So no
+/// title, no sender, no id — only the fact that looking is worth it.
+///
+/// It is not windowed like the block above. A draft waits until it is
+/// accepted or until whatever delivered it gives up; a window would hide
+/// exactly the ones that have been ignored longest.
+fn waiting_line(n: i64) -> Option<String> {
+    if n <= 0 {
+        return None;
+    }
+    let plural = if n == 1 { "memory is" } else { "memories are" };
+    Some(format!(
+        "{n} received {plural} waiting for review and cannot be searched until accepted: \
+         `mem recent --all --external`."
+    ))
 }

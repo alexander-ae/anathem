@@ -79,21 +79,67 @@ neglected notes, and the command says so every time it runs.
 
 **What the greeting costs.** It is the one piece of text anathem puts in a
 model's system prompt, so it is paid in **every** session of that project,
-whether or not any memory is ever searched. Measured on a real corpus with
-the default `handoff_items: 5`:
+whether or not any memory is ever searched.
+
+Measured on two real projects of the author's own corpus, with the default
+`handoff_items: 5`, counting the exact string `initialize` returns with
+tiktoken's `cl100k_base`:
 
 | | tokens |
 |---|---|
-| the greeting, as it comes out today | **186** |
-| of those, the fixed framing that says this is data and not instructions | 100 |
-| of those, the notes themselves | 54 |
-| its ceiling, with five notes at the longest each field is allowed | **470** |
+| the greeting over a project of English notes | **484** |
+| the greeting over a project of Spanish notes | **564** |
+| of either, the fixed framing that says this is data and not instructions | 165 |
+| of that framing, the sentence about permission | 32 |
+| the line that says received memories are waiting, when any are | **22** |
+| that line on its own, with no recent activity to report | 22 |
+| nothing saved lately and nothing waiting | 0 |
 | one `search_memory` call, for comparison | ~1,300 |
 
-The ceiling is not an estimate: every field is already truncated — 160
-characters of title, 40 of agent, 40 of topic key — so five notes cannot
-exceed it however long the originals are. Together with the 24-hour window,
-that is what keeps this from growing with the corpus.
+**The bound is in characters, and only in characters.** Every field is
+truncated — 160 of title, 40 of agent, 40 of topic key — so five notes plus
+the framing and the waiting line cannot exceed about **1,950 characters**,
+however long the originals were. That part is guaranteed by the code and
+does not grow with the corpus.
+
+In *tokens* it is not guaranteed, and a previous version of this table said
+it was. Measured across those same corpora, the greeting costs between
+**0.278 and 0.348 tokens per character** — English notes at the low end,
+Spanish prose dense with identifiers at the high end — so the same bounded
+block is worth roughly **540 to 680 tokens** depending on what language the
+notes are written in. A corpus in Spanish genuinely exceeds what an English
+one measures, which is why there is no single number in that row any more.
+
+### What is waiting at the door
+
+A memory that arrived from another machine is a draft: invisible to search
+and to the block above until somebody runs `mem accept`. That gate is the
+point and nothing here moves it. What was missing is that the gate never
+said it had something behind it — the only way to find out was a command
+nobody had a reason to run, so a mailbox filled up and nobody emptied it.
+
+So when anything is waiting, one line follows the block:
+
+```
+3 received memories are waiting for review and cannot be searched until accepted: `mem recent --all --external`.
+```
+
+A count and the command, and not one character more. No title, no sender, no
+id, no body — those are text another machine sent, and putting any of it
+here would walk it into the system prompt before anyone agreed to let it in,
+which is the entire reason it is a draft. A test asserts that a draft whose
+body is full of delimiters and instructions changes nothing in the block.
+
+Three details, each deliberate:
+
+- **It counts the whole database, not this project.** The command it offers
+  is `--all --external`, and a draft filed under the *sender's* project name
+  is precisely the one nobody is standing in front of.
+- **It is not windowed** like the block above. A draft waits until it is
+  accepted; a 24-hour window would hide the ones ignored longest.
+- **`handoff_items: 0` silences it too.** Somebody who turned the greeting
+  off asked for nothing in the system prompt, and this is in the system
+  prompt.
 
 Worth knowing which half is which. Making the list terser — ids and topic
 keys instead of titles — would cut the 54, not the 100: the framing is the
