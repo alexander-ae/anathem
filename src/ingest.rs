@@ -128,6 +128,29 @@ pub struct Saved {
     pub other_keys: Vec<String>,
 }
 
+/// What `save_received` did, which the caller has to be able to tell apart.
+///
+/// A mailbox that pipes a message into `mem save --external` reads the exit
+/// code to decide whether to acknowledge the delivery. If "written" and
+/// "already here" both came back as a zero and a line of prose, a collision
+/// between two producers' `ext_id` values would look exactly like a
+/// successful delivery and the message would be dropped in silence — which
+/// is worse than the duplicate this parameter exists to prevent.
+#[derive(Debug, Clone)]
+pub enum Received {
+    /// Written now, as a draft.
+    Stored(Saved),
+    /// Some earlier delivery already carried this `ext_id`. Nothing was
+    /// written, and this is the memory that holds it.
+    AlreadyHere {
+        id: i64,
+        /// Who that earlier delivery said it came from, which is not
+        /// necessarily who is delivering now — the case worth seeing.
+        from: Option<String>,
+        when: Option<String>,
+    },
+}
+
 /// Saves a memory that arrived from somewhere else, as a draft.
 ///
 /// `from` is a free label naming who sent it. It is required: a received
@@ -154,11 +177,13 @@ pub fn save_received(
     project: &str,
     given_tags: Vec<String>,
     from: &str,
-) -> Result<Saved> {
+    ext_id: Option<&str>,
+) -> Result<Received> {
     let from = from.trim();
     if from.is_empty() {
         bail!("a received memory needs to say who sent it");
     }
+    let ext_id = ext_id.map(validate_ext_id).transpose()?;
     let tags = if given_tags.is_empty() {
         crate::tags::classify(text).map_err(|e| anyhow::anyhow!(e))?
     } else {
@@ -172,11 +197,30 @@ pub fn save_received(
         event_start: None,
         event_end: None,
         source: "explicit".into(),
-        ext_id: None,
+        ext_id: ext_id.clone(),
         tags: tags.clone(),
         refs: crate::tags::extract_refs(text),
     };
-    let tx = conn.unchecked_transaction()?;
+    // `Immediate` and not the default, for the same reason `save_with_topic`
+    // uses it: the check and the insert are one unit. A deferred transaction
+    // lets two deliveries of the same message both read "not here" and both
+    // write, which is the duplicate this is meant to prevent — and the
+    // unique index would then fail the second one with a raw SQLite error
+    // rather than with an answer.
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    if let Some(key) = &ext_id {
+        let found: Option<(i64, Option<String>, Option<String>)> = tx
+            .query_row(
+                "select id, received_from, received_at from memories where ext_id = ?1",
+                [key],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()?;
+        if let Some((id, from, when)) = found {
+            tx.commit()?;
+            return Ok(Received::AlreadyHere { id, from, when });
+        }
+    }
     let id = insert_row(&tx, &m, None)?;
     // Marked after the insert rather than threading two more parameters
     // through `insert_row`, whose other callers have nothing to do with
@@ -186,7 +230,7 @@ pub fn save_received(
         params![id, from, now_with_time()],
     )?;
     tx.commit()?;
-    Ok(Saved {
+    Ok(Received::Stored(Saved {
         id,
         project: project.to_string(),
         tags,
@@ -194,8 +238,35 @@ pub fn save_received(
         replaced: None,
         key_is_new: false,
         other_keys: Vec::new(),
-    })
+    }))
 }
+
+/// Checks the identifier a delivery uses to say "this is the message I
+/// already sent you".
+///
+/// The value is the caller's, not ours: a mailbox namespaces it with its own
+/// prefix so it cannot collide with the document ids `migrate` writes into
+/// the same unique column. What is enforced here is only that it can be
+/// stored, compared and printed without surprises — control characters would
+/// travel into a terminal and into the handoff block.
+fn validate_ext_id(raw: &str) -> Result<String> {
+    let v = raw.trim();
+    if v.is_empty() {
+        bail!("--ext-id cannot be empty: it is what tells a retry from a new message");
+    }
+    if v.chars().count() > MAX_EXT_ID {
+        bail!("--ext-id is longer than {MAX_EXT_ID} characters");
+    }
+    if let Some(c) = v.chars().find(|c| c.is_control()) {
+        bail!("--ext-id cannot contain control characters (found {:?})", c);
+    }
+    Ok(v.to_string())
+}
+
+/// Long enough for a namespaced message id — `stele:` plus a UUID is under
+/// fifty — and short enough that it cannot be used to store the message in
+/// the key.
+const MAX_EXT_ID: usize = 200;
 
 /// Validates and normalizes a topic key: lowercase, trimmed at the edges
 /// and with inner whitespace collapsed to one space (a newline counts as a

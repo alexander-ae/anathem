@@ -78,6 +78,35 @@ pub fn list_recent(
     list_recent_filtered(conn, project, window_seconds, limit, excerpt, false)
 }
 
+/// How many memories that arrived from elsewhere are filed under a project
+/// other than this one, inside the same window.
+///
+/// It exists for one message. `mem recent --external` filters by the project
+/// of the directory you are standing in, and a mailbox files each note under
+/// the project the sender named — so standing in the wrong repository prints
+/// the same "nothing here" as an empty mailbox. The two are different
+/// answers and only one of them means there is nothing to do.
+///
+/// A count and nothing else: no titles, no senders, no bodies. What the
+/// message needs is the fact that looking elsewhere is worth it.
+pub fn external_elsewhere(
+    conn: &Connection,
+    project: &str,
+    window_seconds: Option<i64>,
+) -> Result<i64> {
+    let mut sql = String::from(
+        "select count(*) from memories
+          where received_from is not null and project <> ?1",
+    );
+    let mut args: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(project.to_string())];
+    if let Some(s) = window_seconds {
+        sql.push_str(" and coalesce(created_ts, created) >= ?2");
+        args.push(Box::new(since(s)));
+    }
+    let refs: Vec<&dyn rusqlite::ToSql> = args.iter().map(|b| b.as_ref()).collect();
+    Ok(conn.query_row(&sql, refs.as_slice(), |r| r.get(0))?)
+}
+
 /// `list_recent`, optionally restricted to memories that arrived from
 /// elsewhere.
 ///
