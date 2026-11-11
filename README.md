@@ -89,6 +89,28 @@ compiles from source.
 
 Check it with `mem doctor`, which has to end in `All good.` and exit 0.
 
+**If you download the binary with a browser instead, your operating system
+will warn you about it, and it is right to.** Windows shows "Windows
+protected your PC" and macOS says the developer cannot be verified. Neither
+is a detection of anything: it is an unsigned executable that nobody has
+downloaded enough times to have a reputation, which describes every small
+project and this one too. Code signing is what removes the warning —
+Authenticode on Windows, notarization on macOS — and anathem has neither,
+because both are paid programs tied to a legal identity.
+
+The command above avoids the warning for a reason worth knowing: the marker
+that triggers it (`Mark of the Web` on Windows, `com.apple.quarantine` on
+macOS) is attached by browsers and mail clients, not by `curl`. If you did
+download it with a browser, on macOS you clear it with
+`xattr -d com.apple.quarantine ~/.local/bin/mem`.
+
+What is offered instead of a signature is one you can check yourself: every
+release carries a `.sha256` next to each file and a
+[minisign](https://jedisct1.github.io/minisign/) `.minisig` signed with the
+key in [`anathem.pub`](anathem.pub). That proves the file is the one
+published here. It does not tell your operating system anything, and it is
+not a substitute — it is the honest version of what this project can offer.
+
 Nineteen seconds of it working, recorded with
 [asciinema](https://asciinema.org): [`demo.cast`](demo.cast) — an agent
 saves what it worked out, a later session finds it asked a different way,

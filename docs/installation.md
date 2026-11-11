@@ -83,10 +83,38 @@ shasum -a 256 -c mem-macos-arm64.tar.gz.sha256   # macOS
 sha256sum -c mem-macos-x86_64.tar.gz.sha256      # Linux
 ```
 
-On macOS, the first time around Gatekeeper may block a binary downloaded from
-the internet, because it is not signed with an Apple developer account. It is
-unblocked with `xattr -d com.apple.quarantine ~/.local/bin/mem`, or from
-Settings → Privacy and Security, which offers to open it anyway.
+**Both operating systems will warn you about this binary, and they are right
+to.** It is unsigned, and nobody has downloaded it enough times for it to have
+a reputation. That describes every small project, so the warning says nothing
+about whether the file is sound — but it is the first thing a new person
+meets, so it is better said here than discovered.
+
+- **macOS**: Gatekeeper reports that the developer cannot be verified, because
+  the binary is not signed with an Apple developer account and not notarized.
+  Clear it with `xattr -d com.apple.quarantine ~/.local/bin/mem`, or from
+  Settings → Privacy and Security, which offers to open it anyway.
+- **Windows**: SmartScreen shows "Windows protected your PC" for the same
+  reason — no Authenticode signature and no reputation. *More info* → *Run
+  anyway*.
+
+**Downloading with `curl` avoids both.** The marker that triggers them —
+`Mark of the Web` on Windows, `com.apple.quarantine` on macOS — is attached by
+browsers and mail clients, not by `curl`, which is what the installer uses.
+If you fetch the release by hand from a browser, you meet the warning; if you
+run the one-line install, you should not.
+
+What replaces a signature here is one you can verify yourself: each release
+carries a `.sha256` beside every file and a
+[minisign](https://jedisct1.github.io/minisign/) `.minisig` made with the key
+in [`anathem.pub`](../anathem.pub).
+
+```bash
+minisign -Vm mem-macos-arm64.tar.gz -p anathem.pub
+```
+
+That proves the file is the one published here, by whoever holds that key. It
+tells your operating system nothing, and it is not a substitute for signing —
+it is what this project can honestly offer.
 
 ### Compiling from source
 
