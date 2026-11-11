@@ -64,17 +64,53 @@ ARCHIVOS="mem-linux-x86_64.tar.gz mem-windows-x86_64.zip mem-macos-arm64.tar.gz 
 TEMPORAL="$(mktemp -d)"
 trap 'rm -rf "$TEMPORAL"' EXIT
 
+# Downloads one asset, and tells apart "it is not there" from "the server
+# said no right now".
+#
+# This mattered the first time it was run: GitLab answered 429 to every
+# request, and the script reported that four of the five files were not in
+# the release and that the fifth had no sha256. Both statements were false
+# and the release was intact — which is the same failure the publishing
+# script already carries a comment about, a warning that was wrong in the
+# direction that stops you looking.
+#
+# `--retry` alone does not cover 429 in every curl, so the status code is
+# read and the wait is done here. Only a 404 means absent.
+bajar() {
+  destino="$1"
+  url="$2"
+  intento=1
+  while [ "$intento" -le 5 ]; do
+    codigo="$(curl -sSL -o "$destino" -w '%{http_code}' "$url" 2>/dev/null || echo 000)"
+    case "$codigo" in
+      200) return 0 ;;
+      404) return 2 ;;
+      429|5??|000)
+        [ "$intento" -lt 5 ] && sleep $((intento * 4))
+        ;;
+      *)
+        malo "$url answered $codigo"
+        return 1
+        ;;
+    esac
+    intento=$((intento + 1))
+  done
+  malo "$url still answering $codigo after 5 attempts; it is not a missing file"
+  echo "    GitLab rate-limits release downloads. Wait a few minutes and run this again." >&2
+  return 1
+}
+
 paso "1. Download what the release publishes"
 
 PRESENTES=""
 for f in $ARCHIVOS; do
   URL="https://gitlab.com/$REPO/-/releases/$ETIQUETA/downloads/$f"
-  if curl -fsSL -o "$TEMPORAL/$f" "$URL" 2>/dev/null; then
-    ok "$f"
-    PRESENTES="$PRESENTES $f"
-  else
-    aviso "$f is not in this release; skipping it"
-  fi
+  bajar "$TEMPORAL/$f" "$URL"
+  case $? in
+    0) ok "$f"; PRESENTES="$PRESENTES $f" ;;
+    2) aviso "$f is not in this release; skipping it" ;;
+    *) exit 1 ;;
+  esac
 done
 [ -n "$PRESENTES" ] || { malo "this release publishes none of the expected files"; exit 1; }
 
@@ -84,10 +120,12 @@ paso "2. Check each one against its own sha256 before signing it"
 # bytes, which is worse than not signing: it would carry this key's word.
 for f in $PRESENTES; do
   URL="https://gitlab.com/$REPO/-/releases/$ETIQUETA/downloads/$f.sha256"
-  if ! curl -fsSL -o "$TEMPORAL/$f.sha256" "$URL" 2>/dev/null; then
-    malo "$f has no .sha256 in the release, so this download cannot be checked"
-    exit 1
-  fi
+  bajar "$TEMPORAL/$f.sha256" "$URL"
+  case $? in
+    0) : ;;
+    2) malo "$f has no .sha256 in the release, so this download cannot be checked"; exit 1 ;;
+    *) exit 1 ;;
+  esac
   esperado="$(cut -d' ' -f1 < "$TEMPORAL/$f.sha256")"
   if command -v sha256sum >/dev/null 2>&1; then
     obtenido="$(sha256sum "$TEMPORAL/$f" | cut -d' ' -f1)"
