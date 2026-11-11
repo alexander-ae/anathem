@@ -7,7 +7,17 @@ use std::path::{Path, PathBuf};
 #[command(
     name = "mem",
     about = "anathem — local memory for agents",
-    version = anathem::doctor::FULL_VERSION
+    version = anathem::doctor::FULL_VERSION,
+    // One line and no subcommand. Somebody holding this binary may never
+    // have seen the repository — an agent installed it for them — and
+    // `--help` is where they look to find out what it is. A `mem docs`
+    // that opened a browser would be a thirty-second subcommand doing what
+    // a printed URL does, with a dependency on the desktop environment and
+    // a side effect nobody asked a local-only tool for.
+    after_help = concat!(
+        "Docs, issues and the source: ", env!("CARGO_PKG_REPOSITORY"), "\n",
+        "`mem doctor` diagnoses an installation; `mem update` says whether a newer version exists."
+    )
 )]
 struct Cli {
     /// Path to the database
