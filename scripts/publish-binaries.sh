@@ -221,23 +221,48 @@ fi
 paso "6. Download every link back"
 
 ROTOS=0
+SINCOMPROBAR=0
 # The binaries, each with the sha256 published beside it, plus whatever the
 # pack step carried over under its own whole name.
 LISTA=""
 for f in $PRESENTES; do LISTA="$LISTA $f $f.sha256"; done
 LISTA="$LISTA $EXTRA"
+# A 429 is not a broken link, and this loop runs right after uploading tens
+# of megabytes to the same host — which is exactly when GitLab starts
+# answering 429 to downloads from this IP. Counting those as broken would
+# end a correct publish with "the release is not usable", and `sign-release.sh`
+# carries the same distinction for the same reason.
 for archivo in $LISTA; do
   URL="https://gitlab.com/$REPO_GL/-/releases/$ETIQUETA/downloads/$archivo"
-  CODIGO="$(curl -s -o /dev/null -w '%{http_code}' -L "$URL")"
-  if [ "$CODIGO" = "200" ]; then
-    ok "$archivo"
-  else
-    malo "$archivo -> HTTP $CODIGO"
-    echo "      $URL" >&2
-    ROTOS=$((ROTOS + 1))
-  fi
+  INTENTO=1
+  while [ "$INTENTO" -le 4 ]; do
+    CODIGO="$(curl -s -o /dev/null -w '%{http_code}' -L "$URL" || echo 000)"
+    case "$CODIGO" in
+      429|5??|000) [ "$INTENTO" -lt 4 ] && sleep $((INTENTO * 4)) ;;
+      *) break ;;
+    esac
+    INTENTO=$((INTENTO + 1))
+  done
+  case "$CODIGO" in
+    200)
+      ok "$archivo" ;;
+    429|5??|000)
+      aviso "$archivo -> HTTP $CODIGO, so it could not be checked"
+      SINCOMPROBAR=$((SINCOMPROBAR + 1)) ;;
+    *)
+      malo "$archivo -> HTTP $CODIGO"
+      echo "      $URL" >&2
+      ROTOS=$((ROTOS + 1)) ;;
+  esac
 done
 [ "$ROTOS" -eq 0 ] || { malo "$ROTOS links do not work; the release is not usable"; exit 1; }
+if [ "$SINCOMPROBAR" -gt 0 ]; then
+  aviso "$SINCOMPROBAR links could not be checked; nothing says they are broken"
+  echo "      GitLab rate-limits downloads from this IP, and this script has" >&2
+  echo "      just spent that budget uploading. Wait and run it again: the" >&2
+  echo "      assets already there are left alone and only the check runs." >&2
+  exit 1
+fi
 
 paso "Done"
 echo "  The vocabulary pack is carried over separately; see scripts/publish.sh."

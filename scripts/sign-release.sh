@@ -76,6 +76,12 @@ trap 'rm -rf "$TEMPORAL"' EXIT
 #
 # `--retry` alone does not cover 429 in every curl, so the status code is
 # read and the wait is done here. Only a 404 means absent.
+#
+# Call it through `if`, never as a bare statement: `set -e` is on, and a
+# function that returns non-zero as a simple command ends the script right
+# there — the `case $?` after it is never reached, and every branch written
+# for "this file is not in the release" or "that was a 429" is dead code
+# that looks alive.
 bajar() {
   destino="$1"
   url="$2"
@@ -105,8 +111,8 @@ paso "1. Download what the release publishes"
 PRESENTES=""
 for f in $ARCHIVOS; do
   URL="https://gitlab.com/$REPO/-/releases/$ETIQUETA/downloads/$f"
-  bajar "$TEMPORAL/$f" "$URL"
-  case $? in
+  if bajar "$TEMPORAL/$f" "$URL"; then codigo=0; else codigo=$?; fi
+  case $codigo in
     0) ok "$f"; PRESENTES="$PRESENTES $f" ;;
     2) aviso "$f is not in this release; skipping it" ;;
     *) exit 1 ;;
@@ -120,8 +126,8 @@ paso "2. Check each one against its own sha256 before signing it"
 # bytes, which is worse than not signing: it would carry this key's word.
 for f in $PRESENTES; do
   URL="https://gitlab.com/$REPO/-/releases/$ETIQUETA/downloads/$f.sha256"
-  bajar "$TEMPORAL/$f.sha256" "$URL"
-  case $? in
+  if bajar "$TEMPORAL/$f.sha256" "$URL"; then codigo=0; else codigo=$?; fi
+  case $codigo in
     0) : ;;
     2) malo "$f has no .sha256 in the release, so this download cannot be checked"; exit 1 ;;
     *) exit 1 ;;
@@ -196,14 +202,26 @@ if [ ! -f "$PUB" ]; then
   PUB="$TEMPORAL/anathem.pub"
   minisign -R -s "$CLAVE" -p "$PUB" >/dev/null 2>&1 || true
 fi
+# `bajar` here too, and not a bare `curl -f`. This step used one, and on
+# v1.0.1 it said all five signatures did not come back from a release that
+# had just stored all five: the uploads above spend the download budget this
+# check then needs, so the five requests that follow them are the likeliest
+# in the whole script to be answered 429 — and `curl -f` cannot tell a 429
+# from a missing file. The script ended with "the release is not properly
+# signed", which was false, and whose obvious remedy — sign it again — is
+# more requests against the limit that caused it.
 ROTOS=0
+SINCOMPROBAR=0
 for f in $PRESENTES; do
   URL="https://gitlab.com/$REPO/-/releases/$ETIQUETA/downloads/$f.minisig"
-  if ! curl -fsSL -o "$TEMPORAL/bajada-$f.minisig" "$URL" 2>/dev/null; then
-    malo "$f.minisig does not come back from $URL"
-    ROTOS=$((ROTOS + 1))
-    continue
-  fi
+  if bajar "$TEMPORAL/bajada-$f.minisig" "$URL"; then codigo=0; else codigo=$?; fi
+  case $codigo in
+    0) : ;;
+    2) malo "$f.minisig is not in the release, although it was just uploaded"
+       ROTOS=$((ROTOS + 1)); continue ;;
+    *) aviso "$f.minisig could not be downloaded to check it"
+       SINCOMPROBAR=$((SINCOMPROBAR + 1)); continue ;;
+  esac
   if [ -f "$PUB" ] && minisign -V -p "$PUB" -m "$TEMPORAL/$f" -x "$TEMPORAL/bajada-$f.minisig" >/dev/null 2>&1; then
     ok "$f: published and verifies"
   else
@@ -214,6 +232,20 @@ done
 
 if [ "$ROTOS" -gt 0 ]; then
   malo "$ROTOS signatures are not usable; the release is not properly signed"
+  exit 1
+fi
+
+# Not the same thing, and the difference is the whole point of this block.
+# A signature that was uploaded and could not be re-read is probably fine;
+# saying otherwise invites signing it again, which is the one action that
+# makes a rate limit worse. The release is left as it is and the check is
+# left pending, out loud.
+if [ "$SINCOMPROBAR" -gt 0 ]; then
+  aviso "$SINCOMPROBAR signatures were uploaded but could not be read back just now"
+  echo "      Nothing says they are wrong: GitLab was rate-limiting these" >&2
+  echo "      downloads, which is what uploading them spends. Do not sign" >&2
+  echo "      again. Wait for the limit to clear and run this script once" >&2
+  echo "      more; it skips what is already uploaded and only checks." >&2
   exit 1
 fi
 
