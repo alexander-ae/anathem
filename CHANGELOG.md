@@ -10,6 +10,31 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The other half of the rate-limit fix, which 1.0.0 said was done.** That
+  entry below is accurate about step 1 and wrong by omission: `sign-release.sh`
+  checks the signatures it uploaded in a *later* step, and that one kept the
+  bare `curl -f`. It is also the likelier of the two to be rate-limited, since
+  the uploads right before it are what spends the budget. Run against v1.0.1 it
+  signed five assets, uploaded five, and reported that none of the five came
+  back from a release that held all five. The remedy such a message invites —
+  sign it again — is more requests against the limit that caused it.
+
+- **Three branches that could never run.** `set -e` is on, and the download
+  helper was called as a bare statement with `case $?` after it. A function
+  that returns non-zero as a simple command ends the script there, so the case
+  never ran: every branch written for "this file is not in the release" and for
+  "that was a rate limit" was unreachable, and the script died with the
+  helper's status and no message of its own.
+
+  Both scripts now separate a link that is **broken**, which fails the run,
+  from one that **could not be checked**, which leaves the release alone and
+  says so.
+
+  Nothing in the binary changes. These scripts publish a release from a
+  maintainer's machine and are run from `main`, never from a tag.
+
 ## [1.0.1] - 2026-11-11
 
 A patch: nothing about the four promises changes, and nothing anyone had
