@@ -10,6 +10,38 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-11
+
+A patch: nothing about the four promises changes, and nothing anyone had
+working stops working. What changes is what the binary tells somebody who
+has never seen the project.
+
+### Added
+
+- **`mem --help` and `mem doctor` say where the project lives.** Somebody can
+  be holding this binary without ever having seen the repository — an agent
+  ran the installer for them, or it came with a machine they inherited — and
+  nothing printed told them what it was or where to report a problem. One line
+  in each: `--help` is where you look to find out what something is, `doctor`
+  is where you are when it is broken. The URL is read from `Cargo.toml` at
+  compile time so it cannot drift from what the release and crates.io publish.
+
+  Deliberately not a `mem docs` subcommand: that would be a thirty-second
+  entry doing what a printed URL does, needing `xdg-open`/`open`/`start` told
+  apart, for a side effect nobody asks of a tool that talks to no network. And
+  deliberately not in `--version`, whose output is parsed by `mem update` and
+  by the installer — a test pins that it stays one line with no URL.
+
+### Documentation
+
+- **The README says what 1.0 promises.** It was in this file and nowhere else,
+  and a changelog is read by people who already use the thing while the README
+  is read by somebody deciding whether to. The four promises are now where
+  that person reads them, each with the note that it is a test against a
+  committed fixture rather than a sentence.
+- `installation.md` offered `--tag v0.9.0` as the way to pin a version, two
+  releases out of date.
+
 ## [1.0.0] - 2026-11-11
 
 **What 1.0 promises: a database and an export written by any 1.x can be read
@@ -1030,7 +1062,8 @@ First release with prebuilt binaries.
 - The project lives on GitLab. GitHub remains only as the macOS builder, since
   GitLab's macOS runners are Premium and Ultimate only.
 
-[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v1.0.0...main
+[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v1.0.1...main
+[1.0.1]: https://gitlab.com/__alexander__/anathem/-/compare/v1.0.0...v1.0.1
 [1.0.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.10.0...v1.0.0
 [0.10.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.9.0...v0.10.0
 [0.9.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.8.0...v0.9.0
