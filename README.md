@@ -412,6 +412,32 @@ line here.
   ([`docs/search.md`](docs/search.md)). What is missing is a dedicated
   reranker, which is a smaller claim than the one this entry used to make.
 
+## What 1.0 promises
+
+Four things, and breaking any of them costs a major version:
+
+- A **database** written by any 1.x opens under any later 1.x, and `mem
+  doctor` comes out clean afterwards.
+- An **export** taken under any 1.x imports into any later 1.x with nothing
+  lost.
+- The **five MCP tools** keep their names and their required parameters.
+  Adding an optional one is allowed; renaming a tool is not.
+- The **commands and flags documented here** keep working.
+
+Each of those is a test, in `tests/compat_test.rs`, against a fixture
+committed to the repository — so the promise is checked on every run rather
+than restated in prose.
+
+What 1.0 does **not** promise is a number. The benchmarks, the defaults and
+the resource figures below are measurements of a moment, each documented
+with its method, and they move when the measurement does.
+
+The version went to 1.0 because the guarantee did, not because the code
+arrived somewhere. `0.x` means anything may break at any time; the database
+had been migrating itself through every schema change since the first
+release, and saying otherwise to somebody deciding whether to trust this with
+two years of notes was false in the direction nobody warns you about.
+
 ## Documentation
 
 - Installing, and connecting each agent: [`docs/installation.md`](docs/installation.md)
