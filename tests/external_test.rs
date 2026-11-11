@@ -191,7 +191,10 @@ fn the_mcp_output_marks_a_received_memory_too() {
     use anathem::{config::Config, db, ingest, mcp, search};
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
-    let g = ingest::save_received(&conn, NOTA, "dell", Vec::new(), REMITENTE).unwrap();
+    let g = match ingest::save_received(&conn, NOTA, "dell", Vec::new(), REMITENTE, None).unwrap() {
+        ingest::Received::Stored(g) => g,
+        otro => panic!("tenía que guardarla: {otro:?}"),
+    };
     anathem::maint::accept(&conn, g.id).unwrap();
 
     let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
@@ -283,4 +286,212 @@ fn doctor_says_how_many_are_waiting_to_be_accepted() {
     assert!(ok, "una memoria esperando no es un problema, es información");
     assert!(out.contains("accept"), "tiene que mencionar que hay algo esperando: {out}");
     assert!(out.contains('1'), "{out}");
+}
+
+
+// ------------------------------------------- a delivery that is retried
+
+// A delivery is made at least once. A mailbox that pipes a message into
+// `mem save - --external` acknowledges only after this command exits zero,
+// so the window between the two is real: if the process dies there, the
+// retry writes a second draft of the same message.
+//
+// `--ext-id` closes it with the column that was already in the schema —
+// `memories.ext_id text unique`, which `mem migrate` has used for the same
+// purpose since the beginning.
+
+const ID_EXTERNO: &str = "stele:01J9Z0K7Q4";
+
+#[test]
+fn the_same_ext_id_twice_writes_one_draft_and_says_so() {
+    let d = tempfile::tempdir().unwrap();
+    assert!(mem(d.path(), &["init"]).0);
+
+    let args = ["save", "the API contract moved to v2", "--external",
+                "--from", "opencode@dell", "--project", "api", "--ext-id", ID_EXTERNO];
+    let (ok, out, err) = mem(d.path(), &args);
+    assert!(ok, "{out}{err}");
+    assert!(out.contains("saved as a draft"), "{out}");
+
+    // The retry. It has to succeed — a mailbox reads the exit code — and it
+    // has to be distinguishable from the first, which is the whole point.
+    let (ok2, out2, err2) = mem(d.path(), &args);
+    assert!(ok2, "un reintento tiene que salir en 0: {out2}{err2}");
+    assert!(out2.contains("already received"), "{out2}");
+    assert!(!out2.contains("saved as a draft"), "no puede decir que guardó: {out2}");
+
+    let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
+    let n: i64 = conn
+        .query_row("select count(*) from memories where ext_id = ?1", [ID_EXTERNO], |r| r.get(0))
+        .unwrap();
+    assert_eq!(n, 1, "el reintento escribió un segundo borrador");
+    let total: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
+    assert_eq!(total, 1, "no puede haber quedado ninguna fila suelta");
+}
+
+/// Two producers using the same value is a collision, and a collision drops
+/// somebody's message. It cannot be prevented from here — the value is the
+/// caller's — but it must not be silent.
+#[test]
+fn a_collision_between_two_senders_is_pointed_at() {
+    let d = tempfile::tempdir().unwrap();
+    assert!(mem(d.path(), &["init"]).0);
+    assert!(mem(d.path(), &["save", "primera", "--external", "--from", "uno@dell",
+                            "--project", "api", "--ext-id", ID_EXTERNO]).0);
+
+    let (ok, out, _) = mem(d.path(), &["save", "segunda", "--external", "--from", "dos@laptop",
+                                       "--project", "api", "--ext-id", ID_EXTERNO]);
+    assert!(ok, "{out}");
+    assert!(out.contains("already received"), "{out}");
+    assert!(out.contains("uno@dell"), "tiene que decir de quién era la primera: {out}");
+    assert!(out.contains("same --ext-id"), "tiene que avisar de la colisión: {out}");
+}
+
+#[test]
+fn ext_id_needs_external_and_a_usable_value() {
+    let d = tempfile::tempdir().unwrap();
+    assert!(mem(d.path(), &["init"]).0);
+
+    // Without --external it is a different decision and is not offered.
+    let (ok, out, err) = mem(d.path(), &["save", "algo", "--ext-id", "x"]);
+    assert!(!ok, "{out}{err}");
+    assert!(format!("{out}{err}").contains("external"), "{out}{err}");
+
+    for malo in ["", "   "] {
+        let (ok, out, err) = mem(d.path(), &["save", "algo", "--external", "--from", "a",
+                                             "--project", "p", "--ext-id", malo]);
+        assert!(!ok, "un --ext-id vacío tiene que fallar: {out}{err}");
+    }
+    let largo = "x".repeat(201);
+    let (ok, _, err) = mem(d.path(), &["save", "algo", "--external", "--from", "a",
+                                       "--project", "p", "--ext-id", &largo]);
+    assert!(!ok, "un --ext-id larguísimo tiene que fallar: {err}");
+
+    // And nothing partial was left behind by any of the refusals.
+    let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
+    let total: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
+    assert_eq!(total, 0, "un rechazo no puede dejar media fila");
+}
+
+/// Without `--ext-id` nothing changes: two deliveries of the same text are
+/// two drafts, because nothing said they were the same message.
+#[test]
+fn without_ext_id_two_saves_are_still_two_drafts() {
+    let d = tempfile::tempdir().unwrap();
+    assert!(mem(d.path(), &["init"]).0);
+    let args = ["save", "la misma nota", "--external", "--from", "uno@dell", "--project", "api"];
+    assert!(mem(d.path(), &args).0);
+    assert!(mem(d.path(), &args).0);
+    let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
+    let total: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
+    assert_eq!(total, 2);
+}
+
+/// The pre-check alone would not be enough: two deliveries arriving at once
+/// would both read "not here" and both write. The write lock is taken before
+/// the read (`TransactionBehavior::Immediate`), so the second waits for the
+/// first and then finds it.
+///
+/// Through two real processes rather than two threads on one connection: the
+/// case this guards is a mailbox retrying while the first attempt is still
+/// running, which is two `mem` invocations.
+#[test]
+fn two_deliveries_at_once_leave_one_row_and_both_succeed() {
+    let d = tempfile::tempdir().unwrap();
+    assert!(mem(d.path(), &["init"]).0);
+
+    let hijos: Vec<_> = (0..2)
+        .map(|_| {
+            Command::new(env!("CARGO_BIN_EXE_mem"))
+                .arg("--db")
+                .arg(d.path().join("mem.db"))
+                .args([
+                    "save", "la nota que llega dos veces", "--external",
+                    "--from", "opencode@dell", "--project", "api",
+                    "--ext-id", "stele:carrera",
+                ])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap()
+        })
+        .collect();
+
+    let salidas: Vec<_> = hijos.into_iter().map(|h| h.wait_with_output().unwrap()).collect();
+    for (i, o) in salidas.iter().enumerate() {
+        assert!(
+            o.status.success(),
+            "el proceso {i} falló: {}{}",
+            String::from_utf8_lossy(&o.stdout),
+            String::from_utf8_lossy(&o.stderr)
+        );
+    }
+
+    let textos: Vec<String> =
+        salidas.iter().map(|o| String::from_utf8_lossy(&o.stdout).to_string()).collect();
+    let guardaron = textos.iter().filter(|t| t.contains("saved as a draft")).count();
+    let ya_estaba = textos.iter().filter(|t| t.contains("already received")).count();
+    assert_eq!(guardaron, 1, "exactamente uno tenía que escribir:\n{textos:?}");
+    assert_eq!(ya_estaba, 1, "el otro tenía que encontrarla:\n{textos:?}");
+
+    let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
+    let total: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
+    assert_eq!(total, 1, "quedaron dos filas para un solo mensaje");
+}
+
+// -------------------- standing in the wrong directory, with mail waiting
+
+// `mem recent --external` filters by the project of the directory you are
+// standing in, and a mailbox files each note under the project the SENDER
+// named. So the common case is standing somewhere else and reading "no
+// memories in that window" — the same line an empty mailbox prints.
+
+fn mem_en(dir: &Path, cwd: &Path, args: &[&str]) -> (bool, String) {
+    let o = Command::new(env!("CARGO_BIN_EXE_mem"))
+        .arg("--db")
+        .arg(dir.join("mem.db"))
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .unwrap();
+    (o.status.success(), String::from_utf8_lossy(&o.stdout).to_string())
+}
+
+#[test]
+fn an_empty_project_says_where_the_mail_actually_is() {
+    let d = tempfile::tempdir().unwrap();
+    let otro = tempfile::tempdir().unwrap(); // a directory that is no project of ours
+    assert!(mem(d.path(), &["init"]).0);
+    for n in ["primera", "segunda"] {
+        assert!(mem(d.path(), &["save", n, "--external", "--from", "opencode@dell",
+                                "--project", "api"]).0);
+    }
+
+    // Implicit project, standing somewhere with no mail: the hint.
+    let (ok, out) = mem_en(d.path(), otro.path(), &["recent", "--since", "all", "--external"]);
+    assert!(ok, "{out}");
+    assert!(out.contains("no external memories in project"), "falta la pista: {out}");
+    assert!(out.contains("2 are in other projects"), "falta el conteo: {out}");
+    assert!(out.contains("--all --external"), "tiene que decir el comando: {out}");
+    assert!(!out.contains("primera") && !out.contains("segunda"),
+            "no puede filtrar contenido de los borradores: {out}");
+
+    // Explicit --project: the person asked about that one, plain answer.
+    let (_, out2) = mem_en(d.path(), otro.path(),
+        &["recent", "--since", "all", "--external", "--project", "vacio"]);
+    assert!(out2.contains("no memories in that window"),
+            "con --project explícito no va la pista: {out2}");
+
+    // And --all lists them, which is what the hint points at.
+    let (_, out3) = mem_en(d.path(), otro.path(), &["recent", "--since", "all", "--external", "--all"]);
+    assert!(out3.contains("primera"), "{out3}");
+}
+
+#[test]
+fn with_no_mail_anywhere_the_message_is_unchanged() {
+    let d = tempfile::tempdir().unwrap();
+    let otro = tempfile::tempdir().unwrap();
+    assert!(mem(d.path(), &["init"]).0);
+    let (_, out) = mem_en(d.path(), otro.path(), &["recent", "--since", "all", "--external"]);
+    assert!(out.contains("no memories in that window"), "{out}");
 }

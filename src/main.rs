@@ -94,6 +94,18 @@ enum Cmd {
         /// Who sent it: a free label such as `claude-code@my-laptop`
         #[arg(long = "from", value_name = "LABEL", requires = "external")]
         from: Option<String>,
+        /// The sender's own id for this message, so a retried delivery is
+        /// one draft and not two
+        ///
+        /// A delivery is made at least once: if the process dies after this
+        /// command exits and before the sender is told it arrived, the retry
+        /// would write a second draft. Passing the same value twice writes
+        /// once and reports the memory that already holds it. Namespace it
+        /// with the sender's own prefix — `stele:<message-id>` — because the
+        /// column is unique across everything, including what `mem migrate`
+        /// imported.
+        #[arg(long = "ext-id", value_name = "ID", requires = "external")]
+        ext_id: Option<String>,
     },
     /// Edits an existing memory's body in $EDITOR
     Edit {
@@ -641,7 +653,7 @@ fn run(cli: Cli) -> Result<()> {
                 println!("    {}", e.hit.snippet.chars().take(180).collect::<String>());
             }
         }
-        Cmd::Save { text, project, tag, topic, external, from } => {
+        Cmd::Save { text, project, tag, topic, external, from, ext_id } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
             // `-` means the body comes on stdin, which is what lets a note
@@ -671,13 +683,35 @@ fn run(cli: Cli) -> Result<()> {
                                    two is current. Save it without a key and use `mem supersede` \
                                    after accepting it, if that is what you meant.");
                 }
-                let g = anathem::ingest::save_received(&conn, &text, &project, tag, &from)?;
-                println!(
-                    "received memory {} in {project}, from {from}, saved as a draft",
-                    g.id
-                );
-                println!("Nothing searches it until you accept it: `mem show {}` to read it, `mem accept {}` to let it in.", g.id, g.id);
-                sync_after_write(&conn, &dir);
+                let got = anathem::ingest::save_received(
+                    &conn, &text, &project, tag, &from, ext_id.as_deref())?;
+                match got {
+                    anathem::ingest::Received::Stored(g) => {
+                        println!(
+                            "received memory {} in {project}, from {from}, saved as a draft",
+                            g.id
+                        );
+                        println!("Nothing searches it until you accept it: `mem show {}` to read it, `mem accept {}` to let it in.", g.id, g.id);
+                        sync_after_write(&conn, &dir);
+                    }
+                    // Said plainly, and said differently from a save, because
+                    // a mailbox reads this to decide whether the delivery
+                    // landed. The id is printed either way so the two
+                    // outcomes are equally actionable.
+                    anathem::ingest::Received::AlreadyHere { id, from: before, when } => {
+                        println!("already received: memory {id} already carries that --ext-id; nothing was written");
+                        let who = before.unwrap_or_else(|| "an unrecorded sender".into());
+                        let fecha = when.map(|w| w.get(..16).unwrap_or(&w).to_string());
+                        match fecha {
+                            Some(d) => println!("  it arrived from {who} on {d}"),
+                            None => println!("  it arrived from {who}"),
+                        }
+                        if who != from {
+                            println!("  NOTE: this delivery says it is from {from}, which is not who sent that one. Two senders are using the same --ext-id, and one of their messages is being dropped.");
+                        }
+                        println!("  `mem show {id}` to read it, `mem accept {id}` to let it in.");
+                    }
+                }
                 return Ok(());
             }
             // When the project is derived instead of given, say so: an
@@ -1211,6 +1245,10 @@ every other key the file has, or put it in {} yourself:",
                 Some(anathem::recent::duration_in_seconds(&since)?)
             };
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            // Whether the project was ASKED for, which has to be read before
+            // `resolve` consumes it: the hint below exists only for the
+            // implicit case.
+            let pedido = project.is_some();
             let project_ = if all_projects {
                 None
             } else {
@@ -1220,6 +1258,23 @@ every other key the file has, or put it in {} yourself:",
             let cfg = anathem::config::load(dir)?;
             let items = anathem::recent::list_recent_filtered(
                 &conn, project_.as_deref(), window, limit, cfg.excerpt, external)?;
+            // An empty answer under an implicit project is ambiguous: it is
+            // either an empty mailbox or the wrong directory, and today both
+            // print the same line. Only when the project was NOT asked for:
+            // somebody who typed `--project X` asked about X and gets the
+            // plain answer.
+            if items.is_empty() && external && !pedido && !all_projects {
+                let aqui = project_.as_deref().unwrap_or("");
+                let otras = anathem::recent::external_elsewhere(&conn, aqui, window)?;
+                if otras > 0 {
+                    let plural = if otras == 1 { "is" } else { "are" };
+                    println!(
+                        "no external memories in project «{aqui}»; {otras} {plural} in other \
+                         projects — `mem recent --all --external`"
+                    );
+                    return Ok(());
+                }
+            }
             println!("{}", anathem::recent::format_items(&items, project_.is_none()));
         }
         Cmd::History { id } => {

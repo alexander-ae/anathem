@@ -198,6 +198,39 @@ agent's context before a person has looked at it once. `mem recent
 --external` lists what is waiting, `mem show <id>` reads one, and `mem
 doctor` says how many there are.
 
+If `mem recent --external` finds nothing in the project of the directory you
+are standing in, but there is mail filed under another, it says so and gives
+the command rather than printing the same "nothing here" an empty mailbox
+would. The sender chooses the project, so standing somewhere else is the
+ordinary case, not the mistake.
+
+### A delivery that is retried
+
+Anything delivering messages does it **at least** once. A sender that pipes
+a note in and then loses the connection before learning it arrived has no
+way to know whether to send it again — and if it does, the note is saved
+twice.
+
+`--ext-id` is how the sender says "this is the message I already sent you":
+
+```bash
+ssh dell-server mem save - --external --from claude-code@laptop \
+    --project api --ext-id "stele:01J9Z0K7Q4" < note.md
+```
+
+The second delivery with the same value writes nothing, reports the memory
+that already holds it, and exits 0, so a retry is safe. It reuses
+`memories.ext_id`, the unique column `mem migrate` has always used to make
+re-imports idempotent.
+
+Two things worth knowing before using it. **The value is yours to
+namespace** — the column is unique across the whole database, including the
+document ids `migrate` imported, so a sender prefixes with its own name.
+And if two senders ever pick the same value, the second message is not
+stored; that is why the output names who sent the one already there, and
+says plainly that a collision is dropping somebody's message. Silence there
+would be worse than the duplicate this flag exists to prevent.
+
 Once accepted it carries `[from: sender]` wherever it appears, so an agent
 can tell what this installation was told from what it observed.
 
