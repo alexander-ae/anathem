@@ -159,7 +159,7 @@ it reads `/proc`, which does not exist there — and it says so when it runs.
 The rest of the suite runs in full.
 
 **Tested on macOS**, ever since there is CI: every push compiles on a
-`macos-14` runner (Apple Silicon) and runs the full suite, plus a run
+`macos-latest` runner (Apple Silicon) and runs the full suite, plus a run
 through `init`, `save`, `search` and `doctor`. What CI does not cover is
 the installation itself — Gatekeeper, your shell's `PATH`, the Claude Code
 plugin — so if something fails there, that is valuable information.
