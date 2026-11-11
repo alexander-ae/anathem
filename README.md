@@ -332,6 +332,15 @@ so treat those as the author's own calibration rather than as a measurement
 you could repeat. They are here because they are worse than the headline, not
 because they are strong enough to argue with.
 
+That bet is not only this author's: raw history with a good reranker has
+been measured to beat structured agent memory by 0.13 to 5.53 points across
+four long-term-memory benchmarks (arXiv:2610.30755). The same field also
+measures that memory often changes no outcome at all — across 8,000
+SWE-bench episodes, resolution rates stayed within 0.4 points of having no
+memory (arXiv:2611.01718). That is why this one instruments delivery against
+use, with `mem log` and `mem stats`, instead of claiming a gain it has not
+shown. Neither figure was reproduced here.
+
 Both are true, and the distance between them is the honest subject.
 LongMemEval's questions are written against the sessions that answer them, so
 they share vocabulary with the evidence; a note you wrote in June and a
@@ -341,7 +350,11 @@ will live with, and which of the two you get depends on how you write and how
 you ask. The second cannot be reproduced by anybody else — which is why it is
 labelled rather than headlined, and why it is here rather than left out.
 
-## Known limitations
+## What it does not do, and why
+
+These are decisions with reasons, not a backlog. Each one was considered and
+settled; where something is still open it is an issue in the tracker, not a
+line here.
 
 - `migrate` and `save_memory` assign no tag to a body that matches no rule
   of the active taxonomy (the default one or `tags.json`). That is
@@ -386,6 +399,7 @@ labelled rather than headlined, and why it is here rather than left out.
 - Security: where text you did not write gets in, what is mitigated and what is not: [`docs/security.md`](docs/security.md)
 - Measuring retrieval against a public dataset: [`docs/benchmarks.md`](docs/benchmarks.md)
 - Why `bm25_weight` and the pack size are what they are: [`docs/choosing-the-defaults.md`](docs/choosing-the-defaults.md)
+- The research this was built on, including the papers that argue against it: [`docs/research.md`](docs/research.md)
 - The export format, which is complete enough to rebuild the database elsewhere: [`docs/export-format.md`](docs/export-format.md)
 - Windows: what the operating system forced to change, and why: [`docs/windows.md`](docs/windows.md)
 - Compared with [supermemory](docs/comparison-with-supermemory.md), [Engram](docs/comparison-with-engram.md) and [OpenViking](docs/comparison-with-openviking.md)
