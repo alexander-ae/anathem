@@ -235,7 +235,7 @@ fn a_concurrent_install_leaves_no_vectors_from_two_packs() {
     let saved_one = spawn(&db, &["save", "hola mundo"]);
     // Terminal 2: switches the pack while the other one embeds.
     std::thread::sleep(std::time::Duration::from_millis(100));
-    let instalado = spawn(&db, &["model", "install", b.to_str().unwrap()]);
+    let installed = spawn(&db, &["model", "install", b.to_str().unwrap()]);
 
     let o = saved_one.wait_with_output().unwrap();
     assert!(
@@ -243,7 +243,7 @@ fn a_concurrent_install_leaves_no_vectors_from_two_packs() {
         "el `mem save` tiene que salir con 0: la memoria se guardó igual. {}",
         String::from_utf8_lossy(&o.stderr)
     );
-    let o = instalado.wait_with_output().unwrap();
+    let o = installed.wait_with_output().unwrap();
     assert!(
         o.status.success(),
         "el `mem model install` tiene que salir con 0: {}",

@@ -144,7 +144,7 @@ fn switching_packs_rebuilds_the_index_instead_of_mixing() {
 
     let s = mem(d.path(), &["model", "status"]);
     let txt = String::from_utf8_lossy(&s.stdout).to_string();
-    assert!(txt.contains("ancho-es"), "debe quedar el último instalado: {txt}");
+    assert!(txt.contains("ancho-es"), "debe quedar el último installed: {txt}");
     assert!(txt.contains("1/1"), "el índice debe estar completo y rehecho: {txt}");
 
     // And the stored vectors have to be 8-dimensional, not 4.
@@ -165,8 +165,8 @@ fn a_pack_swapped_by_hand_triggers_the_reindex() {
     mem(d.path(), &["save", "hola mundo"]);
     mem(d.path(), &["model", "install", a.to_str().unwrap()]);
 
-    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
-    write_pack_wide(&instalado, "mini-es"); // mismo name, otras dimensiones
+    let installed = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
+    write_pack_wide(&installed, "mini-es"); // same name, other dimensions
 
     let o = mem(d.path(), &["search", "hola"]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
@@ -190,8 +190,8 @@ fn a_name_mismatch_leaves_the_registry_consistent_with_disk() {
     mem(d.path(), &["save", "hola mundo"]);
     mem(d.path(), &["model", "install", a.to_str().unwrap()]);
 
-    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
-    support::write_pack_mini(&instalado, "otro-es"); // mismas dims, otro name
+    let installed = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
+    support::write_pack_mini(&installed, "otro-es"); // mismas dims, otro name
 
     let o1 = mem(d.path(), &["search", "hola"]);
     assert!(o1.status.success(), "{}", String::from_utf8_lossy(&o1.stderr));
@@ -235,18 +235,18 @@ fn reinstalling_from_the_installed_path_does_not_destroy_the_pack() {
     let o = mem(d.path(), &["model", "install", r.to_str().unwrap()]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
 
-    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
-    let tam = std::fs::metadata(&instalado).unwrap().len();
+    let installed = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
+    let tam = std::fs::metadata(&installed).unwrap().len();
     assert!(tam > 0);
 
-    let o = mem(d.path(), &["model", "install", instalado.to_str().unwrap()]);
+    let o = mem(d.path(), &["model", "install", installed.to_str().unwrap()]);
     assert!(
         o.status.success(),
         "reinstalar desde la ruta ya instalada tiene que funcionar: {}",
         String::from_utf8_lossy(&o.stderr)
     );
     assert_eq!(
-        std::fs::metadata(&instalado).unwrap().len(),
+        std::fs::metadata(&installed).unwrap().len(),
         tam,
         "el paquete quedó truncado en disco"
     );
@@ -356,7 +356,7 @@ fn an_install_cut_short_after_the_rename_does_not_keep_querying_the_old_build() 
     let old = d.path().join("viejo.anathem-pack");
     let new_id = d.path().join("nuevo.anathem-pack");
     support::write_pack_mini(&old, "mini-es"); // ▁hola -> eje 0
-    support::write_pack_permuted(&new_id, "mini-es"); // mismo name y dims, ▁hola -> eje 3
+    support::write_pack_permuted(&new_id, "mini-es"); // same name and dims, ▁hola -> axis 3
 
     mem(d.path(), &["save", "hola mundo"]);
     assert!(mem(d.path(), &["model", "install", old.to_str().unwrap()]).status.success());
@@ -378,9 +378,9 @@ fn an_install_cut_short_after_the_rename_does_not_keep_querying_the_old_build() 
 
     let o = mem(d.path(), &["model", "install", new_id.to_str().unwrap()]);
     assert!(!o.status.success(), "esta instalación tenía que quedar cortada");
-    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
+    let installed = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
     assert_eq!(
-        std::fs::read(&instalado).unwrap(),
+        std::fs::read(&installed).unwrap(),
         std::fs::read(&new_id).unwrap(),
         "precondición: el rename ya pasó y en disco está el build nuevo"
     );
@@ -509,14 +509,14 @@ fn the_installed_pack_carries_its_sha256_so_reinstalling_still_verifies() {
     mem(d.path(), &["save", "hola mundo"]);
     assert!(mem(d.path(), &["model", "install", r.to_str().unwrap()]).status.success());
 
-    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
+    let installed = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
     let firma = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack.sha256");
-    assert!(firma.exists(), "el paquete instalado tiene que quedar verificable");
+    assert!(firma.exists(), "the installed pack has to stay verifiable");
     assert!(
-        std::fs::read_to_string(&firma).unwrap().contains(&anathem::pack::sha256(&instalado).unwrap()),
+        std::fs::read_to_string(&firma).unwrap().contains(&anathem::pack::sha256(&installed).unwrap()),
         "y el sha que dice tiene que ser el del archivo que está"
     );
 
-    let o = mem(d.path(), &["model", "install", instalado.to_str().unwrap()]);
+    let o = mem(d.path(), &["model", "install", installed.to_str().unwrap()]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
 }

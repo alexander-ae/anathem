@@ -489,15 +489,15 @@ fn the_cli_and_the_mcp_filter_identically_through_the_same_parser() {
     let r = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req)
         .unwrap()
         .unwrap();
-    let texto = r["result"]["content"][0]["text"].as_str().unwrap().to_string();
-    let por_mcp: Vec<i64> = texto
+    let text = r["result"]["content"][0]["text"].as_str().unwrap().to_string();
+    let por_mcp: Vec<i64> = text
         .lines()
         .filter_map(|l| l.strip_prefix("[id:"))
         .filter_map(|l| l.split(']').next())
         .filter_map(|n| n.parse().ok())
         .collect();
 
-    assert_eq!(por_biblioteca, por_mcp, "las dos superficies tienen que filtrar igual: {texto}");
+    assert_eq!(por_biblioteca, por_mcp, "both surfaces have to filter the same: {text}");
 }
 
 #[test]
@@ -509,8 +509,8 @@ fn an_invalid_scope_over_mcp_is_an_explained_error_and_not_a_crash() {
     let r = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req)
         .unwrap()
         .unwrap();
-    let texto = serde_json::to_string(&r).unwrap();
-    assert!(texto.contains("autor"), "el modelo tiene que poder corregirlo: {texto}");
+    let text = serde_json::to_string(&r).unwrap();
+    assert!(text.contains("autor"), "the model has to be able to correct it: {text}");
 }
 
 // ---------------------------------------------------------------------------

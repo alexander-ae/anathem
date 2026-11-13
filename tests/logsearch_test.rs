@@ -153,9 +153,9 @@ fn a_search_then_a_get_memory_shows_in_the_log_as_followed_up() {
     let (id, _tags) =
         ingest::save_explicit(&conn, "la caché se cae con 50 conexiones", "p", Vec::new()).unwrap();
     let ctx = search::SearchContext::bm25_only();
-    let buscar = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+    let request = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
         "params":{"name":"search_memory","arguments":{"query":"caché"}}});
-    mcp::handle(&conn, &ctx, &Config::default(), &buscar).unwrap();
+    mcp::handle(&conn, &ctx, &Config::default(), &request).unwrap();
     let abrir = serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/call",
         "params":{"name":"get_memory","arguments":{"id":id}}});
     mcp::handle(&conn, &ctx, &Config::default(), &abrir).unwrap();

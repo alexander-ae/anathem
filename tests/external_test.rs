@@ -72,10 +72,10 @@ fn an_external_memory_arrives_as_draft_and_search_does_not_see_it() {
     assert!(out.contains("draft") || out.contains("accept"), "tiene que decir que no está activa: {out}");
     assert_eq!(status_of(d.path(), 1), "draft");
 
-    let buscar = mem_ok(d.path(), &["search", "nginx", "--project", "dell"]);
+    let found = mem_ok(d.path(), &["search", "nginx", "--project", "dell"]);
     assert!(
-        !buscar.contains("8443"),
-        "una memoria que nadie aceptó no puede salir en una búsqueda: {buscar}"
+        !found.contains("8443"),
+        "a memory nobody accepted cannot show up in a search: {found}"
     );
 }
 
@@ -136,8 +136,8 @@ fn accepting_one_makes_it_searchable() {
     assert!(out.contains('1'), "{out}");
     assert_eq!(status_of(d.path(), 1), "active");
 
-    let buscar = mem_ok(d.path(), &["search", "nginx", "--project", "dell"]);
-    assert!(buscar.contains("8443"), "aceptada, ya tiene que salir: {buscar}");
+    let found = mem_ok(d.path(), &["search", "nginx", "--project", "dell"]);
+    assert!(found.contains("8443"), "accepted, it has to show up now: {found}");
 }
 
 #[test]
