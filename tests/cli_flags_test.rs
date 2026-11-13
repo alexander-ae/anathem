@@ -43,7 +43,7 @@ fn import_takes_from_and_merge_in_english() {
     let vacia = d.path().join("vacia");
     std::fs::create_dir(&vacia).unwrap();
     assert!(mem(&db, &["import", "--from", vacia.to_str().unwrap(), "--merge"]).1);
-    // Y la forma vieja sigue andando.
+    // And the old form still works.
     assert!(mem(&db, &["import", "--desde", vacia.to_str().unwrap(), "--fusionar"]).1);
 }
 
@@ -63,26 +63,26 @@ fn the_help_is_english_and_well_formed() {
     let d = tempfile::tempdir().unwrap();
     let (help, ok) = mem(&d.path().join("m.db"), &["--help"]);
     assert!(ok, "{help}");
-    // La primera línea de cada doc comment es el resumen del subcomando: si
-    // alguno queda mal cortado al traducir, desaparece de la ayuda.
+    // The first line of each doc comment is the subcommand's summary: if one
+    // is cut badly during a translation it disappears from the help.
     for sub in ["save", "search", "recent", "doctor", "export", "import", "model", "serve"] {
         assert!(help.contains(sub), "falta el subcomando {sub}: {help}");
     }
-    for palabra in ["memoria", "búsqueda", "proyecto", "Guarda", "archivo", "paquete"] {
-        assert!(!help.contains(palabra), "queda español en la ayuda: «{palabra}»\n{help}");
+    for word in ["memoria", "búsqueda", "proyecto", "Guarda", "archivo", "paquete"] {
+        assert!(!help.contains(word), "Spanish left in the help: «{word}»\n{help}");
     }
 }
 
 #[test]
 fn the_unbounded_window_keyword_is_the_one_the_help_advertises() {
-    // `--help` decía `--since all` y el código solo aceptaba `todo`: la
-    // ayuda enseñaba un valor que el binario rechaza. Lo introduje al
-    // traducir el doc comment sin traducir el centinela que compara.
+    // `--help` said `--since all` while the code only accepted `todo`: the
+    // help taught a value the binary rejects. Introduced while translating
+    // the doc comment without translating the sentinel it compares.
     let d = tempfile::tempdir().unwrap();
     let db = base(d.path());
-    assert!(mem(&db, &["recent", "--since", "all"]).1, "`all` es lo que anuncia la ayuda");
-    // Y la forma vieja se sigue aceptando, como con las banderas.
-    assert!(mem(&db, &["recent", "--since", "todo"]).1, "`todo` seguía andando y no se rompe");
+    assert!(mem(&db, &["recent", "--since", "all"]).1, "`all` is what the help advertises");
+    // And the old form is still accepted, as with the flags.
+    assert!(mem(&db, &["recent", "--since", "todo"]).1, "`todo` used to work and is not broken now");
 }
 
 /// Somebody can hold this binary without ever having seen the repository —

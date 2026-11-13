@@ -125,14 +125,14 @@ fn an_installed_pack_is_read_only_and_still_replaceable() {
     assert_eq!(mode(&instalado), 0o400);
 }
 
-/// `mem doctor` tiene que decir cuando la base está abierta a otros usuarios.
+/// `mem doctor` has to say when the database is open to other users.
 ///
-/// El diagnóstico abre la base en `immutable=1`, así que NO pasa por
-/// `db::open` y por lo tanto no aplica la corrección de permisos. Eso está
-/// bien —su contrato dice que no modifica nada— pero callarlo no: una
-/// instalación con la base en 0644 recibía dieciocho líneas en verde y un
-/// «All good.» sin una palabra sobre el asunto. Medido sobre una instalación
-/// real que venía de una versión anterior.
+/// The diagnosis opens the database with `immutable=1`, so it does NOT go
+/// through `db::open` and therefore does not apply the permission fix. That
+/// is right — its contract says it changes nothing — but staying silent is
+/// not: an installation with the database at 0644 got eighteen green lines
+/// and an "All good." without a word about it. Measured on a real
+/// installation that came from an earlier version.
 #[test]
 fn doctor_reports_a_world_readable_database() {
     let d = tempfile::tempdir().unwrap();
@@ -141,7 +141,7 @@ fn doctor_reports_a_world_readable_database() {
     assert!(mem(&db, &["init"]));
     assert!(mem(&db, &["save", "una nota"]));
 
-    // Como la dejaría una versión anterior al arreglo.
+    // As a version before the fix would leave it.
     std::fs::set_permissions(&db, std::fs::Permissions::from_mode(0o644)).unwrap();
     std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o755)).unwrap();
 
@@ -149,17 +149,17 @@ fn doctor_reports_a_world_readable_database() {
         .arg("--db").arg(&db).arg("doctor").output().unwrap();
     let out = String::from_utf8_lossy(&o.stdout).to_string();
 
-    assert!(out.contains("0644"), "tiene que decir qué permisos tiene: {out}");
+    assert!(out.contains("0644"), "it has to say which mode it has: {out}");
     assert!(
         out.to_lowercase().contains("readable") || out.to_lowercase().contains("other users"),
-        "y qué significa: {out}"
+        "and what it means: {out}"
     );
-    // Es un aviso y no un problema: la base funciona perfectamente.
-    assert_eq!(o.status.code(), Some(0), "no puede hacer fallar el diagnóstico: {out}");
+    // A notice, not a problem: the database works.
+    assert_eq!(o.status.code(), Some(0), "it cannot fail the diagnosis: {out}");
 
-    // Y no la corrige: doctor no modifica nada.
-    let modo = std::fs::metadata(&db).unwrap().permissions().mode() & 0o777;
-    assert_eq!(modo, 0o644, "doctor no tiene que cambiar los permisos");
+    // And it does not correct it: doctor changes nothing.
+    let current = std::fs::metadata(&db).unwrap().permissions().mode() & 0o777;
+    assert_eq!(current, 0o644, "doctor must not change the mode");
 }
 
 #[test]

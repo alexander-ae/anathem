@@ -84,7 +84,7 @@ fn bm25_weight_negative_is_rejected_naming_the_real_key() {
     assert!(e.contains("bm25_weight"), "el error debe nombrar la clave real: {e}");
 }
 
-// --- las claves del config pasan a inglés sin romper los archivos viejos ---
+// --- the config keys moved to English without breaking old files ---
 
 #[test]
 fn the_old_spanish_keys_still_load() {
@@ -110,8 +110,8 @@ fn the_new_english_keys_load() {
 
 #[test]
 fn the_old_and_new_key_together_is_an_error() {
-    // Elegir una de las dos en silencio dejaría al usuario creyendo que
-    // aplicó la que no se aplicó.
+    // Silently picking one would leave the user believing the one that was
+    // not applied is the one that was.
     let d = tempfile::tempdir().unwrap();
     std::fs::write(d.path().join("config.json"),
         r#"{"traspaso_items": 3, "handoff_items": 9}"#).unwrap();

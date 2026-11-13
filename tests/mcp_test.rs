@@ -192,32 +192,32 @@ fn a_very_long_query_does_not_grow_the_fts_expression_without_bound() {
     assert!(ramas <= 50, "la expresión creció a {ramas} ramas");
 }
 
-// --- la superficie que lee el modelo está en inglés ----------------------
+// --- the surface the model reads is in English ----------------------
 
 #[test]
 fn the_topic_label_and_the_tool_description_agree() {
-    // Si estas dos se separan, el modelo lee una etiqueta y se le pide
-    // reusar otra, y el reemplazo silenciosamente no ocurre.
+    // If these two drift apart the model reads one label and is asked to
+    // reuse another, and the replacement silently does not happen.
     let defs = serde_json::to_string(&anathem::mcp::tool_defs()).unwrap();
-    assert!(defs.contains("[topic:"), "la descripción tiene que nombrar la etiqueta real: {defs}");
-    assert!(!defs.contains("[tema:"), "no puede quedar la vieja");
+    assert!(defs.contains("[topic:"), "the description has to name the real label: {defs}");
+    assert!(!defs.contains("[tema:"), "the old one cannot remain");
 }
 
 #[test]
 fn every_tool_description_is_english() {
     let defs = serde_json::to_string(&anathem::mcp::tool_defs()).unwrap();
-    for palabra in ["memoria", "búsqueda", "guardar", "clave", "usuario", "proyecto"] {
-        assert!(!defs.contains(palabra), "queda español en las tools: «{palabra}»");
+    for word in ["memoria", "búsqueda", "guardar", "clave", "usuario", "proyecto"] {
+        assert!(!defs.contains(word), "Spanish left in the tools: «{word}»");
     }
 }
 
 #[test]
 fn every_surface_that_shows_the_topic_key_uses_the_same_label() {
-    // Las tres tools que imprimen la etiqueta tienen que coincidir. Si una
-    // dice `[tema:` y las otras `[topic:`, el modelo ve dos etiquetas para
-    // lo mismo mientras la descripción de save_memory le pide reusar
-    // EXACTAMENTE la que vio. El test anterior solo miraba `tool_defs`, y
-    // por eso `recent_memories` se escapó.
+    // The three tools that print the label have to agree. If one says
+    // `[tema:` and the others `[topic:`, the model sees two labels for the
+    // same thing while save_memory's description asks it to reuse EXACTLY
+    // the one it saw. The previous test only looked at `tool_defs`, which is
+    // why `recent_memories` slipped through.
     let d = tempfile::tempdir().unwrap();
     let conn = anathem::db::open(&d.path().join("m.db")).unwrap();
     let cfg = anathem::config::Config::default();

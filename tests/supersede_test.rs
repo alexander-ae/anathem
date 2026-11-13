@@ -92,7 +92,7 @@ fn link_refuses_to_close_a_two_step_cycle() {
         "mensaje inesperado: {err}"
     );
 
-    // debe sobrevivir exactamente una versión activa
+    // exactly one active version has to survive
     let active_ones: i64 = conn.query_row(
         "select count(*) from memories where id in (?1, ?2) and status = 'active'",
         [siete, ocho],

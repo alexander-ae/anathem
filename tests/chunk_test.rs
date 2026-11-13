@@ -111,7 +111,7 @@ fn duplicate_valid_refs_insert_cleanly() {
         source: "migrated".into(),
         ext_id: None,
         tags: vec![],
-        // el mismo par (kind, value) dos veces, como puede pasar tras extracción
+        // the same (kind, value) pair twice, as can happen after extraction
         refs: vec![("ticket".into(), "PROJ-482".into()), ("ticket".into(), "PROJ-482".into())],
     };
 
