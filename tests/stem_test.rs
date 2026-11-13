@@ -25,7 +25,7 @@ fn insert(conn: &rusqlite::Connection, body: &str) -> i64 {
     .unwrap()
 }
 
-fn buscar(conn: &rusqlite::Connection, q: &str) -> usize {
+fn count(conn: &rusqlite::Connection, q: &str) -> usize {
     let query = search::Query { text: q.into(), project: None, ..Default::default() };
     search::run(conn, &query, &search::SearchContext::bm25_only()).unwrap().len()
 }
@@ -47,8 +47,8 @@ fn off_by_default_so_nothing_already_written_changes() {
 fn a_singular_does_not_find_a_plural_without_stemming() {
     let (_d, conn) = db();
     insert(&conn, "los registros de auditoria quedaron incompletos");
-    assert_eq!(buscar(&conn, "registros"), 1);
-    assert_eq!(buscar(&conn, "registro"), 0, "this is the defect, and it has to be reproducible");
+    assert_eq!(count(&conn, "registros"), 1);
+    assert_eq!(count(&conn, "registro"), 0, "this is the defect, and it has to be reproducible");
 }
 
 #[test]
@@ -57,8 +57,8 @@ fn with_stemming_it_does() {
     insert(&conn, "los registros de auditoria quedaron incompletos");
     stem::set(&conn, true).unwrap();
     anathem::edit::reindex(&conn).unwrap();
-    assert_eq!(buscar(&conn, "registro"), 1, "the singular has to reach the plural now");
-    assert_eq!(buscar(&conn, "registros"), 1, "and the exact word must still work");
+    assert_eq!(count(&conn, "registro"), 1, "the singular has to reach the plural now");
+    assert_eq!(count(&conn, "registros"), 1, "and the exact word must still work");
 }
 
 #[test]
@@ -67,7 +67,7 @@ fn english_too_and_not_only_spanish() {
     insert(&conn, "the deployment pipeline runs nightly on the build host");
     stem::set(&conn, true).unwrap();
     anathem::edit::reindex(&conn).unwrap();
-    assert_eq!(buscar(&conn, "deployments"), 1, "both languages or neither");
+    assert_eq!(count(&conn, "deployments"), 1, "both languages or neither");
 }
 
 /// Turning it off has to put the index back, or a user who tries it once is
@@ -78,11 +78,11 @@ fn it_can_be_turned_off_again() {
     insert(&conn, "los registros de auditoria quedaron incompletos");
     stem::set(&conn, true).unwrap();
     anathem::edit::reindex(&conn).unwrap();
-    assert_eq!(buscar(&conn, "registro"), 1);
+    assert_eq!(count(&conn, "registro"), 1);
     stem::set(&conn, false).unwrap();
     anathem::edit::reindex(&conn).unwrap();
-    assert_eq!(buscar(&conn, "registro"), 0, "off has to mean off, in the index too");
-    assert_eq!(buscar(&conn, "registros"), 1, "and the exact word survives either way");
+    assert_eq!(count(&conn, "registro"), 0, "off has to mean off, in the index too");
+    assert_eq!(count(&conn, "registros"), 1, "and the exact word survives either way");
 }
 
 /// A memory saved *after* the setting was changed has to be written the same
@@ -93,7 +93,7 @@ fn memories_saved_afterwards_are_written_the_same_way() {
     let (_d, conn) = db();
     stem::set(&conn, true).unwrap();
     insert(&conn, "los registros de auditoria quedaron incompletos");
-    assert_eq!(buscar(&conn, "registro"), 1, "a save after the switch must stem too");
+    assert_eq!(count(&conn, "registro"), 1, "a save after the switch must stem too");
 }
 
 // -- what must not be touched -------------------------------------------
