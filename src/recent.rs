@@ -185,7 +185,9 @@ pub fn format_items(items: &[RecentItem], show_project: bool) -> String {
             s.push_str(&format!("  [{}: {t}]", "topic"));
         }
         if let Some(f) = &it.received_from {
-            s.push_str(&format!("  [from: {f}]"));
+            // Sender-controlled, and this is output an agent reads: a
+            // newline would forge a line. Same treatment as the title.
+            s.push_str(&format!("  [from: {}]", sanitize(f, 40)));
         }
         s.push_str(&format!("\n  id:{}  {}\n", it.id, it.title));
         if !it.excerpt.is_empty() && it.excerpt != it.title {
