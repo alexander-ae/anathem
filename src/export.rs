@@ -3,6 +3,8 @@ use rusqlite::Connection;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use crate::permissions;
+
 pub fn slug(s: &str) -> String {
     s.chars()
         .map(|c| if c.is_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
@@ -120,6 +122,13 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
     // different continuations). The id is the primary key and therefore
     // unique, so suffixing it guarantees a distinct filename per memory
     // without sacrificing readability.
+
+    // The export is the copy that leaves the machine, and it used to come
+    // out with the umask (0644) while the database is 0600. Narrow what this
+    // run creates, and report a filesystem that cannot carry a mode.
+    let root_was_there = dir.exists();
+    let mut unrestricted: Vec<PathBuf> = Vec::new();
+
     let mut written: HashSet<PathBuf> = HashSet::new();
     let mut n = 0;
     for f in rows {
@@ -152,6 +161,9 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
             );
         }
         std::fs::create_dir_all(&d)?;
+        if permissions::restrict_to_owner(&d).is_err() {
+            unrestricted.push(d.clone());
+        }
         // `created` gets the same treatment as `project`, and for the same
         // reason: it is not always generated here. `import::parse` reads it
         // verbatim out of a `.md` frontmatter and `migrate::run` out of the
@@ -236,8 +248,26 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
             f.body
         );
         std::fs::write(&path, doc)?;
+        if permissions::restrict_to_owner(&path).is_err() {
+            unrestricted.push(path.clone());
+        }
         written.insert(path);
         n += 1;
+    }
+    // Only a root this run created is narrowed. An existing directory is the
+    // owner's to choose the mode of.
+    if !root_was_there && permissions::restrict_to_owner(dir).is_err() {
+        unrestricted.push(dir.to_path_buf());
+    }
+    if !unrestricted.is_empty() {
+        unrestricted.sort();
+        unrestricted.dedup();
+        eprintln!(
+            "mem export: this filesystem cannot carry Unix modes, so these stay readable by others:"
+        );
+        for p in &unrestricted {
+            eprintln!("  {}", p.display());
+        }
     }
     Ok(n)
 }

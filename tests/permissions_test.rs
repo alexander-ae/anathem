@@ -172,3 +172,44 @@ fn doctor_says_nothing_when_the_permissions_are_right() {
     let out = String::from_utf8_lossy(&o.stdout).to_string();
     assert!(!out.contains("0644"), "con 0600 no hay nada que decir: {out}");
 }
+
+/// The export is the copy that leaves the machine; it used to be 0644.
+#[test]
+fn an_export_leaves_nothing_readable_by_others() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("mem.db");
+    assert!(mem(&db, &["init"]));
+    assert!(mem(&db, &["save", "a note with something private inside", "--project", "api"]));
+
+    let out = dir.path().join("export");
+    assert!(mem(&db, &["export", "--out", out.to_str().unwrap()]));
+
+    assert_eq!(mode(&out), 0o700, "the directory the export creates is 0700");
+    let project = out.join("api");
+    assert_eq!(mode(&project), 0o700, "the project directory carries titles in its file names");
+    let file = std::fs::read_dir(&project)
+        .unwrap()
+        .next()
+        .expect("one exported memory")
+        .unwrap()
+        .path();
+    assert_eq!(mode(&file), 0o600, "every exported memory is 0600: {}", file.display());
+}
+
+/// An existing directory keeps its mode: it belongs to whoever made it.
+#[test]
+fn an_export_into_a_directory_that_already_existed_does_not_change_its_mode() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("mem.db");
+    assert!(mem(&db, &["init"]));
+    assert!(mem(&db, &["save", "another private note", "--project", "api"]));
+
+    let out = dir.path().join("already-there");
+    std::fs::create_dir(&out).unwrap();
+    std::fs::set_permissions(&out, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    assert!(mem(&db, &["export", "--out", out.to_str().unwrap()]));
+
+    assert_eq!(mode(&out), 0o755, "an existing directory is left alone");
+    assert_eq!(mode(&out.join("api")), 0o700, "its contents are not");
+}
