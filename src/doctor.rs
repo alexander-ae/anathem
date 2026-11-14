@@ -68,7 +68,7 @@ pub const EXIT_BROKEN: i32 = 2;
 
 /// How many concrete ids each check names before summarising with "y N
 /// más": enough to go look at them without flooding the terminal.
-const EJEMPLOS: usize = 5;
+const EXAMPLES: usize = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Level {
@@ -249,13 +249,12 @@ fn missing_vector_tables(conn: &Connection) -> rusqlite::Result<Vec<&'static str
     Ok(v)
 }
 
-/// Lists ids as `1, 2, 3 y 4 más`, without going past `EJEMPLOS`.
-/// The Spanish in the output is deliberate: it is user-facing text.
+/// Lists ids as `1, 2, 3 and 4 more`, without going past `EXAMPLES`.
 fn name_list(ids: &[String]) -> String {
-    if ids.len() <= EJEMPLOS {
+    if ids.len() <= EXAMPLES {
         ids.join(", ")
     } else {
-        format!("{} and {} more", ids[..EJEMPLOS].join(", "), ids.len() - EJEMPLOS)
+        format!("{} and {} more", ids[..EXAMPLES].join(", "), ids.len() - EXAMPLES)
     }
 }
 
@@ -440,39 +439,39 @@ fn search_log_size(conn: &Connection, s: &mut Section) {
 #[cfg(unix)]
 fn permissions_section(db: &Path, s: &mut Section) {
     use std::os::unix::fs::PermissionsExt;
-    let modo = |p: &Path| -> Option<u32> {
+    let mode_of = |p: &Path| -> Option<u32> {
         std::fs::metadata(p).ok().map(|m| m.permissions().mode() & 0o777)
     };
-    let mut abiertos: Vec<String> = Vec::new();
+    let mut still_open: Vec<String> = Vec::new();
     // The directory too: `0755` on it leaks the names of the packs and of
     // anything else living beside the database.
     if let Some(parent) = db.parent().filter(|p| !p.as_os_str().is_empty()) {
-        if let Some(m) = modo(parent) {
+        if let Some(m) = mode_of(parent) {
             if m & 0o077 != 0 {
-                abiertos.push(format!("{} is {:04o}", parent.display(), m));
+                still_open.push(format!("{} is {:04o}", parent.display(), m));
             }
         }
     }
     // The `-wal` and `-shm` carry the same content as the database, so a
     // narrow `mem.db` beside a wide `mem.db-wal` protects nothing.
-    for sufijo in ["", "-wal", "-shm"] {
-        let mut ruta = db.as_os_str().to_os_string();
-        ruta.push(sufijo);
-        let ruta = std::path::PathBuf::from(ruta);
-        if let Some(m) = modo(&ruta) {
+    for suffix in ["", "-wal", "-shm"] {
+        let mut path = db.as_os_str().to_os_string();
+        path.push(suffix);
+        let path = std::path::PathBuf::from(path);
+        if let Some(m) = mode_of(&path) {
             if m & 0o077 != 0 {
-                abiertos.push(format!("{} is {:04o}", ruta.display(), m));
+                still_open.push(format!("{} is {:04o}", path.display(), m));
             }
         }
     }
-    if abiertos.is_empty() {
+    if still_open.is_empty() {
         s.bien("readable only by its owner");
     } else {
         s.warning(format!(
             "readable by other users on this machine — {}. Anything that opens the \
              database narrows it: `mem search \"\"` is enough. This diagnostic does not, \
              because it changes nothing",
-            abiertos.join(", ")
+            still_open.join(", ")
         ));
     }
 }

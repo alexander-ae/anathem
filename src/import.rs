@@ -80,9 +80,9 @@ pub fn parse(text: &str) -> Option<ParsedMemory> {
     } else {
         text
     };
-    let resto = text.strip_prefix("---\n")?;
-    let fin = resto.find("\n---\n")?;
-    let (cabecera, body) = (&resto[..fin], &resto[fin + 5..]);
+    let rest = text.strip_prefix("---\n")?;
+    let fin = rest.find("\n---\n")?;
+    let (cabecera, body) = (&rest[..fin], &rest[fin + 5..]);
 
     let mut m = ParsedMemory { body: body.trim_start_matches('\n').trim_end().to_string(), ..Default::default() };
     m.status = "active".into();

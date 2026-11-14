@@ -413,11 +413,11 @@ fn call_tool(
             let warning = if cand.is_empty() {
                 String::new()
             } else {
-                let lista = cand.iter()
+                let list = cand.iter()
                     .map(|c| format!("  id:{} {}", c.memory_id, c.title))
                     .collect::<Vec<_>>().join("\n");
                 format!(
-                    "\n\nSimilar memories this one could replace:\n{lista}\n\
+                    "\n\nSimilar memories this one could replace:\n{list}\n\
                      If any of them is now obsolete, say so and I will mark it with `mem supersede {id} <old_id>`."
                 )
             };

@@ -510,13 +510,13 @@ impl Saved {
                     msg.push_str(&format!(" There are no other topic keys in {}.", self.project));
                 } else {
                     let has_more = self.other_keys.len() > MAX_KEYS_LISTED;
-                    let lista: Vec<&str> = self.other_keys.iter()
+                    let list: Vec<&str> = self.other_keys.iter()
                         .take(MAX_KEYS_LISTED).map(String::as_str).collect();
                     let puntos = if has_more { ", …" } else { "" };
                     msg.push_str(&format!(
                             " Keys that already exist in {}: {}{}. If you meant to update one \
                              of them, the key did not match: save again with the exact one.",
-                            self.project, lista.join(", "), puntos
+                            self.project, list.join(", "), puntos
                         ));
                 }
                 Some(msg)

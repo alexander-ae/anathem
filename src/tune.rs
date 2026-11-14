@@ -156,17 +156,17 @@ pub fn sweep_until_interior(
     loop {
         let pares: Vec<(f64, f64)> = out.iter().map(|(w, m, _)| (*w, *m)).collect();
         let best = best_weight(&pares);
-        let alto = out.last().map(|(w, _, _)| *w).unwrap_or(0.0);
-        let bajo = out.first().map(|(w, _, _)| *w).unwrap_or(0.0);
-        let siguiente = if best == alto && alto * 2.0 <= MAX_WEIGHT {
-            alto * 2.0
-        } else if best == bajo && bajo / 2.0 >= MIN_WEIGHT {
-            bajo / 2.0
+        let high = out.last().map(|(w, _, _)| *w).unwrap_or(0.0);
+        let low = out.first().map(|(w, _, _)| *w).unwrap_or(0.0);
+        let next = if best == high && high * 2.0 <= MAX_WEIGHT {
+            high * 2.0
+        } else if best == low && low / 2.0 >= MIN_WEIGHT {
+            low / 2.0
         } else {
             return Ok(out);
         };
-        let p = punto(conn, cases, pack, siguiente)?;
-        if siguiente > alto {
+        let p = punto(conn, cases, pack, next)?;
+        if next > high {
             out.push(p);
         } else {
             out.insert(0, p);

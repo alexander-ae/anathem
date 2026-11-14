@@ -695,15 +695,15 @@ pub fn run_explained(
     // transformation that was is recorded in the database, not in a
     // configuration file, precisely so the two cannot drift apart.
     let texto_indexado;
-    let texto = if crate::stem::enabled(conn) {
+    let text = if crate::stem::enabled(conn) {
         texto_indexado = crate::stem::augment(&q.text);
         &texto_indexado
     } else {
         &q.text
     };
-    let m = to_match(texto);
+    let m = to_match(text);
 
-    // --- recuperación léxica: idéntica a como era ---
+    // --- lexical retrieval: identical to how it was ---
     let mut best: HashMap<i64, (SearchHit, i64)> = HashMap::new();
     let mut orden_bm25: Vec<i64> = Vec::new();
     if !m.is_empty() {
@@ -793,15 +793,15 @@ pub fn run_explained(
     // Pinned ones still come first, as always: the merge orders within each
     // group, it does not cut across them.
     let mut pinned_ids: Vec<i64> = Vec::new();
-    let mut resto: Vec<i64> = Vec::new();
+    let mut rest: Vec<i64> = Vec::new();
     for id in merged {
         match best.get(&id) {
             Some((_, 1)) => pinned_ids.push(id),
-            Some(_) => resto.push(id),
+            Some(_) => rest.push(id),
             None => {}
         }
     }
-    pinned_ids.extend(resto);
+    pinned_ids.extend(rest);
 
     let mut out = Vec::new();
     let mut spent = 0usize;
@@ -853,7 +853,7 @@ pub fn run_explained(
     // Counted once the list is final, so the work is proportional to what
     // is returned and not to the candidate pool.
     let ids: Vec<i64> = out.iter().map(|e| e.hit.memory_id).collect();
-    let (words_total, per) = word_evidence(conn, &match_terms(texto), &ids)?;
+    let (words_total, per) = word_evidence(conn, &match_terms(text), &ids)?;
     for e in out.iter_mut() {
         e.words_total = words_total;
         e.words_matched = per.get(&e.hit.memory_id).copied().unwrap_or(0);

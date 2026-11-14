@@ -49,11 +49,11 @@ fn latest_published(json: &str) -> Result<String> {
     // The field is found by hand so a JSON parser is not added to a path
     // that runs once in a while; the response comes from GitLab and the
     // field is stable.
-    let marca = "\"tag_name\":\"";
-    let i = json.find(marca).context("the response carries no tag_name")?;
-    let resto = &json[i + marca.len()..];
-    let j = resto.find('"').context("unterminated tag_name")?;
-    Ok(resto[..j].trim_start_matches('v').to_string())
+    let marker = "\"tag_name\":\"";
+    let i = json.find(marker).context("the response carries no tag_name")?;
+    let rest = &json[i + marker.len()..];
+    let j = rest.find('"').context("unterminated tag_name")?;
+    Ok(rest[..j].trim_start_matches('v').to_string())
 }
 
 /// Compares two versions like `0.2.0`. Returns whether `published` is newer.
