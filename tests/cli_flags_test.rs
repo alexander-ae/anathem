@@ -97,21 +97,21 @@ fn the_help_and_doctor_say_where_the_project_lives() {
     let url = env!("CARGO_PKG_REPOSITORY");
     assert!(url.starts_with("https://"), "el repositorio tiene que ser una URL: {url}");
 
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
+    let salida = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--help")
         .output()
         .unwrap();
-    let ayuda = String::from_utf8_lossy(&output.stdout);
+    let ayuda = String::from_utf8_lossy(&salida.stdout);
     assert!(ayuda.contains(url), "`mem --help` no dice dónde vive el proyecto:\n{ayuda}");
 
     let d = tempfile::tempdir().unwrap();
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
+    let salida = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--db")
         .arg(d.path().join("mem.db"))
         .arg("doctor")
         .output()
         .unwrap();
-    let doctor = String::from_utf8_lossy(&output.stdout);
+    let doctor = String::from_utf8_lossy(&salida.stdout);
     assert!(doctor.contains(url), "`mem doctor` tampoco lo dice:\n{doctor}");
 }
 
@@ -120,11 +120,11 @@ fn the_help_and_doctor_say_where_the_project_lives() {
 /// discoverability that `--help` does not already give, and costs a parser.
 #[test]
 fn the_version_stays_machine_readable() {
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
+    let salida = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--version")
         .output()
         .unwrap();
-    let v = String::from_utf8_lossy(&output.stdout);
+    let v = String::from_utf8_lossy(&salida.stdout);
     assert!(!v.contains("http"), "--version tiene que seguir siendo una línea sin URL: {v}");
     assert!(v.starts_with("mem "), "{v}");
 }

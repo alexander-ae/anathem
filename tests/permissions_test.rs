@@ -25,15 +25,15 @@ fn mem(db: &Path, args: &[&str]) -> bool {
 #[test]
 fn the_database_and_its_directory_are_private() {
     let dir = tempfile::tempdir().unwrap();
-    let home = dir.path().join("anathem");
-    let db = home.join("mem.db");
+    let casa = dir.path().join("anathem");
+    let db = casa.join("mem.db");
     assert!(mem(&db, &["init"]));
     assert!(mem(&db, &["save", "una nota con algo privado adentro"]));
 
     assert_eq!(mode(&db), 0o600, "la base tiene que ser 0600");
-    assert_eq!(mode(&home), 0o700, "el directorio tiene que ser 0700");
+    assert_eq!(mode(&casa), 0o700, "el directorio tiene que ser 0700");
     for sufijo in ["-wal", "-shm"] {
-        let p = home.join(format!("mem.db{sufijo}"));
+        let p = casa.join(format!("mem.db{sufijo}"));
         if p.exists() {
             assert_eq!(mode(&p), 0o600, "{sufijo} tiene el mismo contenido que la base");
         }
@@ -45,16 +45,16 @@ fn an_existing_database_left_world_readable_gets_narrowed() {
     // The case that matters: not a fresh install, but the one that has been
     // accumulating notes under an earlier version that created it 0644.
     let dir = tempfile::tempdir().unwrap();
-    let home = dir.path().join("anathem");
-    let db = home.join("mem.db");
+    let casa = dir.path().join("anathem");
+    let db = casa.join("mem.db");
     assert!(mem(&db, &["init"]));
 
     std::fs::set_permissions(&db, std::fs::Permissions::from_mode(0o644)).unwrap();
-    std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::set_permissions(&casa, std::fs::Permissions::from_mode(0o755)).unwrap();
 
     assert!(mem(&db, &["search", "lo que sea"]));
     assert_eq!(mode(&db), 0o600, "abrir una base vieja tiene que restringirla");
-    assert_eq!(mode(&home), 0o700, "y también su directorio");
+    assert_eq!(mode(&casa), 0o700, "y también su directorio");
 }
 
 #[test]
@@ -92,8 +92,8 @@ fn an_installed_pack_is_read_only_and_still_replaceable() {
     support::write_pack_mini(&origen, "mini-es");
     assert!(mem(&db, &["model", "install", origen.to_str().unwrap()]));
 
-    let installed = anathem::packstore::packs_dir(dir.path()).join("mini-es.anathem-pack");
-    assert_eq!(mode(&installed), 0o400, "the installed pack has to be 0400");
+    let instalado = anathem::packstore::packs_dir(dir.path()).join("mini-es.anathem-pack");
+    assert_eq!(mode(&instalado), 0o400, "el paquete instalado tiene que ser 0400");
 
     // Writing over it in place is what the mode prevents — for everyone
     // except root, who ignores permission bits entirely. CI runs inside a
@@ -110,7 +110,7 @@ fn an_installed_pack_is_read_only_and_still_replaceable() {
         eprintln!("saltado: root ignora los bits de permiso, el 0400 no lo detiene");
     } else {
         assert!(
-            std::fs::OpenOptions::new().write(true).truncate(true).open(&installed).is_err(),
+            std::fs::OpenOptions::new().write(true).truncate(true).open(&instalado).is_err(),
             "no tendría que poder truncarse en su lugar"
         );
     }
@@ -122,7 +122,7 @@ fn an_installed_pack_is_read_only_and_still_replaceable() {
         mem(&db, &["model", "install", otro.to_str().unwrap()]),
         "reinstalar tiene que seguir funcionando: el rename pide permiso sobre el directorio"
     );
-    assert_eq!(mode(&installed), 0o400);
+    assert_eq!(mode(&instalado), 0o400);
 }
 
 /// `mem doctor` tiene que decir cuando la base está abierta a otros usuarios.
@@ -158,8 +158,8 @@ fn doctor_reports_a_world_readable_database() {
     assert_eq!(o.status.code(), Some(0), "no puede hacer fallar el diagnóstico: {out}");
 
     // Y no la corrige: doctor no modifica nada.
-    let current = std::fs::metadata(&db).unwrap().permissions().mode() & 0o777;
-    assert_eq!(current, 0o644, "doctor no tiene que cambiar los permisos");
+    let modo = std::fs::metadata(&db).unwrap().permissions().mode() & 0o777;
+    assert_eq!(modo, 0o644, "doctor no tiene que cambiar los permisos");
 }
 
 #[test]

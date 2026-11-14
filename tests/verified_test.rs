@@ -107,18 +107,18 @@ fn the_mark_moves_no_ranking() {
     let (_d, conn) = db();
     let a = insert(&conn, "a", "the deployment pipeline runs nightly on the build host");
     let b = insert(&conn, "b", "the deployment pipeline runs nightly on the spare host");
-    let before: Vec<&str> = {
+    let antes: Vec<&str> = {
         let out = answer(&conn, "deployment pipeline nightly");
         hits(&out).iter().map(|l| if l.contains("build") { "a" } else { "b" }).collect()
     };
     // Mark whichever came second, which is the one a ranking boost would move.
-    let segundo = if before[1] == "a" { a } else { b };
+    let segundo = if antes[1] == "a" { a } else { b };
     anathem::maint::verify(&conn, segundo, true).unwrap();
-    let after: Vec<&str> = {
+    let despues: Vec<&str> = {
         let out = answer(&conn, "deployment pipeline nightly");
         hits(&out).iter().map(|l| if l.contains("build") { "a" } else { "b" }).collect()
     };
-    assert_eq!(before, after, "the mark changed the order, and it must not");
+    assert_eq!(antes, despues, "the mark changed the order, and it must not");
 }
 
 /// Additive: a database written before the column existed keeps working and

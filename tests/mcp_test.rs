@@ -52,7 +52,7 @@ fn search_memory_returns_results() {
         "params":{"name":"search_memory","arguments":{"query":"cache staleness"}}});
     let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
     let text = res["result"]["content"][0]["text"].as_str().unwrap();
-    assert!(text.contains("cache"), "returned text: {text}");
+    assert!(text.contains("cache"), "texto devuelto: {text}");
 }
 
 #[test]
@@ -180,8 +180,8 @@ fn search_memory_clamps_an_absurd_limit_and_budget() {
     let comienzo = std::time::Instant::now();
     let res = anathem::mcp::handle(&conn, &ctx, &cfg, &req).unwrap().unwrap();
     assert!(comienzo.elapsed() < std::time::Duration::from_secs(5), "tardó demasiado");
-    let text = res["result"]["content"][0]["text"].as_str().unwrap();
-    assert!(text.contains("cache"), "it had to return results anyway: {text}");
+    let texto = res["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(texto.contains("cache"), "tenía que devolver resultados igual: {texto}");
 }
 
 #[test]
