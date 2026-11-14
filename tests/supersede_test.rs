@@ -17,7 +17,7 @@ fn it_proposes_similar_candidates() {
     seed(&conn, "otra", "El design system define los colores de la plataforma");
 
     let c = supersede::candidates(&conn, "El cache del breakdown NO se justifica", "p", 5).unwrap();
-    assert!(!c.is_empty(), "no propuso candidatos");
+    assert!(!c.is_empty(), "it proposed no candidates");
     assert_eq!(c[0].ext_id.as_deref(), Some("vieja"));
 }
 
@@ -36,7 +36,7 @@ fn link_marks_the_older_one_and_removes_it_from_search() {
 
     let q = search::Query { text: "cache breakdown justifica".into(), ..Default::default() };
     let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
-    assert!(hits.iter().all(|h| h.ext_id.as_deref() != Some("vieja")), "la superseded sigue apareciendo");
+    assert!(hits.iter().all(|h| h.ext_id.as_deref() != Some("vieja")), "the superseded one still shows up");
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn link_with_a_missing_newer_one_fails_and_leaves_the_older_alone() {
         [older],
         |r| Ok((r.get(0)?, r.get(1)?)),
     ).unwrap();
-    assert_eq!(status, "active", "vieja quedó superseded apuntando a nada");
+    assert_eq!(status, "active", "the old one was left superseded pointing at nothing");
     assert_eq!(supersedes, None);
 }
 
@@ -98,7 +98,7 @@ fn link_refuses_to_close_a_two_step_cycle() {
         [siete, ocho],
         |r| r.get(0),
     ).unwrap();
-    assert_eq!(active_ones, 1, "el ciclo dejó sin ninguna versión activa (o dos)");
+    assert_eq!(active_ones, 1, "the cycle left no active version (or two)");
 }
 
 // -- I3: candidates() by id, not by content, with a case that tells them apart --
@@ -126,8 +126,8 @@ fn candidates_does_not_discard_preexisting_duplicates_from_the_same_project() {
     // discarded dup_a, dup_b AND the freshly inserted one -- all three share
     // the query's body -- leaving `c` without either of the real duplicates.
     // The by-id rule discards only the one with the highest id.
-    assert!(c.iter().any(|h| h.memory_id == dup_a), "no propuso dup_a: {c:?}");
-    assert!(c.iter().any(|h| h.memory_id == dup_b), "no propuso dup_b: {c:?}");
+    assert!(c.iter().any(|h| h.memory_id == dup_a), "it did not propose dup_a: {c:?}");
+    assert!(c.iter().any(|h| h.memory_id == dup_b), "it did not propose dup_b: {c:?}");
     assert!(c.iter().all(|h| h.memory_id != recien_insertada),
             "se propuso a sí misma: {c:?}");
 }

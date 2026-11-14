@@ -49,10 +49,10 @@ fn windows_are_understood_in_the_usual_units() {
 fn a_window_it_cannot_parse_fails_and_says_so() {
     for malo in ["", "   ", "ayer", "-3h", "0h", "3x"] {
         let e = recent::duration_in_seconds(malo);
-        assert!(e.is_err(), "«{malo}» debería fallar y no lo hizo");
+        assert!(e.is_err(), "«{malo}» should have failed and did not");
     }
     let msg = recent::duration_in_seconds("ayer").unwrap_err().to_string();
-    assert!(msg.contains("6h"), "el mensaje tiene que sugerir el formato: {msg}");
+    assert!(msg.contains("6h"), "the message has to suggest the format: {msg}");
 }
 
 // -------------------------------------------------------------------- listar
@@ -68,7 +68,7 @@ fn the_newest_comes_first() {
 
     let r = recent::list_recent(&conn, Some("p"), None, 10, 120).unwrap();
     let ids: Vec<i64> = r.iter().map(|x| x.id).collect();
-    assert_eq!(ids, vec![new_id, old], "tiene que venir de más nuevo a más viejo");
+    assert_eq!(ids, vec![new_id, old], "it has to come newest to oldest");
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn the_window_leaves_out_what_came_before() {
 
     let r = recent::list_recent(&conn, Some("p"), Some(3600), 10, 120).unwrap();
     let ids: Vec<i64> = r.iter().map(|x| x.id).collect();
-    assert_eq!(ids, vec![dentro], "la ventana de una hora tiene que dejar afuera lo de anteayer");
+    assert_eq!(ids, vec![dentro], "the one-hour window has to leave out the day before yesterday");
 }
 
 #[test]
@@ -97,7 +97,7 @@ fn only_the_requested_project_and_also_all_of_them() {
     assert_eq!(solo[0].project, "uno");
 
     let all_ = recent::list_recent(&conn, None, None, 10, 120).unwrap();
-    assert_eq!(all_.len(), 2, "sin proyecto tiene que traer los dos");
+    assert_eq!(all_.len(), 2, "with no project it has to bring both");
 }
 
 #[test]
@@ -115,8 +115,8 @@ fn superseded_and_forgotten_ones_do_not_show_up() {
 
     let r = recent::list_recent(&conn, Some("p"), None, 10, 120).unwrap();
     let ids: Vec<i64> = r.iter().map(|x| x.id).collect();
-    assert_eq!(ids, vec![current_one], "solo lo activo: {r:?}");
-    assert_eq!(r[0].topic.as_deref(), Some("estado"), "la clave de tema tiene que viajar");
+    assert_eq!(ids, vec![current_one], "only the active one: {r:?}");
+    assert_eq!(r[0].topic.as_deref(), Some("estado"), "the topic key has to travel");
 }
 
 #[test]
@@ -131,7 +131,7 @@ fn the_limit_trims_but_keeps_the_newest() {
     }
     let r = recent::list_recent(&conn, Some("p"), None, 2, 120).unwrap();
     assert_eq!(r.len(), 2);
-    assert_eq!(r[0].id, ids[4], "el más nuevo primero");
+    assert_eq!(r[0].id, ids[4], "the newest first");
     assert_eq!(r[1].id, ids[3]);
 }
 
@@ -152,7 +152,7 @@ fn the_mcp_server_records_who_saved_it_with_nothing_configured() {
                    "clientInfo": {"name": "opencode", "version": "1.2.3"}}
     });
     mcp::handle_con_agente(&conn, &ctx, &cfg, &init, &mut agent).unwrap().unwrap();
-    assert_eq!(agent.as_deref(), Some("opencode"), "el nombre del cliente se tiene que recordar");
+    assert_eq!(agent.as_deref(), Some("opencode"), "the client name has to be remembered");
 
     let save = serde_json::json!({
         "jsonrpc": "2.0", "id": 2, "method": "tools/call",
@@ -182,7 +182,7 @@ fn with_no_clientinfo_it_does_not_invent_an_agent() {
         let init = serde_json::json!({
             "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": params});
         mcp::handle_con_agente(&conn, &ctx, &cfg, &init, &mut agent).unwrap().unwrap();
-        assert_eq!(agent, None, "un nombre ausente o vacío no es un agente");
+        assert_eq!(agent, None, "a missing or empty name is not an agent");
     }
 
     let save = serde_json::json!({
@@ -191,7 +191,7 @@ fn with_no_clientinfo_it_does_not_invent_an_agent() {
     });
     mcp::handle_con_agente(&conn, &ctx, &cfg, &save, &mut agent).unwrap().unwrap();
     let r = recent::list_recent(&conn, Some("p"), None, 10, 120).unwrap();
-    assert_eq!(r[0].agent, None, "mejor sin agente que con uno inventado");
+    assert_eq!(r[0].agent, None, "better no agent than an invented one");
 }
 
 #[test]
@@ -243,7 +243,7 @@ fn an_invalid_window_in_the_tool_is_explained_and_does_not_break() {
     let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &call)
         .unwrap()
         .unwrap();
-    assert!(res["error"].is_null(), "no tiene que ser un error de protocolo: {res}");
+    assert!(res["error"].is_null(), "it must not be a protocol error: {res}");
     let txt = res["result"]["content"][0]["text"].as_str().unwrap();
     assert!(txt.contains("Could not list"), "respuesta: {txt}");
 }
@@ -270,7 +270,7 @@ fn a_database_predating_these_columns_keeps_working_and_migrates_itself() {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(n, 0, "el escenario exige que las columnas no estén");
+        assert_eq!(n, 0, "the scenario requires the columns to be absent");
     }
 
     // Opening the old database migrates it.
@@ -282,13 +282,13 @@ fn a_database_predating_these_columns_keeps_working_and_migrates_itself() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(n, 2, "abrir la base tiene que agregar las dos columnas");
+    assert_eq!(n, 2, "opening the database has to add both columns");
 
     // The old memory shows up all the same, with all that is known about it.
     let r = recent::list_recent(&conn, Some("p"), None, 10, 120).unwrap();
-    assert_eq!(r.len(), 1, "la memoria anterior tiene que seguir apareciendo");
+    assert_eq!(r.len(), 1, "the earlier memory has to keep showing up");
     assert_eq!(r[0].agent, None);
-    assert!(!r[0].when.is_empty(), "sin creado_ts se cae a la fecha de created");
+    assert!(!r[0].when.is_empty(), "with no creado_ts it falls back to created's date");
 }
 
 // ------------------------------------------------------------------------ CLI
@@ -301,8 +301,8 @@ fn the_recent_command_prints_the_latest() {
         ingest::save_explicit(&conn, "una nota del proyecto equis", "equis", vec![]).unwrap();
     }
     let (ok, out, err) = mem(d.path(), &["recent", "--project", "equis"]);
-    assert!(ok, "falló: {err}");
-    assert!(out.contains("una nota del proyecto equis"), "salida: {out}");
+    assert!(ok, "failed: {err}");
+    assert!(out.contains("una nota del proyecto equis"), "output: {out}");
 
     // A window that covers nothing says so instead of lying with a list.
     // The memory is aged by hand: freshly saved it falls inside any window,
@@ -313,16 +313,16 @@ fn the_recent_command_prints_the_latest() {
     }
     let (ok, out, _) = mem(d.path(), &["recent", "--project", "equis", "--desde", "1h"]);
     assert!(ok);
-    assert!(out.contains("no memories"), "salida: {out}");
+    assert!(out.contains("no memories"), "output: {out}");
 
     // `--desde todo` puts no bound on time.
     let (ok, out, _) = mem(d.path(), &["recent", "--project", "equis", "--desde", "todo"]);
     assert!(ok);
-    assert!(out.contains("una nota del proyecto equis"), "salida: {out}");
+    assert!(out.contains("una nota del proyecto equis"), "output: {out}");
 
     // An unreadable window fails and explains itself.
     let (ok, _, err) = mem(d.path(), &["recent", "--desde", "ayer"]);
-    assert!(!ok, "una ventana ilegible no puede pasar por buena");
+    assert!(!ok, "an unreadable window cannot pass as good");
     assert!(err.contains("ayer"), "stderr: {err}");
 }
 
@@ -399,13 +399,13 @@ fn the_handoff_says_who_saved_each_thing() {
     mcp::handle_con_agente(&conn, &ctx, &cfg, &save, &mut agent).unwrap();
 
     // Another agent connects and sees it.
-    let visto = instructions_for(&conn, &cfg, "claude-code").expect("tenía que haber traspaso");
-    assert!(visto.contains("opencode"), "no dice quién fue: {visto}");
-    assert!(visto.contains("quedo a medias el refactor"), "no trae el título: {visto}");
+    let visto = instructions_for(&conn, &cfg, "claude-code").expect("there had to be a handoff");
+    assert!(visto.contains("opencode"), "it does not say who it was: {visto}");
+    assert!(visto.contains("quedo a medias el refactor"), "it does not bring the title: {visto}");
 
     // The same agent sees it marked as its own, not as someone else's.
     let propio = instructions_for(&conn, &cfg, "opencode").unwrap();
-    assert!(propio.contains("this tool"), "debería marcar lo propio: {propio}");
+    assert!(propio.contains("this tool"), "it should mark its own: {propio}");
 }
 
 #[test]
@@ -418,7 +418,7 @@ fn the_handoff_stays_within_what_was_asked() {
     let cfg = Config { handoff_items: 3, ..Config::default() };
     let txt = instructions_for(&conn, &cfg, "claude-code").unwrap();
     let lines = txt.lines().filter(|l| l.starts_with("- ")).count();
-    assert_eq!(lines, 3, "tenía que listar 3 y listó {lines}:\n{txt}");
+    assert_eq!(lines, 3, "it had to list 3 and listed {lines}:\n{txt}");
 }
 
 #[test]
@@ -434,9 +434,9 @@ fn an_unreadable_handoff_window_does_not_break_the_handshake() {
         "jsonrpc": "2.0", "id": 1, "method": "initialize",
         "params": {"clientInfo": {"name": "x"}}});
     let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &roto, &req).unwrap().unwrap();
-    assert!(res["error"].is_null(), "el handshake tiene que sobrevivir: {res}");
+    assert!(res["error"].is_null(), "the handshake has to survive: {res}");
     assert_eq!(res["result"]["protocolVersion"].as_str().unwrap(), "2024-11-05");
-    assert!(res["result"]["instructions"].is_null(), "sin traspaso, pero vivo");
+    assert!(res["result"]["instructions"].is_null(), "no handoff, but alive");
 }
 
 // ----------------------------------------- injection through the handoff
@@ -460,7 +460,7 @@ fn a_memory_cannot_close_the_data_block() {
     // The close is at the end, not in the middle: the content did not bring it forward.
     let cierre = txt.find("<<<fin-memorias-anathem>>>").unwrap();
     let ultima_nota = txt.rfind("\n- ").unwrap();
-    assert!(cierre > ultima_nota, "el cierre tiene que ir después de las notas:\n{txt}");
+    assert!(cierre > ultima_nota, "the closing has to come after the notes:\n{txt}");
 }
 
 #[test]
@@ -474,8 +474,8 @@ fn a_memory_can_neither_inject_lines_nor_take_over_the_prompt() {
 
     let txt = instructions_for(&conn, &Config::default(), "claude-code").unwrap();
     let notes_ = txt.lines().filter(|l| l.starts_with("- ")).count();
-    assert_eq!(notes_, 1, "una memoria tiene que ocupar una sola línea:\n{txt}");
-    assert!(txt.len() < 1200, "el traspaso no puede ocupar el prompt entero: {} bytes", txt.len());
+    assert_eq!(notes_, 1, "a memory has to take one line:\n{txt}");
+    assert!(txt.len() < 1200, "the handoff cannot take the whole prompt: {} bytes", txt.len());
 }
 
 #[test]
@@ -589,7 +589,7 @@ fn the_greeting_says_how_many_are_waiting() {
     }
     let con = instructions_for(&conn, &Config::default(), "claude-code").unwrap();
 
-    assert!(con.starts_with(&sin), "lo que ya decía no puede cambiar:\n{con}");
+    assert!(con.starts_with(&sin), "what it already said cannot change:\n{con}");
     let extra = &con[sin.len()..];
     assert_eq!(extra.lines().filter(|l| !l.trim().is_empty()).count(), 1,
                "tiene que ser exactamente una línea: {extra:?}");
@@ -643,7 +643,7 @@ fn drafts_alone_are_announced_with_no_block() {
     ingest::save_received(&conn, "llegó algo", "otro", vec![], "opencode@dell", None).unwrap();
     let t = instructions_for(&conn, &Config::default(), "claude-code").unwrap();
     assert!(t.contains("1 received memory is waiting"), "{t}");
-    assert!(!t.contains("<<<memorias-anathem>>>"), "no hay notas que enmarcar: {t}");
+    assert!(!t.contains("<<<memorias-anathem>>>"), "there are no notes to frame: {t}");
 }
 
 /// The off switch stays one switch. Somebody who set `handoff_items: 0`

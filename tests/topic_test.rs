@@ -22,7 +22,7 @@ fn mem(dir: &Path, args: &[&str]) -> (bool, String, String) {
 
 fn mem_ok(dir: &Path, args: &[&str]) -> String {
     let (ok, out, err) = mem(dir, args);
-    assert!(ok, "mem {args:?} falló: {err}");
+    assert!(ok, "mem {args:?} failed: {err}");
     out
 }
 
@@ -46,7 +46,7 @@ fn saving_twice_under_one_key_leaves_the_first_superseded_and_the_second_active(
     let sup: i64 = conn
         .query_row("select supersedes_id from memories where id = 2", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(sup, 1, "la nueva tiene que apuntar a la que reemplazó");
+    assert_eq!(sup, 1, "the new one has to point at the one it replaced");
 }
 
 #[test]
@@ -56,8 +56,8 @@ fn the_older_one_stops_showing_in_search_and_the_newer_one_does() {
     mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
 
     let out = mem_ok(d.path(), &["search", "proveedor pagos"]);
-    assert!(out.contains("Adyen"), "la nueva tiene que aparecer: {out}");
-    assert!(!out.contains("Stripe"), "la vieja sigue apareciendo: {out}");
+    assert!(out.contains("Adyen"), "the new one has to show up: {out}");
+    assert!(!out.contains("Stripe"), "the old one still shows up: {out}");
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn history_on_the_newer_one_shows_the_chain_back_to_the_older() {
 
     let out = mem_ok(d.path(), &["history", "3"]);
     let lines: Vec<&str> = out.lines().collect();
-    assert_eq!(lines.len(), 3, "la cadena tiene tres eslabones: {out}");
+    assert_eq!(lines.len(), 3, "the chain has three links: {out}");
     assert!(lines[0].contains("active") && lines[0].contains("desde octubre"), "{out}");
     assert!(lines[1].contains("superseded") && lines[1].contains("Adyen"), "{out}");
     assert!(lines[2].contains("superseded") && lines[2].contains("Stripe"), "{out}");
@@ -103,10 +103,10 @@ fn saving_under_a_new_key_simply_saves() {
     mem_ok(d.path(), &["save", "Otro hecho", "--project", "p", "--topic", "otro"]);
     let out = mem_ok(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "pagos"]);
 
-    assert_eq!(status_(d.path(), 1), "active", "una clave distinta no toca a las demás");
+    assert_eq!(status_(d.path(), 1), "active", "a different key does not touch the others");
     assert_eq!(status_(d.path(), 2), "active");
     assert!(out.contains("saved memory 2"), "{out}");
-    assert!(out.contains("pagos") && out.contains("new one"), "tiene que decir que la clave era nueva: {out}");
+    assert!(out.contains("pagos") && out.contains("new one"), "it has to say the key was new: {out}");
 }
 
 #[test]
@@ -116,8 +116,8 @@ fn on_replacing_the_output_names_the_superseded_memory_by_id() {
     let out = mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
 
     assert!(out.contains("saved memory 2"), "{out}");
-    assert!(out.contains("replaces memory 1"), "tiene que nombrar el id reemplazado: {out}");
-    assert!(out.contains("Stripe"), "tiene que mostrar el título reemplazado: {out}");
+    assert!(out.contains("replaces memory 1"), "it has to name the replaced id: {out}");
+    assert!(out.contains("Stripe"), "it has to show the replaced title: {out}");
 }
 
 #[test]
@@ -132,14 +132,14 @@ fn topics_lists_project_count_and_current() {
     let row = |key: &str| -> Vec<String> {
         out.lines()
             .find(|l| l.split_whitespace().nth(1) == Some(key))
-            .unwrap_or_else(|| panic!("falta la clave {key} en:\n{out}"))
+            .unwrap_or_else(|| panic!("missing key {key} in:\n{out}"))
             .split_whitespace()
             .map(str::to_string)
             .collect()
     };
     assert_eq!(row("pagos"), ["p", "pagos", "2", "2"], "{out}");
     assert_eq!(row("base"), ["q", "base", "1", "3"], "{out}");
-    assert_eq!(out.lines().count(), 3, "cabecera y dos claves, nada más: {out}");
+    assert_eq!(out.lines().count(), 3, "header and two keys, nothing else: {out}");
 }
 
 #[test]
@@ -159,8 +159,8 @@ fn once_the_current_one_is_forgotten_the_key_saves_again_without_superseding() {
     mem_ok(d.path(), &["forget", "1"]);
     let out = mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
 
-    assert!(!out.contains("replaces memory"), "no había una activa que reemplazar: {out}");
-    assert_eq!(status_(d.path(), 1), "forgotten", "no se revive lo olvidado");
+    assert!(!out.contains("replaces memory"), "there was no active one to replace: {out}");
+    assert_eq!(status_(d.path(), 1), "forgotten", "what was forgotten is not revived");
     assert_eq!(status_(d.path(), 2), "active");
 }
 
@@ -168,7 +168,7 @@ fn once_the_current_one_is_forgotten_the_key_saves_again_without_superseding() {
 fn an_empty_key_is_rejected_and_nothing_is_saved() {
     let d = tempfile::tempdir().unwrap();
     let (ok, _, err) = mem(d.path(), &["save", PAGOS_VIEJO, "--project", "p", "--topic", "  "]);
-    assert!(!ok, "una clave vacía tiene que fallar");
+    assert!(!ok, "an empty key has to fail");
     assert!(err.contains("topic key"), "{err}");
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let n: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
@@ -190,7 +190,7 @@ fn case_and_inner_spaces_do_not_make_another_topic() {
     let out = mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "  Proveedor   DE\tPagos "]);
 
     assert_eq!(status_(d.path(), 1), "superseded", "{out}");
-    assert!(out.contains("«proveedor de pagos»"), "muestra la clave normalizada: {out}");
+    assert!(out.contains("«proveedor de pagos»"), "it shows the normalised key: {out}");
     let topics = mem_ok(d.path(), &["topics"]);
     assert!(topics.contains("proveedor de pagos") && !topics.contains("Proveedor"), "{topics}");
 }
@@ -206,7 +206,7 @@ fn a_new_key_lists_the_ones_already_in_the_project() {
     let out = mem_ok(d.path(), &["save", "El stack es Svelte", "--project", "p", "--topic", "stack-frontend"]);
 
     assert!(out.contains("stack-del-frontend") && out.contains("politica-de-ramas"), "{out}");
-    assert!(!out.contains("solo-en-q"), "solo las del mismo proyecto: {out}");
+    assert!(!out.contains("solo-en-q"), "only those of the same project: {out}");
     assert_eq!(status_(d.path(), 1), "active");
 }
 
@@ -251,7 +251,7 @@ fn vector_search_does_not_return_the_superseded_memory_either() {
     let q = search::Query { text: "pagos".into(), ..Default::default() };
     let hits = anathem::vecstore::search_vectors(&conn, &[1.0, 0.0], &q, 10).unwrap();
     let ids: Vec<i64> = hits.iter().map(|h| h.memory_id).collect();
-    assert_eq!(ids, vec![newer.id], "solo la vigente puede salir por vector: {ids:?}");
+    assert_eq!(ids, vec![newer.id], "only the current one may come out of the vector side: {ids:?}");
 }
 
 // -- the save happens in a single transaction --------------------------------
@@ -269,10 +269,10 @@ fn when_the_link_fails_the_new_memory_is_not_left_half_written() {
     .unwrap();
 
     let err = ingest::save_with_topic(&conn, PAGOS_NUEVO, "p", vec![], Some("pagos"), None);
-    assert!(err.is_err(), "la falla del enlace tiene que propagarse");
+    assert!(err.is_err(), "the link failure has to propagate");
 
     let n: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
-    assert_eq!(n, 1, "el insert se tiene que deshacer junto con el enlace");
+    assert_eq!(n, 1, "the insert has to roll back with the link");
     let st: String = conn
         .query_row("select status from memories where id = ?1", [primera.id], |r| r.get(0))
         .unwrap();
@@ -317,7 +317,7 @@ fn concurrent_saves_under_one_key_all_succeed_and_leave_a_single_active() {
 
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let total: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
-    assert_eq!(total, N as i64, "se perdió algún guardado");
+    assert_eq!(total, N as i64, "a save was lost");
     let active_ones: i64 = conn
         .query_row(
             "select count(*) from memories where project='p' and topic='pagos' and status='active'",
@@ -325,7 +325,7 @@ fn concurrent_saves_under_one_key_all_succeed_and_leave_a_single_active() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(active_ones, 1, "tiene que quedar exactamente una activa por clave");
+    assert_eq!(active_ones, 1, "exactly one active per key has to remain");
 }
 
 // -- MCP ---------------------------------------------------------------------
@@ -379,10 +379,10 @@ fn the_save_memory_description_explains_when_to_use_topic() {
     let tools = res["result"]["tools"].as_array().unwrap();
     let save = tools.iter().find(|t| t["name"] == "save_memory").unwrap();
 
-    assert!(save["inputSchema"]["properties"]["topic"].is_object(), "falta el parámetro topic");
+    assert!(save["inputSchema"]["properties"]["topic"].is_object(), "the topic parameter is missing");
     let desc = save["description"].as_str().unwrap().to_lowercase();
     for key in ["topic", "correction", "replace", "updated version"] {
-        assert!(desc.contains(key), "la descripción no menciona {key:?}: {desc}");
+        assert!(desc.contains(key), "the description does not mention {key:?}: {desc}");
     }
 }
 
@@ -453,7 +453,7 @@ fn supersedes_of_a_missing_memory_is_rejected_in_words_and_saves_nothing() {
     let out = call(&conn, "save_memory", serde_json::json!({
         "text": PAGOS_NUEVO, "project": "p", "supersedes": 999999}));
     assert!(out.starts_with("Not saved") && out.contains("999999"), "{out}");
-    assert_eq!(total(&conn), 0, "el rechazo no puede dejar la memoria nueva guardada");
+    assert_eq!(total(&conn), 0, "the rejection cannot leave the new memory saved");
 }
 
 #[test]
@@ -467,7 +467,7 @@ fn supersedes_of_a_memory_that_is_not_active_is_rejected() {
 
     assert!(out.starts_with("Not saved") && out.contains("forgotten"), "{out}");
     assert_eq!(total(&conn), 1);
-    assert_eq!(status(&conn, 1), "forgotten", "no se revive lo olvidado");
+    assert_eq!(status(&conn, 1), "forgotten", "what was forgotten is not revived");
 }
 
 #[test]
@@ -495,7 +495,7 @@ fn supersedes_and_topic_pointing_at_different_memories_are_rejected() {
         "text": PAGOS_NUEVO, "project": "p", "topic": "pagos", "supersedes": 2}));
 
     assert!(out.starts_with("Not saved"), "{out}");
-    assert!(out.contains("id:1") && out.contains("id:2"), "nombra las dos: {out}");
+    assert!(out.contains("id:1") && out.contains("id:2"), "it names both: {out}");
     assert_eq!(total(&conn), 2);
     assert_eq!(status(&conn, 1), "active");
     assert_eq!(status(&conn, 2), "active");
@@ -531,8 +531,8 @@ fn the_description_tells_when_to_use_supersedes_and_when_topic() {
     assert_eq!(save["inputSchema"]["properties"]["supersedes"]["type"], "integer");
     let desc = save["description"].as_str().unwrap();
     assert!(desc.contains("`supersedes`") && desc.contains("`topic`"), "{desc}");
-    assert!(desc.contains("KEEP EVOLVING"), "cuándo va topic: {desc}");
-    assert!(desc.contains("ONE SPECIFIC EXISTING MEMORY"), "cuándo va supersedes: {desc}");
+    assert!(desc.contains("KEEP EVOLVING"), "when to use topic: {desc}");
+    assert!(desc.contains("ONE SPECIFIC EXISTING MEMORY"), "when to use supersedes: {desc}");
 }
 
 // -- export ------------------------------------------------------------------
@@ -551,7 +551,7 @@ fn export_keeps_the_topic_key() {
         if txt.contains("topic: \"pagos\"") {
             with_topic += 1;
         } else {
-            assert!(!txt.contains("topic:"), "sin clave no se emite el campo: {txt}");
+            assert!(!txt.contains("topic:"), "with no key the field is not emitted: {txt}");
         }
     }
     assert_eq!(with_topic, 1);
@@ -661,7 +661,7 @@ fn older_database(dir: &Path) {
     let tiene: i64 = conn
         .query_row("select count(*) from pragma_table_info('memories') where name='topic'", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(tiene, 0, "la base de partida no debería tener la columna topic");
+    assert_eq!(tiene, 0, "the starting database should not have the topic column");
 }
 
 #[test]
@@ -675,7 +675,7 @@ fn an_older_database_still_opens_and_keeps_its_memories() {
     let conn = db::open(&d.path().join("mem.db")).unwrap();
     db::open(&d.path().join("mem.db")).unwrap();
     let n: i64 = conn.query_row("select count(*) from memories where topic is null", [], |r| r.get(0)).unwrap();
-    assert_eq!(n, 1, "la memoria vieja queda sin clave");
+    assert_eq!(n, 1, "the old memory is left with no key");
 }
 
 #[test]
@@ -686,7 +686,7 @@ fn an_older_database_accepts_saving_with_a_key_and_listing_topics() {
     mem_ok(d.path(), &["save", "La base es MySQL", "--project", "p", "--topic", "base"]);
     let out = mem_ok(d.path(), &["save", "La base es Oracle", "--project", "p", "--topic", "base"]);
     assert!(out.contains("replaces memory 2"), "{out}");
-    assert_eq!(status_(d.path(), 1), "active", "la anterior sin clave no se toca");
+    assert_eq!(status_(d.path(), 1), "active", "the earlier one with no key is not touched");
     assert_eq!(status_(d.path(), 2), "superseded");
     assert!(mem_ok(d.path(), &["topics"]).contains("base"));
 }
@@ -751,7 +751,7 @@ fn reviving_a_forgotten_one_when_a_current_exists_fails_instead_of_leaving_two_a
     ingest::save_with_topic(&conn, PAGOS_NUEVO, "p", vec![], Some("pagos"), None).unwrap();
 
     let r = conn.execute("update memories set status = 'active' where id = ?1", [older.id]);
-    assert!(r.is_err(), "revivir la olvidada habría dejado dos activas para la clave");
+    assert!(r.is_err(), "reviving the forgotten one would have left two active for the key");
 }
 
 #[test]
@@ -782,14 +782,14 @@ fn show_topic_prints_the_current_body_and_the_chain_below_it() {
     mem_ok(d.path(), &["save", PAGOS_NUEVO, "--project", "p", "--topic", "pagos"]);
 
     let out = mem_ok(d.path(), &["show", "--topic", "pagos", "--project", "p"]);
-    assert!(out.contains(PAGOS_NUEVO), "tiene que estar el cuerpo vigente: {out}");
+    assert!(out.contains(PAGOS_NUEVO), "the current body has to be there: {out}");
     assert!(
         !out.contains("stripe-sk-vieja"),
         "el cuerpo de la versión reemplazada no, solo su título en la cadena: {out}"
     );
-    assert!(out.contains("id:2"), "y de quién es ese cuerpo: {out}");
-    assert!(out.contains("id:1"), "la cadena tiene que nombrar la versión vieja: {out}");
-    assert!(out.contains("superseded"), "y decir en qué estado quedó: {out}");
+    assert!(out.contains("id:2"), "and whose body that is: {out}");
+    assert!(out.contains("id:1"), "the chain has to name the old version: {out}");
+    assert!(out.contains("superseded"), "and say what state it was left in: {out}");
 }
 
 #[test]
@@ -800,8 +800,8 @@ fn show_topic_on_an_unknown_key_lists_the_ones_that_exist() {
     mem_ok(d.path(), &["save", "otro proyecto", "--project", "q", "--topic", "ajeno"]);
 
     let out = mem_ok(d.path(), &["show", "--topic", "cache", "--project", "p"]);
-    assert!(out.contains("cache"), "tiene que decir qué clave se pidió: {out}");
-    assert!(out.contains("pagos") && out.contains("ramas"), "y cuáles hay: {out}");
+    assert!(out.contains("cache"), "it has to say which key was asked for: {out}");
+    assert!(out.contains("pagos") && out.contains("ramas"), "and which ones exist: {out}");
     assert!(
         !out.contains("ajeno"),
         "las de otro proyecto no son alternativas de este: {out}"
@@ -823,7 +823,7 @@ fn show_topic_says_so_when_every_version_was_forgotten() {
         out.contains("no current version") || out.contains("forgotten"),
         "tiene que distinguirse de una clave inexistente: {out}"
     );
-    assert!(out.contains("id:1"), "y la historia sigue ahí: {out}");
+    assert!(out.contains("id:1"), "and the history is still there: {out}");
 }
 
 #[test]
@@ -834,6 +834,6 @@ fn show_topic_is_byte_identical_across_runs() {
 
     let a = mem_ok(d.path(), &["show", "--topic", "pagos", "--project", "p"]);
     let b = mem_ok(d.path(), &["show", "--topic", "pagos", "--project", "p"]);
-    assert_eq!(a, b, "la salida tiene que ser diffeable, no depender de la corrida");
-    assert!(!a.contains('\u{1b}'), "nada de códigos de color en una salida que se canaliza");
+    assert_eq!(a, b, "the output has to be diffable, not depend on the run");
+    assert!(!a.contains('\u{1b}'), "no colour codes in output that gets piped");
 }
