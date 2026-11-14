@@ -175,33 +175,33 @@ impl Default for Config {
 /// Returns what happened, so the caller can say it precisely: a file that
 /// did not exist is not the same as one that existed without the key.
 pub fn write_bm25_weight(dir: &Path, weight: f64) -> Result<Wrote> {
-    let ruta = dir.join("config.json");
-    let existia = ruta.exists();
-    let (mut obj, antes) = if existia {
-        let raw = std::fs::read_to_string(&ruta)
-            .with_context(|| format!("could not read {}", ruta.display()))?;
+    let path = dir.join("config.json");
+    let existed = path.exists();
+    let (mut obj, before) = if existed {
+        let raw = std::fs::read_to_string(&path)
+            .with_context(|| format!("could not read {}", path.display()))?;
         let v: serde_json::Value = serde_json::from_str(&raw).with_context(|| {
             format!(
                 "{} is not valid JSON, and it was left untouched rather than                  overwritten: fix it by hand, or move it aside",
-                ruta.display()
+                path.display()
             )
         })?;
         let obj = match v {
             serde_json::Value::Object(m) => m,
-            _ => bail!("{} has to hold a JSON object", ruta.display()),
+            _ => bail!("{} has to hold a JSON object", path.display()),
         };
-        let antes = obj.get("bm25_weight").and_then(|v| v.as_f64());
-        (obj, antes)
+        let before = obj.get("bm25_weight").and_then(|v| v.as_f64());
+        (obj, before)
     } else {
         (serde_json::Map::new(), None)
     };
     let n = serde_json::Number::from_f64(weight)
         .ok_or_else(|| anyhow::anyhow!("{weight} cannot be written as JSON"))?;
     obj.insert("bm25_weight".into(), serde_json::Value::Number(n));
-    let texto = serde_json::to_string_pretty(&serde_json::Value::Object(obj))?;
-    std::fs::write(&ruta, format!("{texto}\n"))
-        .with_context(|| format!("could not write {}", ruta.display()))?;
-    Ok(match (existia, antes) {
+    let text = serde_json::to_string_pretty(&serde_json::Value::Object(obj))?;
+    std::fs::write(&path, format!("{text}\n"))
+        .with_context(|| format!("could not write {}", path.display()))?;
+    Ok(match (existed, before) {
         (false, _) => Wrote::Created,
         (true, None) => Wrote::KeyAdded,
         (true, Some(v)) => Wrote::Replaced(v),

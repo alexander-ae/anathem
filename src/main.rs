@@ -1245,9 +1245,9 @@ every other key the file has, or put it in {} yourself:",
         }
         Cmd::Recent { project, all_projects, since, limit, external } => {
             let conn = anathem::db::open(&path)?;
-            // `all` es lo que anuncia la ayuda; `todo` era el centinela
-            // original y se sigue aceptando, igual que los alias de las
-            // banderas, para no romper a quien lo tenga escrito.
+            // `all` is what the help advertises; `todo` was the original
+            // sentinel and is still accepted, like the old flag aliases, so
+            // nobody's scripts break.
             let unbounded = ["all", "todo"];
             let window = if unbounded.iter().any(|k| since.trim().eq_ignore_ascii_case(k)) {
                 None

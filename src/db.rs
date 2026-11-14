@@ -164,9 +164,9 @@ fn restringir(path: &Path) {
             let _ = crate::permissions::restrict_to_owner(parent);
         }
     }
-    let anexo = |sufijo: &str| {
+    let anexo = |suffix: &str| {
         let mut s = path.as_os_str().to_os_string();
-        s.push(sufijo);
+        s.push(suffix);
         std::path::PathBuf::from(s)
     };
     for p in [path.to_path_buf(), anexo("-wal"), anexo("-shm")] {

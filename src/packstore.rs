@@ -840,7 +840,7 @@ mod tests {
     // The third test exercises the part an atomic rename never needed:
     // recovering when the second step really fails.
 
-    /// Ningún archivo sibling (`*.reemplazando-*`) sobrevive a un
+    /// No sibling file (`*.reemplazando-*`) survives an
     /// `reemplazar`, salga bien o mal.
     fn no_stray_files(dir: &Path) -> bool {
         std::fs::read_dir(dir)
