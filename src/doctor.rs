@@ -92,6 +92,18 @@ impl Level {
             Level::Bad => "✗",
         }
     }
+
+    /// The name `--json` uses. It is not the symbol: a script comparing
+    /// against `✓` would break on a terminal that cannot draw it, and the
+    /// symbol says nothing a word does not.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Level::Good => "good",
+            Level::Info => "info",
+            Level::Warn => "warn",
+            Level::Bad => "bad",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

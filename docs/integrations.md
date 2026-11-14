@@ -139,6 +139,26 @@ percentage), `tokens_total`, `tokens_p50`, `median_rank`, `ranks_recorded`,
 `empty_queries`. The whole list of empty queries comes back, not the
 `--empty` display limit.
 
+### `mem doctor --json`
+
+The diagnosis, with one part that is contract and one that is not — and the
+difference is the point:
+
+- **Contract:** `ok`, `problems`, `warnings`, `levels` (`good`, `info`,
+  `warn`, `bad`), `version`, `commit` (null when the binary was built outside
+  a git repository), `repository`, `database`, `database_exists`, and each
+  finding's `level`.
+- **Not contract:** each finding's `text`. It is written for a person and it
+  changes when the prose improves. Typing every check — counts, ids, sizes —
+  would put a second source of truth beside the line that already carries
+  them, and the two would drift.
+
+The exit code is the one the prose path already had: 0 with no problems
+(warnings do not count), 1 with problems, 2 if doctor could not run at all.
+A monitor can keep watching that status and read the document only when it
+changes: `ok` and `problems` say what changed, and the finding that made it
+is the line with `level: "bad"`.
+
 ### Writes
 
 `mem save --json` returns `id`, `project`, `tags`, `topic`, `status`,

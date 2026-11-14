@@ -238,6 +238,63 @@ fn raw_changes_nothing_in_a_document() {
     assert_eq!(v["body"], "before\u{1b}[2J after");
 }
 
+/// `mem doctor` keeps its exit code in JSON mode — 0 with no problems, even
+/// with warnings — so a monitor can keep using the status it already watches
+/// and read the detail from the document.
+#[test]
+fn doctor_reports_the_envelope_and_keeps_its_exit_code() {
+    let d = tempfile::tempdir().unwrap();
+    // No database yet: a warning, not a problem.
+    let v = json(d.path(), &["doctor"]);
+    assert_eq!(v["ok"], true);
+    assert_eq!(v["problems"], 0);
+    assert!(v["warnings"].as_u64().unwrap() >= 1);
+    assert_eq!(v["database_exists"], false);
+    assert!(v["version"].is_string());
+
+    let titles: Vec<&str> =
+        v["sections"].as_array().unwrap().iter().map(|s| s["title"].as_str().unwrap()).collect();
+    assert!(titles.contains(&"Binary"));
+    assert!(titles.contains(&"Database"));
+
+    // The counters are not decoration: they are the same numbers the prose
+    // summary prints, and a caller that trusts them should be able to check
+    // them against the lines.
+    let lines: Vec<&serde_json::Value> = v["sections"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|s| s["lines"].as_array().unwrap())
+        .collect();
+    assert_eq!(v["levels"]["bad"], 0);
+    assert_eq!(
+        v["levels"]["good"].as_u64().unwrap()
+            + v["levels"]["info"].as_u64().unwrap()
+            + v["levels"]["warn"].as_u64().unwrap(),
+        lines.len() as u64
+    );
+}
+
+#[test]
+fn doctor_exits_one_with_json_when_a_check_finds_a_problem() {
+    let d = tempfile::tempdir().unwrap();
+    std::fs::write(d.path().join("mem.db"), "this is not a database").unwrap();
+    let (out, _, code) = mem(d.path(), &["doctor", "--json"]);
+    assert_eq!(code, 1);
+    assert_eq!(out.lines().count(), 1);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(v["ok"], false);
+    assert!(v["problems"].as_u64().unwrap() >= 1);
+    assert_eq!(v["levels"]["bad"], v["problems"]);
+    let bad = v["sections"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|s| s["lines"].as_array().unwrap())
+        .any(|l| l["level"] == "bad");
+    assert!(bad, "a problem has to be a `bad` line:\n{out}");
+}
+
 /// A command without a document refuses the flag rather than printing prose
 /// into a pipe that asked for JSON. Silence here is the expensive kind: the
 /// caller gets a zero and nothing to parse, or parses somebody's next line.
