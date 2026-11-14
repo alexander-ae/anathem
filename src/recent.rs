@@ -200,8 +200,8 @@ pub fn format_items(items: &[RecentItem], show_project: bool) -> String {
 
 /// Delimiters of the data block. What goes inside is note content, and it
 /// can come from anywhere.
-const OPEN_TAG: &str = "<<<memorias-anathem>>>";
-const CLOSE_TAG: &str = "<<<fin-memorias-anathem>>>";
+const OPEN_TAG: &str = "<<<anathem-memories>>>";
+const CLOSE_TAG: &str = "<<<end-anathem-memories>>>";
 
 /// The one sentence of the greeting that is about permission rather than
 /// about instructions.
