@@ -21,7 +21,7 @@ fn a_broken_file_fails_loudly() {
     let d = tempfile::tempdir().unwrap();
     std::fs::write(d.path().join("config.json"), "{esto no es json").unwrap();
     let e = config::load(d.path()).unwrap_err().to_string();
-    assert!(e.contains("config.json"), "el error debe nombrar el archivo: {e}");
+    assert!(e.contains("config.json"), "the error has to name the file: {e}");
 }
 
 #[test]
@@ -60,8 +60,8 @@ fn candidates_at_zero_is_rejected_naming_file_and_field() {
     let d = tempfile::tempdir().unwrap();
     std::fs::write(d.path().join("config.json"), r#"{"candidates": 0}"#).unwrap();
     let e = config::load(d.path()).unwrap_err().to_string();
-    assert!(e.contains("config.json"), "el error debe nombrar el archivo: {e}");
-    assert!(e.contains("candidates"), "el error debe nombrar el campo: {e}");
+    assert!(e.contains("config.json"), "the error has to name the file: {e}");
+    assert!(e.contains("candidates"), "the error has to name the field: {e}");
 }
 
 #[test]
@@ -69,8 +69,8 @@ fn excerpt_at_zero_is_rejected_naming_file_and_field() {
     let d = tempfile::tempdir().unwrap();
     std::fs::write(d.path().join("config.json"), r#"{"excerpt": 0}"#).unwrap();
     let e = config::load(d.path()).unwrap_err().to_string();
-    assert!(e.contains("config.json"), "el error debe nombrar el archivo: {e}");
-    assert!(e.contains("excerpt"), "el error debe nombrar el campo: {e}");
+    assert!(e.contains("config.json"), "the error has to name the file: {e}");
+    assert!(e.contains("excerpt"), "the error has to name the field: {e}");
 }
 
 #[test]
@@ -81,7 +81,7 @@ fn bm25_weight_negative_is_rejected_naming_the_real_key() {
     let d = tempfile::tempdir().unwrap();
     std::fs::write(d.path().join("config.json"), r#"{"bm25_weight": -1.0}"#).unwrap();
     let e = config::load(d.path()).unwrap_err().to_string();
-    assert!(e.contains("bm25_weight"), "el error debe nombrar la clave real: {e}");
+    assert!(e.contains("bm25_weight"), "the error has to name the real key: {e}");
 }
 
 // --- the config keys moved to English without breaking old files ---

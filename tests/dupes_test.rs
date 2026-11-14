@@ -133,9 +133,9 @@ fn doctor_offers_the_command_instead_of_leaving_the_arithmetic() {
     drop(c);
 
     let (ok, out) = mem(d.path(), &["doctor"]);
-    assert!(ok, "duplicar no es una falla, el código de salida sigue en 0:\n{out}");
-    assert!(out.contains("mem supersede 2 1"), "falta la línea lista para correr:\n{out}");
-    assert!(out.contains("if they are one fact"), "no puede sonar a orden:\n{out}");
+    assert!(ok, "duplicating is not a failure, the exit code stays 0:\n{out}");
+    assert!(out.contains("mem supersede 2 1"), "the ready-to-run line is missing:\n{out}");
+    assert!(out.contains("if they are one fact"), "it must not sound like an order:\n{out}");
     assert!(out.contains("All good."), "{out}");
 }
 
@@ -174,5 +174,5 @@ fn reporting_a_pair_changes_no_status() {
     let active: i64 = c
         .query_row("select count(*) from memories where status = 'active'", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(active, 2, "el reporte no puede haber jubilado a ninguna");
+    assert_eq!(active, 2, "the report cannot have retired any of them");
 }

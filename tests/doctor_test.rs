@@ -49,7 +49,7 @@ fn healthy_database(dir: &Path) -> std::path::PathBuf {
         &["save", "hola mundo tres", "--project", "p", "--tag", "alfa"][..],
     ] {
         let o = mem(&db, args);
-        assert!(o.ok(), "no se pudo preparar la base: {}", o.todo());
+        assert!(o.ok(), "could not prepare the database: {}", o.todo());
     }
     db
 }
@@ -74,9 +74,9 @@ fn version_prints_name_version_and_commit() {
     let d = tempfile::tempdir().unwrap();
     let o = mem(&d.path().join("mem.db"), &["--version"]);
     assert!(o.ok(), "{}", o.todo());
-    assert!(o.stdout.contains("mem"), "salió: {}", o.stdout);
-    assert!(o.stdout.contains(env!("CARGO_PKG_VERSION")), "salió: {}", o.stdout);
-    assert!(o.stdout.contains("commit"), "tiene que decir el commit: {}", o.stdout);
+    assert!(o.stdout.contains("mem"), "exit: {}", o.stdout);
+    assert!(o.stdout.contains(env!("CARGO_PKG_VERSION")), "exit: {}", o.stdout);
+    assert!(o.stdout.contains("commit"), "it has to say the commit: {}", o.stdout);
 }
 
 #[test]
@@ -84,7 +84,7 @@ fn a_healthy_database_exits_zero_and_reports_the_counts() {
     let d = tempfile::tempdir().unwrap();
     let db = healthy_database(d.path());
     let o = mem(&db, &["doctor"]);
-    assert!(o.ok(), "una base sana no es un problema (salió {:?}): {}", o.codigo, o.todo());
+    assert!(o.ok(), "a healthy database is not a problem (exit {:?}): {}", o.codigo, o.todo());
     assert!(
         o.stdout.contains("2 active, 1 superseded, 0 draft, 0 forgotten"),
         "conteos por estado: {}",
@@ -93,9 +93,9 @@ fn a_healthy_database_exits_zero_and_reports_the_counts() {
     assert!(o.stdout.contains("chunks: 3"), "fragmentos: {}", o.stdout);
     assert!(o.stdout.contains("tags: 1"), "tags: {}", o.stdout);
     assert!(o.stdout.contains("references: 0"), "referencias: {}", o.stdout);
-    assert!(o.stdout.contains(env!("CARGO_PKG_VERSION")), "versión: {}", o.stdout);
-    assert!(o.stdout.contains(db.to_str().unwrap()), "la ruta de la base: {}", o.stdout);
-    assert!(!o.stdout.contains('✗'), "una base sana no marca nada como mal: {}", o.stdout);
+    assert!(o.stdout.contains(env!("CARGO_PKG_VERSION")), "version: {}", o.stdout);
+    assert!(o.stdout.contains(db.to_str().unwrap()), "the database path: {}", o.stdout);
+    assert!(!o.stdout.contains('✗'), "a healthy database marks nothing as wrong: {}", o.stdout);
 }
 
 #[test]
@@ -105,7 +105,7 @@ fn no_pack_is_information_and_not_a_problem() {
     let o = mem(&db, &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
     assert!(o.stdout.contains("no vocabulary pack"), "{}", o.stdout);
-    assert!(o.stdout.contains("lexical"), "tiene que decir que es el modo normal: {}", o.stdout);
+    assert!(o.stdout.contains("lexical"), "it has to say that is the normal mode: {}", o.stdout);
 }
 
 #[test]
@@ -136,7 +136,7 @@ fn it_detects_an_out_of_sync_fts5_index_and_exits_nonzero() {
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
     assert!(o.stdout.contains("FTS5"), "{}", o.stdout);
-    assert!(o.stdout.contains("mem reindex"), "tiene que decir cómo se arregla: {}", o.stdout);
+    assert!(o.stdout.contains("mem reindex"), "it has to say how to fix it: {}", o.stdout);
 }
 
 #[test]
@@ -146,11 +146,11 @@ fn a_broken_config_is_reported_and_the_diagnostic_survives() {
     std::fs::write(d.path().join("config.json"), "{ esto no es json").unwrap();
 
     let o = mem(&db, &["doctor"]);
-    assert_eq!(o.codigo, Some(1), "un config roto es un problema: {}", o.todo());
+    assert_eq!(o.codigo, Some(1), "a broken config is a problem: {}", o.todo());
     assert!(o.stdout.contains("config.json"), "{}", o.stdout);
-    assert!(!o.stderr.contains("panicked"), "no puede entrar en pánico: {}", o.stderr);
+    assert!(!o.stderr.contains("panicked"), "it must not panic: {}", o.stderr);
     // And it carried on: the rest of the diagnostic is there.
-    assert!(o.stdout.contains("2 active"), "tiene que seguir con el resto: {}", o.stdout);
+    assert!(o.stdout.contains("2 active"), "it has to carry on with the rest: {}", o.stdout);
 }
 
 #[test]
@@ -261,7 +261,7 @@ fn a_supersession_chain_to_a_missing_memory_is_detected() {
 
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
-    assert!(o.stdout.contains("9999"), "tiene que nombrar el id que no existe: {}", o.stdout);
+    assert!(o.stdout.contains("9999"), "it has to name the id that does not exist: {}", o.stdout);
     assert!(o.stdout.contains("supersession"), "{}", o.stdout);
 }
 
@@ -309,7 +309,7 @@ fn leftover_stray_files_are_a_warning_and_not_a_problem() {
     )
     .unwrap();
     let o = mem(&db, &["doctor"]);
-    assert!(o.ok(), "un resto no impide que todo ande: {}", o.todo());
+    assert!(o.ok(), "a leftover does not stop everything working: {}", o.todo());
     assert!(o.stdout.contains("reemplazando-4242"), "{}", o.stdout);
 }
 
@@ -322,7 +322,7 @@ fn a_database_that_does_not_exist_yet_neither_breaks_nor_is_created() {
     assert!(o.ok(), "{}", o.todo());
     assert!(!o.stderr.contains("panicked"), "{}", o.stderr);
     assert!(o.stdout.contains("does not exist"), "{}", o.stdout);
-    assert!(!carpeta.exists(), "un diagnóstico no crea nada, ni siquiera la carpeta");
+    assert!(!carpeta.exists(), "a diagnosis creates nothing, not even the folder");
 }
 
 #[test]
@@ -334,9 +334,9 @@ fn a_missing_database_does_not_claim_everything_is_fine() {
     let o = mem(&d.path().join("no-esta").join("mem.db"), &["doctor"]);
     assert!(o.ok(), "{}", o.todo());
     assert!(!o.stdout.contains("All good"), "{}", o.stdout);
-    assert!(o.stdout.contains("No problems ("), "tiene que contar el aviso: {}", o.stdout);
+    assert!(o.stdout.contains("No problems ("), "it has to count the warning: {}", o.stdout);
     let line_ = o.stdout.lines().find(|l| l.contains("does not exist")).unwrap();
-    assert!(line_.trim_start().starts_with('!'), "es un aviso, no información: {line_}");
+    assert!(line_.trim_start().starts_with('!'), "it is a warning, not information: {line_}");
 }
 
 #[test]
@@ -444,7 +444,7 @@ fn the_diagnostic_is_read_only_even_with_a_damaged_database() {
     // If the auxiliary-file filter swallowed too much, the test would pass
     // having checked nothing. The main file being in the fingerprint is the
     // precondition for anything below to mean something.
-    assert!(before.contains_key("mem.db"), "la huella no incluye la base: {before:?}");
+    assert!(before.contains_key("mem.db"), "the fingerprint does not include the database: {before:?}");
     let o = mem(&db, &["doctor"]);
     assert_eq!(o.codigo, Some(1), "{}", o.todo());
     let after = snapshot(d.path());
@@ -453,7 +453,7 @@ fn the_diagnostic_is_read_only_even_with_a_damaged_database() {
         .chain(after.keys())
         .filter(|k| before.get(*k) != after.get(*k))
         .collect();
-    assert!(changes.is_empty(), "doctor modificó el directorio de la base: {changes:?}");
+    assert!(changes.is_empty(), "doctor changed the database directory: {changes:?}");
 }
 
 #[test]
@@ -503,10 +503,10 @@ fn a_database_predating_the_vector_layer_is_information_not_three_problems() {
         }
         drop(c);
         let o = mem(&db, &["doctor"]);
-        assert!(o.ok(), "sin {tables:?}: {}", o.todo());
-        assert!(!o.stdout.contains('✗'), "sin {tables:?}: {}", o.stdout);
-        assert!(o.stdout.contains("predates the vector layer"), "sin {tables:?}: {}", o.stdout);
-        assert!(o.stdout.contains("2 active"), "sin {tables:?}: {}", o.stdout);
+        assert!(o.ok(), "without {tables:?}: {}", o.todo());
+        assert!(!o.stdout.contains('✗'), "without {tables:?}: {}", o.stdout);
+        assert!(o.stdout.contains("predates the vector layer"), "without {tables:?}: {}", o.stdout);
+        assert!(o.stdout.contains("2 active"), "without {tables:?}: {}", o.stdout);
         // And it really does migrate itself: the next write leaves it healthy.
         assert!(mem(&db, &["save", "otra", "--project", "p"]).ok());
         let o = mem(&db, &["doctor"]);
@@ -558,7 +558,7 @@ fn the_fts5_index_is_compared_by_ids_and_not_only_by_count() {
     let chunks: i64 = c.query_row("select count(*) from chunks", [], |r| r.get(0)).unwrap();
     let indexed: i64 =
         c.query_row("select count(*) from chunks_fts_docsize", [], |r| r.get(0)).unwrap();
-    assert_eq!(chunks, indexed, "el escenario exige igual cantidad");
+    assert_eq!(chunks, indexed, "the scenario requires the same amount");
     drop(c);
 
     let o = mem(&db, &["doctor"]);
