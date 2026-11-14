@@ -22,6 +22,13 @@ live in the database, not in the binary.
   `docs/integrations.md`. Nothing existing changes: without the flag every
   command prints exactly what it printed before.
 
+- **`mem doctor --json`, for a monitor.** The envelope (`ok`, `problems`,
+  `warnings`, `levels`, `version`, `commit`, `database`) and each finding's
+  `level` are contract; the finding's `text` stays prose, because typing
+  every check would create a second source of truth beside the number it
+  already prints. The exit code is unchanged: 0 with no problems, 1 with
+  problems, 2 when doctor could not run.
+
 ### Changed
 
 - **The handoff block's delimiters are in English.** `<<<memorias-anathem>>>`

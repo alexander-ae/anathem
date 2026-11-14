@@ -26,6 +26,7 @@
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Value};
+use std::path::Path;
 
 use crate::maint::{self, TopicLookup};
 use crate::recent::RecentItem;
@@ -387,6 +388,65 @@ pub fn accepted_all(count: usize, from: &str) -> Value {
 /// `mem log --prune <window> --json`.
 pub fn pruned(removed: usize, window: &str) -> Value {
     json!({ "schema": SCHEMA, "removed": removed, "older_than": window })
+}
+
+/// `mem doctor --json`.
+///
+/// What is structured and what is not, stated here because it is the part a
+/// caller has to know: the envelope — `ok`, `problems`, `warnings`, `levels`,
+/// `version`, `commit`, `database` — is contract; each line's `level` is
+/// contract; a line's `text` is prose meant for a person, and a script that
+/// greps it is doing what this document exists to prevent. Typing every check
+/// (counts, ids, sizes as fields) would mean threading each value out of the
+/// check that computes it, and a second source of truth for numbers the prose
+/// already carries is a second thing to keep in step.
+pub fn doctor(report: &crate::doctor::Informe, db: &Path, exists: bool) -> Value {
+    use crate::doctor::Level;
+    let count = |level: Level| {
+        report
+            .sections
+            .iter()
+            .flat_map(|s| &s.lines)
+            .filter(|l| l.level == level)
+            .count()
+    };
+    let sections: Vec<Value> = report
+        .sections
+        .iter()
+        .map(|s| {
+            json!({
+                "title": s.title,
+                "lines": s.lines.iter().map(|l| json!({
+                    "level": l.level.as_str(),
+                    "text": l.text,
+                })).collect::<Vec<Value>>(),
+            })
+        })
+        .collect();
+    json!({
+        "schema": SCHEMA,
+        "ok": report.problems() == 0,
+        "problems": report.problems(),
+        "warnings": report.warnings(),
+        "levels": {
+            "good": count(Level::Good),
+            "info": count(Level::Info),
+            "warn": count(Level::Warn),
+            "bad": count(Level::Bad),
+        },
+        "version": crate::doctor::VERSION,
+        "commit": match crate::doctor::COMMIT {
+            // Built outside a git repository, which is how a published crate
+            // looks. Null, and not the string "unknown": a caller comparing
+            // versions should not have to know that word.
+            "unknown" => Value::Null,
+            _ => json!(crate::doctor::COMMIT),
+        },
+        "repository": crate::doctor::REPOSITORY,
+        "database": db.display().to_string(),
+        "database_exists": exists,
+        "sections": sections,
+    })
 }
 
 #[cfg(test)]

@@ -486,6 +486,7 @@ fn json_supported(cmd: &Cmd) -> bool {
             | Cmd::Stale { .. }
             | Cmd::Save { .. }
             | Cmd::Accept { .. }
+            | Cmd::Doctor
     )
 }
 
@@ -583,8 +584,8 @@ fn run(cli: Cli) -> Result<()> {
     if json && !json_supported(&cli.cmd) {
         anyhow::bail!(
             "`--json` has no document for this command. The ones that have one are \
-             search, show, recent, topics, log, why, history, stats, stale, save and \
-             accept; `docs/integrations.md` says what each returns."
+             search, show, recent, topics, log, why, history, stats, stale, save, \
+             accept and doctor; `docs/integrations.md` says what each returns."
         );
     }
     // If there is a `tags.json` next to the database, its rules replace the
@@ -1487,7 +1488,12 @@ every other key the file has, or put it in {} yourself:",
             // whatever is missing, and a diagnostic cannot modify what it is
             // diagnosing.
             let informe = anathem::doctor::diagnose(&path);
-            print!("{}", informe.render());
+            if json {
+                anathem::jsonout::print(&anathem::jsonout::doctor(
+                    &informe, &path, path.exists()))?;
+            } else {
+                print!("{}", informe.render());
+            }
             std::io::Write::flush(&mut std::io::stdout())?;
             if informe.problems() > 0 {
                 std::process::exit(anathem::doctor::EXIT_PROBLEMS);
