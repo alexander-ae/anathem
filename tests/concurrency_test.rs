@@ -89,7 +89,7 @@ fn concurrent_saves_neither_fail_nor_lose_vectors() {
     let saved_ones: i64 = conn
         .query_row("select count(*) from memories where source = 'explicit'", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(saved_ones, 6, "se tienen que haber guardado las seis memorias");
+    assert_eq!(saved_ones, 6, "the six memories have to be saved");
     let sin_vector: i64 = conn
         .query_row(
             "select count(*) from chunks c
@@ -99,7 +99,7 @@ fn concurrent_saves_neither_fail_nor_lose_vectors() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(sin_vector, 0, "quedaron {sin_vector} fragmentos sin vector");
+    assert_eq!(sin_vector, 0, "{sin_vector} chunks were left with no vector");
 }
 
 #[test]
@@ -142,9 +142,9 @@ fn search_does_not_fail_even_when_it_cannot_reindex() {
 
     let out = String::from_utf8_lossy(&o.stdout).to_string();
     let err = String::from_utf8_lossy(&o.stderr).to_string();
-    assert!(o.status.success(), "buscar no puede fallar por la capa vectorial: {err}");
-    assert!(out.contains("hola"), "tiene que seguir devolviendo resultados de bm25: {out}");
-    assert!(err.to_lowercase().contains("bm25"), "y decir que quedó degradada: {err}");
+    assert!(o.status.success(), "search cannot fail because of the vector layer: {err}");
+    assert!(out.contains("hola"), "it has to keep returning bm25 results: {out}");
+    assert!(err.to_lowercase().contains("bm25"), "and say it was left degraded: {err}");
     // And that the scenario really was set up: what failed is the rename,
     // not anything else that would also degrade. Without this the test could
     // quietly become a no-op again — which is exactly how it used to void
@@ -190,7 +190,7 @@ fn two_parallel_searches_both_survive_with_the_guard_tripped() {
             "la búsqueda {i} murió en la carrera por reindexar: {}",
             String::from_utf8_lossy(&o.stderr)
         );
-        assert!(out.contains("hola"), "la búsqueda {i} no devolvió nada: {out}");
+        assert!(out.contains("hola"), "search {i} returned nothing: {out}");
     }
 }
 
@@ -252,7 +252,7 @@ fn a_concurrent_install_leaves_no_vectors_from_two_packs() {
 
     let conn = rusqlite::Connection::open(&db).unwrap();
     let (name, _, dims) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
-    assert_eq!(name, "otro-es", "el último que adoptó fue el install de B");
+    assert_eq!(name, "otro-es", "the last one to adopt was B install");
 
     // No text in this test contains the piece "s", so under `otro-es` axes
     // 0 and 1 are exactly zero, and under `mini-es` they are precisely the
@@ -266,7 +266,7 @@ fn a_concurrent_install_leaves_no_vectors_from_two_packs() {
             b.unwrap().chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect()
         })
         .collect();
-    assert!(!vectors.is_empty(), "el install de B tiene que haber dejado su índice");
+    assert!(!vectors.is_empty(), "B install has to have left its index");
     let intruders = vectors.iter().filter(|v| v[0] != 0.0 || v[1] != 0.0).count();
     assert_eq!(
         intruders,
@@ -279,5 +279,5 @@ fn a_concurrent_install_leaves_no_vectors_from_two_packs() {
     // And the acceptable outcome does have to have happened: the index left
     // behind is B's, complete, because nobody interrupted its `sync`.
     let (covered, tot) = anathem::vecstore::coverage(&conn, dims).unwrap();
-    assert_eq!(covered, tot, "el paquete que ganó tiene que terminar su propio índice");
+    assert_eq!(covered, tot, "the winning pack has to finish its own index");
 }

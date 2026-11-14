@@ -30,12 +30,12 @@ fn the_database_and_its_directory_are_private() {
     assert!(mem(&db, &["init"]));
     assert!(mem(&db, &["save", "una nota con algo privado adentro"]));
 
-    assert_eq!(mode(&db), 0o600, "la base tiene que ser 0600");
-    assert_eq!(mode(&home), 0o700, "el directorio tiene que ser 0700");
+    assert_eq!(mode(&db), 0o600, "the database has to be 0600");
+    assert_eq!(mode(&home), 0o700, "the directory has to be 0700");
     for sufijo in ["-wal", "-shm"] {
         let p = home.join(format!("mem.db{sufijo}"));
         if p.exists() {
-            assert_eq!(mode(&p), 0o600, "{sufijo} tiene el mismo contenido que la base");
+            assert_eq!(mode(&p), 0o600, "{sufijo} has the same content as the database");
         }
     }
 }
@@ -53,8 +53,8 @@ fn an_existing_database_left_world_readable_gets_narrowed() {
     std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o755)).unwrap();
 
     assert!(mem(&db, &["search", "lo que sea"]));
-    assert_eq!(mode(&db), 0o600, "abrir una base vieja tiene que restringirla");
-    assert_eq!(mode(&home), 0o700, "y también su directorio");
+    assert_eq!(mode(&db), 0o600, "opening an old database has to narrow it");
+    assert_eq!(mode(&home), 0o700, "and its directory too");
 }
 
 #[test]
@@ -75,8 +75,8 @@ fn mem_edit_leaves_nothing_behind_in_the_shared_temp_directory() {
         .arg("--db").arg(&db).args(["edit", "1"])
         .env("EDITOR", "false")
         .output().unwrap().status.success();
-    assert!(!ok, "un editor que falla tiene que hacer fallar el comando");
-    assert_eq!(viejo.exists(), habia, "no puede quedar nada en la ruta predecible de antes");
+    assert!(!ok, "a failing editor has to fail the command");
+    assert_eq!(viejo.exists(), habia, "nothing can be left at the old predictable path");
 }
 
 /// B-2: an installed pack cannot be written over in place. It stays mapped
@@ -170,5 +170,5 @@ fn doctor_says_nothing_when_the_permissions_are_right() {
     let o = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--db").arg(&db).arg("doctor").output().unwrap();
     let out = String::from_utf8_lossy(&o.stdout).to_string();
-    assert!(!out.contains("0644"), "con 0600 no hay nada que decir: {out}");
+    assert!(!out.contains("0644"), "at 0600 there is nothing to say: {out}");
 }
