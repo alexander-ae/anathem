@@ -17,6 +17,7 @@ pub mod maint;
 pub mod mcp;
 pub mod migrate;
 pub mod model;
+pub mod output;
 pub mod pack;
 pub mod permissions;
 pub mod packstore;
