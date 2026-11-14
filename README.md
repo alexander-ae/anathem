@@ -236,7 +236,10 @@ nothing to learn by heart.
 | `update` | Checks whether a newer version has been published. It goes to the network **only when you ask it to**: anathem does not talk to any server on its own. It downloads nothing and replaces nothing, it tells you what to run | `mem update` |
 | `doctor` | Diagnoses the installation without modifying anything: version and commit of the binary, database (counts, FTS5 index, orphans, supersession chains, memories that look like the same fact saved twice), vector layer (pack, file, coverage) and `config.json`/`tags.json`. It exits with 0 if there are no problems, 1 if there are and 2 if it could not run, so a script can tell "it found problems" from "it broke"; having no pack installed is information, not a problem, and a database that does not exist is a notice (code 0) | `mem doctor` |
 
-Every subcommand accepts `--db <path>` (`~/.anathem/mem.db` by default).
+Every subcommand accepts `--db <path>` (`~/.anathem/mem.db` by default), and
+`--json` turns the answer into one JSON document instead of prose on the
+commands that offer one — the contract, command by command, is in
+[`docs/integrations.md`](docs/integrations.md).
 `mem --version` prints the version and the commit the binary was built from.
 That commit is the one at `HEAD` when it was built: it does not reflect uncommitted
 changes, and `mem doctor` shows it but does not compare it against anything. Knowing
@@ -443,6 +446,8 @@ two years of notes was false in the direction nobody warns you about.
 - Installing, and connecting each agent: [`docs/installation.md`](docs/installation.md)
 - How search works and how to tune it: [`docs/search.md`](docs/search.md)
 - Handing work between agents, and memories received from elsewhere: [`docs/handoff.md`](docs/handoff.md)
+- Writing an integration against `mem`: the JSON contract and the ingestion
+  rules, without loading code into the binary: [`docs/integrations.md`](docs/integrations.md)
 - Vocabulary packs, and what several sessions cost in RAM: [`docs/vocabulary-packs.md`](docs/vocabulary-packs.md)
 - Security: where text you did not write gets in, what is mitigated and what is not: [`docs/security.md`](docs/security.md)
 - Measuring retrieval against a public dataset: [`docs/benchmarks.md`](docs/benchmarks.md)

@@ -10,6 +10,18 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Added
+
+- **`--json` on the commands an integration reads, and on the two that
+  ingest.** `mem search`, `show`, `show --topic`, `recent`, `topics`, `stale`,
+  `history`, `why`, `log`, `stats`, `save` and `accept` print one JSON
+  document carrying `"schema": 1` instead of prose. It is the stable side of a
+  line the project had already drawn: anathem loads no foreign code, so an
+  integration is a separate program, and a separate program cannot parse text
+  written to be read. The whole contract, field by field, is in
+  `docs/integrations.md`. Nothing existing changes: without the flag every
+  command prints exactly what it printed before.
+
 ### Changed
 
 - **The handoff block's delimiters are in English.** `<<<memorias-anathem>>>`

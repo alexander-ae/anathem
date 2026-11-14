@@ -12,6 +12,7 @@ pub mod export;
 pub mod fusion;
 pub mod import;
 pub mod ingest;
+pub mod jsonout;
 pub mod logsearch;
 pub mod maint;
 pub mod mcp;
