@@ -23,6 +23,9 @@ struct Cli {
     /// Path to the database
     #[arg(long, global = true, default_value = "~/.anathem/mem.db")]
     db: String,
+    /// Prints what was stored, control characters and all
+    #[arg(long, global = true)]
+    raw: bool,
     #[command(subcommand)]
     cmd: Cmd,
 }
@@ -539,6 +542,7 @@ fn main() {
 
 fn run(cli: Cli) -> Result<()> {
     let path = resolve(&cli.db, dirs_home().as_deref())?;
+    let raw = cli.raw;
     // If there is a `tags.json` next to the database, its rules replace the
     // default taxonomy in `tags::classify` outright. It has to be set before
     // any operation that classifies memories (migrate, save, serve).
@@ -656,11 +660,14 @@ fn run(cli: Cli) -> Result<()> {
                     // as one that matched every term. This is the number
                     // that told them apart.
                     let signals = format!("{signals}, {}/{} words", e.words_matched, e.words_total);
-                    println!("{:2}. [{}]{} {}  ({signals})", i + 1, e.hit.project, from, e.hit.title);
+                    let line = format!("{:2}. [{}]{} {}  ({signals})", i + 1, e.hit.project, from, e.hit.title);
+                    anathem::output::print_line(&line, raw);
                 } else {
-                    println!("{:2}. [{}]{} {}", i + 1, e.hit.project, from, e.hit.title);
+                    let line = format!("{:2}. [{}]{} {}", i + 1, e.hit.project, from, e.hit.title);
+                    anathem::output::print_line(&line, raw);
                 }
-                println!("    {}", e.hit.snippet.chars().take(180).collect::<String>());
+                let snippet: String = e.hit.snippet.chars().take(180).collect();
+                anathem::output::print_line(&format!("    {snippet}"), raw);
             }
         }
         Cmd::Save { text, project, tag, topic, external, from, ext_id } => {
@@ -1126,7 +1133,8 @@ every other key the file has, or put it in {} yourself:",
                 println!("{:<width_p$}  {:<width_t$}  {:>8}  current", "project", "topic", "memories");
                 for t in topics {
                     let current_one = t.current_one.map_or("none".to_string(), |v| v.to_string());
-                    println!("{:<width_p$}  {:<width_t$}  {:>8}  {current_one}", t.project, t.topic, t.total);
+                    let line = format!("{:<width_p$}  {:<width_t$}  {:>8}  {current_one}", t.project, t.topic, t.total);
+                    anathem::output::print_line(&line, raw);
                 }
             }
         }
@@ -1177,7 +1185,7 @@ every other key the file has, or put it in {} yourself:",
                 println!("Waiting: nothing searches it until `mem accept {id}`.");
             }
             println!();
-            println!("{}", m.body.trim_end());
+            anathem::output::print_line(m.body.trim_end(), raw);
         }
         Cmd::Show { id: None, topic, project } => {
             let Some(topic) = topic else {
@@ -1209,7 +1217,7 @@ every other key the file has, or put it in {} yourself:",
                             let who = c.agent.as_deref().map_or(String::new(), |a| format!(" by {a}"));
                             println!("current: id:{}, saved {}{who}", c.id, short_when(&c.when));
                             println!();
-                            println!("{}", c.body.trim_end());
+                            anathem::output::print_line(c.body.trim_end(), raw);
                         }
                         None => println!(
                             "current: none — every version of this key was forgotten"
@@ -1224,7 +1232,8 @@ every other key the file has, or put it in {} yourself:",
                         .max()
                         .unwrap_or(0);
                     for v in &state.chain {
-                        println!("  id:{:<6} {}  [{:<width$}]  {}", v.id, short_when(&v.when), v.status, v.title);
+                        let line = format!("  id:{:<6} {}  [{:<width$}]  {}", v.id, short_when(&v.when), v.status, v.title);
+                        anathem::output::print_line(&line, raw);
                     }
                 }
             }
@@ -1285,13 +1294,13 @@ every other key the file has, or put it in {} yourself:",
                     return Ok(());
                 }
             }
-            println!("{}", anathem::recent::format_items(&items, project_.is_none()));
+            anathem::output::print_line(&anathem::recent::format_items(&items, project_.is_none()), raw);
         }
         Cmd::History { id } => {
             let conn = anathem::db::open(&path)?;
             let chain = anathem::maint::history(&conn, id)?;
             for (i, title, status) in chain {
-                println!("{i:5}  [{status:10}]  {title}");
+                anathem::output::print_line(&format!("{i:5}  [{status:10}]  {title}"), raw);
             }
         }
         Cmd::Log { project, since, limit, prune } => {
@@ -1319,7 +1328,7 @@ every other key the file has, or put it in {} yourself:",
                         // An older row knows one was opened and not which.
                         Some(anathem::logsearch::Followed::Unrecorded) => "yes".to_string(),
                     };
-                    println!(
+                    let line = format!(
                         "{}  project={}  returned={}  tokens={}  opened={opened}  query=\"{}\"",
                         short_when(&e.ts),
                         e.project.as_deref().unwrap_or("-"),
@@ -1327,6 +1336,7 @@ every other key the file has, or put it in {} yourself:",
                         e.budget_used,
                         e.query,
                     );
+                    anathem::output::print_line(&line, raw);
                 }
             }
         }

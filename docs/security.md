@@ -124,6 +124,29 @@ filter.
 - **What the agent does with the injection.** anathem does not control the
   agent's other tools.
 
+## What a terminal is allowed to interpret
+
+A body is stored as it was written and printed as it was stored. That is
+right for a pipe — a script that reads `mem show 42` should get the note, not
+a rendering of it — and wrong for a terminal, which does not print control
+characters but obeys them:
+
+- `\r` returns the cursor to the start of the line, so `balance 100\rTRANSFER
+  DONE` is read as `TRANSFER DONE`;
+- ESC sequences erase the screen, hide text by painting it in the background
+  colour, set the clipboard (OSC 52, allowed by some terminals), or draw a
+  link whose target is not the text shown (OSC 8).
+
+So the rule is about the destination, not the data. When stdout is a
+terminal, every control character except newline and tab comes out in caret
+notation — `^M`, `^[`, `^G` — the way `cat -v` shows them: visible, and
+inert. A pipe gets the exact bytes, and `--raw` asks for them even on a
+terminal, for whoever needs to copy a sequence out.
+
+What this does not cover: it is the CLI printing path. `get_memory` over MCP
+still returns the body unsanitized, on purpose — it is the content the agent
+asked for, and the model is not a terminal.
+
 ## What you can do
 
 - **Look at what comes in.** `mem recent` shows the latest along with who

@@ -12,6 +12,16 @@ live in the database, not in the binary.
 
 ### Fixed
 
+- **What reaches a terminal is no longer whatever the body happened to
+  contain.** Bodies are printed verbatim by `mem show`, `mem search`, `mem
+  recent`, `mem history`, `mem topics` and `mem log`, so a note copied from a
+  web page could carry `\r` — which returns the cursor and makes a line say
+  what it does not — or an ESC sequence: erase the screen, hide text, draw a
+  link whose target is not the text shown. When stdout is a terminal those
+  control characters are now shown in caret notation, the way `cat -v` shows
+  them. A pipe keeps the exact bytes, which is what a script expects, and
+  `--raw` asks for them even on a terminal.
+
 - **The other half of the rate-limit fix, which 1.0.0 said was done.** That
   entry below is accurate about step 1 and wrong by omission: `sign-release.sh`
   checks the signatures it uploaded in a *later* step, and that one kept the
