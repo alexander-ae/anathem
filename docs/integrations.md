@@ -252,9 +252,7 @@ forever.
   came from: a retried delivery collapses into the draft that already exists.
 - **[anathem-contrib](https://gitlab.com/__alexander__/anathem-contrib)** —
   a collection of self-contained integrations with their own tests, run
-  against a `mem` binary: today a clipper that files a web page as a
-  plain-text draft and a watcher that alerts when `doctor` changes its
-  answer. That repository's README is the list.
+  against a `mem` binary. That repository's README is the list.
 
 They are listed here and not vendored: each has its own repository, its own
 release and its own reason to change.
