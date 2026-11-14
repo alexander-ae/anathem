@@ -10,6 +10,14 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-14
+
+A minor, and the four promises hold: the database, the export and the five
+MCP tools are untouched. Nothing anyone had working stops working, with one
+exception worth naming — the handoff markers changed language, so a prompt or
+a script that quoted the old ones has to be updated. Nothing stored depends
+on them.
+
 ### Added
 
 - **`--json` on the commands an integration reads, and on the two that
@@ -1125,7 +1133,8 @@ First release with prebuilt binaries.
 - The project lives on GitLab. GitHub remains only as the macOS builder, since
   GitLab's macOS runners are Premium and Ultimate only.
 
-[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v1.0.1...main
+[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v1.1.0...main
+[1.1.0]: https://gitlab.com/__alexander__/anathem/-/compare/v1.0.1...v1.1.0
 [1.0.1]: https://gitlab.com/__alexander__/anathem/-/compare/v1.0.0...v1.0.1
 [1.0.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.10.0...v1.0.0
 [0.10.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.9.0...v0.10.0
