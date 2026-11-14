@@ -36,7 +36,7 @@ fn tools_list_exposes_every_tool() {
     // describing: a tool nothing checked was exposed.
     let expected = ["search_memory", "save_memory", "get_memory", "list_tags", "recent_memories"];
     for n in expected {
-        assert!(names.contains(&n.to_string()), "falta {n} en {names:?}");
+        assert!(names.contains(&n.to_string()), "missing {n} in {names:?}");
     }
     assert_eq!(
         names.len(),
@@ -79,7 +79,7 @@ fn an_unknown_method_returns_a_jsonrpc_error() {
 fn a_notification_produces_no_response() {
     let (_d, conn) = conn_with_data();
     let req = serde_json::json!({"jsonrpc":"2.0","method":"notifications/initialized"});
-    assert!(mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().is_none(), "una notificación no lleva respuesta");
+    assert!(mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().is_none(), "a notification carries no response");
 }
 
 #[test]
@@ -109,8 +109,8 @@ fn search_memory_respects_the_requested_limit() {
     };
     let few = ask_for(2);
     let many = ask_for(8);
-    assert_eq!(few, 2, "con limit 2 tienen que volver 2");
-    assert!(many > few, "con limit 8 tienen que volver más: {many} vs {few}");
+    assert_eq!(few, 2, "with limit 2 two have to come back");
+    assert!(many > few, "with limit 8 more have to come back: {many} vs {few}");
 }
 
 fn fixture_with_several() -> (tempfile::TempDir, rusqlite::Connection) {
@@ -150,7 +150,7 @@ fn search_memory_returns_twenty_candidates_by_default() {
     let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
     let n = res["result"]["content"][0]["text"].as_str().unwrap()
         .lines().filter(|l| l.starts_with("[id:")).count();
-    assert_eq!(n, 20, "con 25 memorias que matchean, sin limit deben volver los 20 candidatos por defecto");
+    assert_eq!(n, 20, "with 25 matching memories, no limit has to return the default 20 candidates");
 }
 
 // --- B-4: what a caller may ask for has a ceiling ------------------------
@@ -179,7 +179,7 @@ fn search_memory_clamps_an_absurd_limit_and_budget() {
     });
     let comienzo = std::time::Instant::now();
     let res = anathem::mcp::handle(&conn, &ctx, &cfg, &req).unwrap().unwrap();
-    assert!(comienzo.elapsed() < std::time::Duration::from_secs(5), "tardó demasiado");
+    assert!(comienzo.elapsed() < std::time::Duration::from_secs(5), "it took too long");
     let text = res["result"]["content"][0]["text"].as_str().unwrap();
     assert!(text.contains("cache"), "it had to return results anyway: {text}");
 }
@@ -189,7 +189,7 @@ fn a_very_long_query_does_not_grow_the_fts_expression_without_bound() {
     let largo: String = (0..5_000).map(|i| format!("palabra{i} ")).collect();
     let expr = anathem::search::to_match(&largo);
     let ramas = expr.matches(" OR ").count() + 1;
-    assert!(ramas <= 50, "la expresión creció a {ramas} ramas");
+    assert!(ramas <= 50, "the expression grew to {ramas} branches");
 }
 
 // --- the surface the model reads is in English ----------------------
@@ -239,8 +239,8 @@ fn every_surface_that_shows_the_topic_key_uses_the_same_label() {
             "params": {"name": tool, "arguments": args}});
         let res = anathem::mcp::handle(&conn, &ctx, &cfg, &req).unwrap().unwrap();
         let txt = res["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(txt.contains("[topic: pagos]"), "{tool} tiene que usar la etiqueta en inglés: {txt}");
-        assert!(!txt.contains("[tema:"), "{tool} dejó la etiqueta vieja: {txt}");
+        assert!(txt.contains("[topic: pagos]"), "{tool} has to use the English label: {txt}");
+        assert!(!txt.contains("[tema:"), "{tool} kept the old label: {txt}");
     }
 }
 
