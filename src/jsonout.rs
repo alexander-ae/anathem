@@ -206,6 +206,7 @@ pub fn recent(items: &[RecentItem]) -> Value {
             "agent": it.agent,
             "topic": it.topic,
             "received_from": it.received_from,
+            "status": it.status,
             "excerpt": it.excerpt,
         }))
         .collect();
