@@ -49,8 +49,6 @@ const ALLOWED: &[(&str, &str)] = &[
     // Delimiters of the handoff block. They are markers, not prose, and
     // changing them improves nothing for whoever reads them: the model only
     // has to see them appear once.
-    ("<<<memorias-anathem>>>", "delimiter of the data block"),
-    ("<<<fin-memorias-anathem>>>", "delimiter of the data block"),
     // Leftovers of an interrupted installation: the name of the side file
     // `replace_file` creates. `doctor` looks for them by this name, so
     // changing it would stop detecting the ones already on disk.
@@ -134,9 +132,6 @@ fn no_spanish_left_in_any_user_facing_string() {
             const FRAGMENTS: &[&str] = &[
                 // Appears embedded in the side file's name.
                 ".reemplazando-",
-                // The delimiters travel inside the handoff text.
-                "<<<memorias-anathem>>>",
-                "<<<fin-memorias-anathem>>>",
             ];
             let t = s.trim();
             if ALLOWED.iter().any(|(a, _)| t == *a) || FRAGMENTS.iter().any(|f| s.contains(f)) {

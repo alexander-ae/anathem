@@ -10,6 +10,15 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Changed
+
+- **The handoff block's delimiters are in English.** `<<<memorias-anathem>>>`
+  and `<<<fin-memorias-anathem>>>` are now `<<<anathem-memories>>>` and
+  `<<<end-anathem-memories>>>`. They are markers, not prose: nothing stored
+  depends on them, and a note that tries to close the block still comes out
+  with its signs swapped. Anyone who quoted the old ones in a prompt or a
+  script should update them, which is the only reason this is written down.
+
 ### Fixed
 
 - **The other half of the rate-limit fix, which 1.0.0 said was done.** That
