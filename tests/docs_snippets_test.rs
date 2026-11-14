@@ -56,7 +56,7 @@ fn anathem_entries(file: &str) -> Vec<serde_json::Value> {
         }
         from += at + stop;
     }
-    assert!(!out.is_empty(), "{file} no trae ningún snippet de «anathem»");
+    assert!(!out.is_empty(), "{file} has no «anathem» snippet");
     out
 }
 
@@ -122,7 +122,7 @@ fn neither_snippet_uses_a_tilde_or_a_variable() {
         let raw = serde_json::to_string(&entry_for(file, marker)).unwrap();
         // `$HOME` here is this test's own placeholder, put in by `normalize`.
         let real = raw.replace("$HOME", "");
-        assert!(!real.contains('~'), "{file} ({marker}) usa ~ en una ruta: {raw}");
+        assert!(!real.contains('~'), "{file} ({marker}) uses ~ in a path: {raw}");
         assert!(
             !real.contains("$HOME") && !real.contains("${"),
             "{file} ({marker}) usa una variable en una ruta: {raw}"

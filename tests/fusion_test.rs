@@ -38,7 +38,7 @@ fn it_does_not_repeat_documents() {
     let mut u = r.clone();
     u.sort_unstable();
     u.dedup();
-    assert_eq!(r.len(), u.len(), "hay duplicados en {r:?}");
+    assert_eq!(r.len(), u.len(), "there are duplicates in {r:?}");
     assert_eq!(u, vec![1, 2, 3]);
 }
 

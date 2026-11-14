@@ -94,7 +94,7 @@ fn it_serializes_to_the_shared_format() {
     let r = evalrun::run(&conn, &evalset, "anathem bm25", &search::SearchContext::bm25_only()).unwrap();
     let j: serde_json::Value = serde_json::to_value(&r).unwrap();
     for k in ["system", "n_cases", "recall_at_5", "recall_at_50", "mrr", "p50_ms", "per_case"] {
-        assert!(j.get(k).is_some(), "falta la clave {k} en {j}");
+        assert!(j.get(k).is_some(), "key {k} is missing in {j}");
     }
 }
 

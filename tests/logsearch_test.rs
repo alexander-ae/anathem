@@ -90,7 +90,7 @@ fn log_lists_the_searches_newest_first_with_what_came_back() {
 
     let out = mem_ok(d.path(), &["log", "--since", "all"]);
     let primera = out.lines().find(|l| l.contains("query=")).unwrap();
-    assert!(primera.contains("la nueva"), "la más nueva va primero: {out}");
+    assert!(primera.contains("la nueva"), "the newest goes first: {out}");
     assert!(out.contains("returned=3"), "how many came back: {out}");
     assert!(out.contains("tokens=1301"), "and what budget it cost: {out}");
     assert!(out.contains("project=p"), "{out}");
@@ -117,8 +117,8 @@ fn log_respects_the_window_and_the_project() {
 
     let out = mem_ok(d.path(), &["log", "--since", "24h", "--project", "p"]);
     assert!(out.contains("de recién"), "{out}");
-    assert!(!out.contains("antiquísima"), "fuera de la ventana: {out}");
-    assert!(!out.contains("de otro lado"), "de otro proyecto: {out}");
+    assert!(!out.contains("antiquísima"), "outside the window: {out}");
+    assert!(!out.contains("de otro lado"), "from another project: {out}");
 }
 
 #[test]
@@ -129,7 +129,7 @@ fn why_names_the_queries_that_returned_a_memory_and_its_position() {
 
     let out = mem_ok(d.path(), &["why", "42"]);
     assert!(out.contains("caída de la caché"), "{out}");
-    assert!(out.contains("2 of 3") || out.contains("2 de 3"), "en qué posición salió: {out}");
+    assert!(out.contains("2 of 3") || out.contains("2 de 3"), "what position it came out in: {out}");
 }
 
 #[test]

@@ -17,10 +17,10 @@ fn replace_body_rechunkea_y_reindexa() {
     edit::replace_body(&conn, id, "texto nuevo sobre berenjenas").unwrap();
 
     let q = search::Query { text: "zanahorias".into(), ..Default::default() };
-    assert!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().is_empty(), "el texto viejo sigue indexado");
+    assert!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().is_empty(), "the old text is still indexed");
 
     let q = search::Query { text: "berenjenas".into(), ..Default::default() };
-    assert_eq!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().len(), 1, "el texto nuevo no se indexó");
+    assert_eq!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().len(), 1, "the new text was not indexed");
 }
 
 #[test]
@@ -31,11 +31,11 @@ fn reindex_reconstruye_desde_cero() {
     conn.execute("delete from chunks", []).unwrap();
 
     let q = search::Query { text: "cache".into(), ..Default::default() };
-    assert!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().is_empty(), "precondición: índice vacío");
+    assert!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().is_empty(), "precondition: empty index");
 
     let n = edit::reindex(&conn).unwrap();
     assert_eq!(n, 1);
-    assert_eq!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().len(), 1, "reindex no repobló el índice");
+    assert_eq!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().len(), 1, "reindex did not repopulate the index");
 }
 
 #[test]
@@ -50,10 +50,10 @@ fn export_writes_markdown_with_frontmatter() {
     let files: Vec<_> = std::fs::read_dir(out.join("p")).unwrap().flatten().collect();
     assert_eq!(files.len(), 1, "archivos: {files:?}");
     let txt = std::fs::read_to_string(files[0].path()).unwrap();
-    assert!(txt.starts_with("---\n"), "falta el frontmatter:\n{txt}");
+    assert!(txt.starts_with("---\n"), "the frontmatter is missing:\n{txt}");
     assert!(txt.contains("project: \"p\""), "frontmatter incompleto:\n{txt}");
     assert!(txt.contains("tags: [\"performance\"]"), "frontmatter incompleto:\n{txt}");
-    assert!(txt.contains("el cache del breakdown"), "falta el cuerpo:\n{txt}");
+    assert!(txt.contains("el cache del breakdown"), "the body is missing:\n{txt}");
     // Claude Code's native format nests `type` under `metadata:`, not as a
     // flat key — a flat key produces a file that native memory cannot read,
     // which is precisely what the export is for.
@@ -65,8 +65,8 @@ fn export_writes_markdown_with_frontmatter() {
 
 /// Extracts the YAML block between the frontmatter's `---` delimiters.
 fn frontmatter_yaml(txt: &str) -> &str {
-    let body = txt.strip_prefix("---\n").expect("falta el delimitador de apertura");
-    let end = body.find("\n---\n").expect("falta el delimitador de cierre");
+    let body = txt.strip_prefix("---\n").expect("the opening delimiter is missing");
+    let end = body.find("\n---\n").expect("the closing delimiter is missing");
     &body[..end]
 }
 
@@ -102,7 +102,7 @@ fn export_frontmatter_is_valid_yaml_with_a_colon_in_the_title() {
 
     let yaml_src = frontmatter_yaml(&txt);
     let value: serde_yaml::Value = serde_yaml::from_str(yaml_src).unwrap_or_else(|e| {
-        panic!("el frontmatter no parsea como YAML: {e}\n---\n{yaml_src}\n---")
+        panic!("the frontmatter does not parse as YAML: {e}\n---\n{yaml_src}\n---")
     });
 
     assert_eq!(
@@ -207,7 +207,7 @@ fn export_disambiguates_titles_colliding_on_the_first_eight_words() {
 
     let out = dir.path().join("export");
     let n = export::to_markdown(&conn, &out).unwrap();
-    assert_eq!(n, 2, "el conteo reportado debe igualar los archivos realmente escritos");
+    assert_eq!(n, 2, "the reported count has to match the files actually written");
 
     let files: Vec<_> = std::fs::read_dir(out.join("p")).unwrap().flatten().collect();
     assert_eq!(
@@ -220,8 +220,8 @@ fn export_disambiguates_titles_colliding_on_the_first_eight_words() {
         .iter()
         .map(|f| std::fs::read_to_string(f.path()).unwrap())
         .collect();
-    assert!(bodies.iter().any(|b| b.contains("cuerpo de la memoria a")), "se perdió la memoria a");
-    assert!(bodies.iter().any(|b| b.contains("cuerpo de la memoria b")), "se perdió la memoria b");
+    assert!(bodies.iter().any(|b| b.contains("cuerpo de la memoria a")), "memory a was lost");
+    assert!(bodies.iter().any(|b| b.contains("cuerpo de la memoria b")), "memory b was lost");
 }
 
 #[test]
@@ -232,7 +232,7 @@ fn run_explained_exposes_the_score() {
     let q = search::Query { text: "cache".into(), ..Default::default() };
     let ex = search::run_explained(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(ex.len(), 1);
-    assert!(ex[0].bm25.unwrap() < 0.0, "bm25() de SQLite es negativo, fue {:?}", ex[0].bm25);
+    assert!(ex[0].bm25.unwrap() < 0.0, "SQLite bm25() is negative, was {:?}", ex[0].bm25);
 }
 
 #[test]
@@ -247,14 +247,14 @@ fn editing_the_body_recomputes_the_title() {
     let before: String = conn
         .query_row("select title from memories where id=?1", [id], |r| r.get(0))
         .unwrap();
-    assert_eq!(before, "t", "el helper siembra un título arbitrario, a propósito");
+    assert_eq!(before, "t", "the helper seeds an arbitrary title, on purpose");
 
     anathem::edit::replace_body(&conn, id, "encabezado nuevo\n\notro cuerpo").unwrap();
 
     let after: String = conn
         .query_row("select title from memories where id=?1", [id], |r| r.get(0))
         .unwrap();
-    assert_eq!(after, "encabezado nuevo", "el título quedó desactualizado");
+    assert_eq!(after, "encabezado nuevo", "the title was left out of date");
 }
 
 #[test]
@@ -287,22 +287,22 @@ fn export_preserves_everything_needed_to_migrate() {
             let s = std::fs::read_to_string(&e).unwrap();
             if s.contains(&format!("\nid: {id}\n")) { found = Some(s); }
         }
-        found.unwrap_or_else(|| panic!("no se exportó la memoria {id}"))
+        found.unwrap_or_else(|| panic!("memory {id} was not exported"))
     };
 
     let v = parse(older);
-    assert!(v.contains("ext_id: \"EXT-123\""), "falta ext_id:\n{v}");
-    assert!(v.contains("pinned: true"), "falta pinned:\n{v}");
+    assert!(v.contains("ext_id: \"EXT-123\""), "ext_id missing:\n{v}");
+    assert!(v.contains("pinned: true"), "pinned missing:\n{v}");
     assert!(v.contains("kind: \"ticket\"") && v.contains("value: \"ABC-112\""), "faltan refs:\n{v}");
-    assert!(v.contains("kind: \"pr\"") && v.contains("value: \"1234\""), "falta el ref de pr:\n{v}");
-    assert!(v.contains("source: \"migrated\""), "falta source:\n{v}");
-    assert!(v.contains("status: \"superseded\""), "la vieja quedó superseded:\n{v}");
+    assert!(v.contains("kind: \"pr\"") && v.contains("value: \"1234\""), "the pr ref is missing:\n{v}");
+    assert!(v.contains("source: \"migrated\""), "source missing:\n{v}");
+    assert!(v.contains("status: \"superseded\""), "the old one was left superseded:\n{v}");
 
     let n = parse(newer);
-    assert!(n.contains(&format!("supersedes: {older}")), "falta la cadena:\n{n}");
-    assert!(n.contains("event_start: \"2026-08-01\""), "falta event_start:\n{n}");
-    assert!(!n.contains("ext_id:"), "no debe emitir ext_id vacío:\n{n}");
-    assert!(!n.contains("event_end:"), "no debe emitir event_end vacío:\n{n}");
+    assert!(n.contains(&format!("supersedes: {older}")), "the chain is missing:\n{n}");
+    assert!(n.contains("event_start: \"2026-08-01\""), "event_start missing:\n{n}");
+    assert!(!n.contains("ext_id:"), "it must not emit an empty ext_id:\n{n}");
+    assert!(!n.contains("event_end:"), "it must not emit an empty event_end:\n{n}");
 }
 
 #[test]
@@ -315,9 +315,9 @@ fn export_includes_forgotten_memories() {
     anathem::maint::forget(&conn, id).unwrap();
     let out_text = dir.path().join("out");
     let n = anathem::export::to_markdown(&conn, &out_text).unwrap();
-    assert_eq!(n, 1, "la olvidada tiene que exportarse igual");
+    assert_eq!(n, 1, "the forgotten one has to be exported anyway");
     let s = walk(&out_text).into_iter().map(|p| std::fs::read_to_string(p).unwrap()).collect::<String>();
-    assert!(s.contains("status: \"forgotten\""), "y marcada como olvidada:\n{s}");
+    assert!(s.contains("status: \"forgotten\""), "and marked as forgotten:\n{s}");
 }
 
 fn walk(d: &std::path::Path) -> Vec<std::path::PathBuf> {
@@ -367,7 +367,7 @@ fn export_rechaza_path_traversal_via_created() {
         dir.path().join("ESCAPADO-intento-de-escape-1.md"),
         dir.path().join("a").join("ESCAPADO-intento-de-escape-1.md"),
     ] {
-        assert!(!sospechoso.exists(), "escapó hacia {}", sospechoso.display());
+        assert!(!sospechoso.exists(), "it escaped to {}", sospechoso.display());
     }
     for entry in walkdir(&out) {
         assert!(

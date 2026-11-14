@@ -15,7 +15,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
         .args(["-c", "user.email=a@b.c", "-c", "user.name=prueba", "-c", "commit.gpgsign=false"])
         .args(args)
         .output()
-        .expect("git tiene que estar disponible");
+        .expect("git has to be available");
     assert!(o.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&o.stderr));
     String::from_utf8_lossy(&o.stdout).trim().to_string()
 }

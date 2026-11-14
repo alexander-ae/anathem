@@ -18,7 +18,7 @@ fn it_opens_and_creates_the_schema() {
         .collect();
 
     for t in ["memories", "memory_tags", "memory_refs", "chunks", "chunks_fts", "search_log"] {
-        assert!(tables.contains(&t.to_string()), "falta la tabla {t}; hay {tables:?}");
+        assert!(tables.contains(&t.to_string()), "table {t} is missing; there are {tables:?}");
     }
 }
 
@@ -27,7 +27,7 @@ fn fts5_esta_disponible() {
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     conn.execute_batch("create virtual table probe using fts5(x)")
-        .expect("FTS5 no está compilado en esta build de SQLite");
+        .expect("FTS5 is not compiled into this SQLite build");
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn deleting_a_memory_takes_its_vectors_with_it() {
     let quedan: i64 = conn
         .query_row("select count(*) from chunk_vectors", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(quedan, 0, "el cascade debe llevarse los vectores");
+    assert_eq!(quedan, 0, "the cascade has to take the vectors");
 }
 
 #[test]

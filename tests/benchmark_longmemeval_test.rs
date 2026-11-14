@@ -373,8 +373,8 @@ fn dropping_distractors_never_drops_an_evidence_session() {
         names.iter().any(|n| n.contains("answer_1")),
         "la sesión con la evidencia no puede caer nunca: {names:?}"
     );
-    assert!(names.len() < 7, "tiene que haber sacado distractores: {names:?}");
-    assert!(names.len() > 1, "y no todos: {names:?}");
+    assert!(names.len() < 7, "it has to have removed distractors: {names:?}");
+    assert!(names.len() > 1, "and not all of them: {names:?}");
 }
 
 #[test]
@@ -405,5 +405,5 @@ fn a_distractor_fraction_outside_zero_to_one_is_refused() {
         .arg("1.5")
         .output()
         .unwrap();
-    assert!(!out.status.success(), "una fracción fuera de rango no puede pasar en silencio");
+    assert!(!out.status.success(), "an out-of-range fraction cannot pass silently");
 }

@@ -49,7 +49,7 @@ fn the_server_does_not_mix_vectors_when_the_pack_changes_underneath() {
     writeln!(entry, r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#).unwrap();
     let mut line_ = String::new();
     out_text.read_line(&mut line_).unwrap();
-    assert!(line_.contains("protocolVersion"), "el servidor no arrancó: {line_}");
+    assert!(line_.contains("protocolVersion"), "the server did not start: {line_}");
 
     // And now, from another terminal, someone switches the pack.
     let o = mem(&db, &["model", "install", b.to_str().unwrap()]);
@@ -63,7 +63,7 @@ fn the_server_does_not_mix_vectors_when_the_pack_changes_underneath() {
     .unwrap();
     line_.clear();
     out_text.read_line(&mut line_).unwrap();
-    assert!(line_.contains("Saved"), "el guardado por MCP falló: {line_}");
+    assert!(line_.contains("Saved"), "saving over MCP failed: {line_}");
 
     drop(entry);
     hijo.wait().unwrap();
@@ -118,11 +118,11 @@ fn the_server_stops_using_the_pack_once_it_is_removed() {
     .unwrap();
     line_.clear();
     out_text.read_line(&mut line_).unwrap();
-    assert!(line_.contains("Saved"), "el guardado por MCP falló: {line_}");
+    assert!(line_.contains("Saved"), "saving over MCP failed: {line_}");
     drop(entry);
     hijo.wait().unwrap();
 
     let conn = rusqlite::Connection::open(&db).unwrap();
     let n: i64 = conn.query_row("select count(*) from chunk_vectors", [], |r| r.get(0)).unwrap();
-    assert_eq!(n, 0, "el servidor siguió escribiendo vectores de un paquete que ya no existe");
+    assert_eq!(n, 0, "the server kept writing vectors from a pack that no longer exists");
 }
