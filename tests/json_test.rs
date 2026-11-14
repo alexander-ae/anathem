@@ -295,6 +295,39 @@ fn doctor_exits_one_with_json_when_a_check_finds_a_problem() {
     assert!(bad, "a problem has to be a `bad` line:\n{out}");
 }
 
+#[test]
+fn recent_says_which_items_are_still_drafts() {
+    let d = tempfile::tempdir().unwrap();
+    let draft = json(
+        d.path(),
+        &["save", "a note from elsewhere", "--external", "--from", "laptop", "--project", "api"],
+    );
+    json(d.path(), &["save", "a local note", "--project", "api"]);
+
+    // `--external` is the mailbox: drafts included, and `status` tells them
+    // apart from what was already accepted.
+    let v = json(d.path(), &["recent", "--all", "--external"]);
+    assert_eq!(v["items"][0]["status"], "draft");
+
+    let waiting = || {
+        json(d.path(), &["recent", "--all", "--external"])
+            ["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|i| i["status"] == "draft")
+            .count()
+    };
+    assert_eq!(waiting(), 1);
+
+    json(d.path(), &["accept", &draft["id"].to_string()]);
+    assert_eq!(waiting(), 0);
+
+    // The local listing is active-only, and now says so per item.
+    let v = json(d.path(), &["recent", "--all"]);
+    assert!(v["items"].as_array().unwrap().iter().all(|i| i["status"] == "active"));
+}
+
 /// A command without a document refuses the flag rather than printing prose
 /// into a pipe that asked for JSON. Silence here is the expensive kind: the
 /// caller gets a zero and nothing to parse, or parses somebody's next line.

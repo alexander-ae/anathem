@@ -25,6 +25,11 @@ pub struct RecentItem {
     pub topic: Option<String>,
     /// Who sent it, when it was not written here.
     pub received_from: Option<String>,
+    /// `active`, `draft`, `superseded` or `forgotten`. `recent` is the only
+    /// listing that shows memories which are not active — `--external`
+    /// includes drafts, which is the inbox — so the caller needs to know
+    /// which of the two it is looking at.
+    pub status: String,
     pub excerpt: String,
 }
 
@@ -127,7 +132,7 @@ pub fn list_recent_filtered(
     // same day, which is the order one expects when nothing more is known.
     let mut sql = String::from(
         "select id, project, title, coalesce(created_ts, created) as occurred_at,
-                agent, topic, body, received_from
+                agent, topic, body, received_from, status
            from memories
           where 1 = 1",
     );
@@ -160,6 +165,7 @@ pub fn list_recent_filtered(
             agent: r.get(4)?,
             topic: r.get(5)?,
             received_from: r.get(7)?,
+            status: r.get(8)?,
             // Trimmed by characters and not bytes: the corpus has accents,
             // and cutting mid UTF-8 would break the text.
             excerpt: body.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(excerpt).collect(),

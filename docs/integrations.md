@@ -118,7 +118,7 @@ lists the ones that project does have. Neither is an error: exit 0.
 
 | command | document |
 |---|---|
-| `mem recent --json` | `items`: `id`, `project`, `title`, `when`, `agent`, `topic`, `received_from`, `excerpt` |
+| `mem recent --json` | `items`: `id`, `project`, `title`, `when`, `agent`, `topic`, `received_from`, `status`, `excerpt` |
 | `mem topics --json` | `topics`: `project`, `topic`, `memories`, `current` |
 | `mem stale --json` | `items`: `id`, `project`, `title`, `last_accessed`, `created` |
 | `mem history <id> --json` | `chain`: `id`, `title`, `status`, newest first |
@@ -130,6 +130,19 @@ integration that searches from a script will find nothing of its own there.
 `opened_unrecorded` is true for older rows that say a memory was opened
 without saying which; folding that into `opened: null` would report a past
 that did not happen.
+
+`recent` is the one listing that can return memories that are not active:
+with `--external` it includes drafts, which is the mailbox, and `status` is
+what tells a draft from something already accepted. Counting what is still
+waiting is one filter over it:
+
+```sh
+mem recent --all --external --since todo --json |
+  jq '[.items[] | select(.status == "draft")] | length'
+```
+
+`--since todo` because the default window is 24 hours, and a draft is by
+definition something not read within one.
 
 ### `mem stats --json`
 
@@ -230,3 +243,17 @@ Say so in the tracker instead of parsing around it. The commands above are
 the ones a program asks for; a missing field is a small, additive change,
 while a fourth way to read the same data is a second format to keep in step
 forever.
+
+## Integrations that exist
+
+- **[stele](https://gitlab.com/__alexander__/stele)** — a mailbox between
+  machines. Its `pull` writes each note with `mem save --external --ext-id`,
+  so what arrives is a draft the recipient accepts. It is where `--ext-id`
+  came from: a retried delivery collapses into the draft that already exists.
+- **[anathem-contrib](https://gitlab.com/__alexander__/anathem-contrib)** —
+  a collection of self-contained integrations with their own tests, run
+  against a `mem` binary. Today it holds `clipper`, which files a web page as
+  a plain-text draft.
+
+They are listed here and not vendored: each has its own repository, its own
+release and its own reason to change.

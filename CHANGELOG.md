@@ -10,6 +10,15 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Added
+
+- **`recent --json` says which items are still drafts.** `recent` is the one
+  listing that returns memories that are not active — with `--external` it
+  includes the drafts waiting to be accepted — and until now a caller could
+  not tell them apart from the accepted ones. `status` is the field, and it
+  is what turns `recent` into an answer to "how many notes are waiting for
+  me": one `select(.status == "draft")` over it. The prose is unchanged.
+
 ## [1.1.0] - 2026-11-14
 
 A minor, and the four promises hold: the database, the export and the five
