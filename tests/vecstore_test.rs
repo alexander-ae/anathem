@@ -30,7 +30,7 @@ fn sync_fills_the_gaps_and_is_idempotent() {
     seed(&conn, "hola");
     seed(&conn, "mundo");
     assert_eq!(support::register_and_sync(&conn, &p).written(), 2);
-    assert_eq!(support::register_and_sync(&conn, &p).written(), 0, "no debe reembeber");
+    assert_eq!(support::register_and_sync(&conn, &p).written(), 0, "it must not re-embed");
     assert_eq!(vecstore::coverage(&conn, p.dims()).unwrap(), (2, 2));
 }
 
@@ -52,7 +52,7 @@ fn search_orders_by_cosine() {
     let q = search::Query { text: String::new(), ..Default::default() };
     let v = p.embed("hola").unwrap();
     let r = vecstore::search_vectors(&conn, &v, &q, 10).unwrap();
-    assert_eq!(r[0].memory_id, hola, "la más parecida debe ir primera");
+    assert_eq!(r[0].memory_id, hola, "the closest has to come first");
     assert!(r[0].cosine > r[1].cosine);
     assert!(r.iter().any(|a| a.memory_id == mundo));
 }
@@ -84,7 +84,7 @@ fn search_ignores_memories_that_are_not_active() {
     support::register_and_sync(&conn, &p);
     conn.execute("update memories set status='forgotten' where id=?1", [id]).unwrap();
     let r = vecstore::search_vectors(&conn, &p.embed("hola").unwrap(), &search::Query::default(), 10).unwrap();
-    assert!(r.is_empty(), "una memoria olvidada no puede salir en la búsqueda vectorial");
+    assert!(r.is_empty(), "a forgotten memory cannot come out of vector search");
 }
 
 #[test]
@@ -194,7 +194,7 @@ fn editing_a_memory_invalidates_its_vectors() {
         .query_row("select vec from chunk_vectors", [], |r| r.get(0))
         .unwrap();
     let v: Vec<f32> = blob.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
-    assert!(v[1] > 0.9, "el vector debe ser el de \"mundo\" (eje 1), salió {v:?}");
+    assert!(v[1] > 0.9, "the vector has to be the one for \"mundo\" (axis 1), got {v:?}");
 }
 
 #[test]
@@ -236,12 +236,12 @@ fn search_collapses_several_chunks_of_one_memory() {
     let q = search::Query::default();
     let r = vecstore::search_vectors(&conn, &p.embed("hola").unwrap(), &q, 10).unwrap();
     let hits_: Vec<&vecstore::VectorHit> = r.iter().filter(|a| a.memory_id == id).collect();
-    assert_eq!(hits_.len(), 1, "la memoria debe aparecer una sola vez, no una por fragmento");
+    assert_eq!(hits_.len(), 1, "the memory has to appear once, not once per chunk");
     assert_eq!(
         hits_[0].chunk_id, expected_id,
         "debe quedarse con el fragmento más parecido, no con cualquiera"
     );
-    assert!(hits_[0].cosine > 0.0, "el fragmento elegido debe tener coseno positivo con \"hola\"");
+    assert!(hits_[0].cosine > 0.0, "the chosen chunk has to have a positive cosine with \"hola\"");
 }
 
 #[test]
@@ -332,11 +332,11 @@ fn sync_abandons_midway_when_the_pack_changes_between_batches() {
 
     let r = vecstore::sync(&conn, &p, &identity).unwrap();
 
-    assert!(r.abandoned(), "el cambio de paquete a mitad de camino tiene que abandonar: {r:?}");
+    assert!(r.abandoned(), "a pack change mid-way has to abandon: {r:?}");
     let written: i64 =
         conn.query_row("select count(*) from chunk_vectors", [], |r| r.get(0)).unwrap();
-    assert_eq!(written as usize, r.written(), "lo reportado y lo escrito tienen que coincidir");
-    assert!(written > 0, "el primer lote sí se escribió con la identidad correcta");
+    assert_eq!(written as usize, r.written(), "what is reported and what is written have to match");
+    assert!(written > 0, "the first batch did get written with the right identity");
     assert!(
         (written as usize) < total,
         "se escribieron los {total} fragmentos con un paquete que ya no era el registrado"
@@ -388,7 +388,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         ..Default::default()
     };
     let r = anathem::vecstore::search_vectors(&conn, &query_, &with_project, 50).unwrap();
-    assert_eq!(r.len(), 1, "el filtro de proyecto tiene que valer también acá: {r:?}");
+    assert_eq!(r.len(), 1, "the project filter has to apply here too: {r:?}");
 
     let with_tag = anathem::search::Query {
         text: "nota".into(),
@@ -402,7 +402,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         ..Default::default()
     };
     let r = anathem::vecstore::search_vectors(&conn, &query_, &with_tag, 50).unwrap();
-    assert_eq!(r.len(), 1, "el filtro de tags tiene que valer también acá: {r:?}");
+    assert_eq!(r.len(), 1, "the tag filter has to apply here too: {r:?}");
 
     // And with no filters, both of them.
     let sin = anathem::search::Query {
@@ -417,7 +417,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         ..Default::default()
     };
     let r = anathem::vecstore::search_vectors(&conn, &query_, &sin, 50).unwrap();
-    assert_eq!(r.len(), 2, "sin filtros tienen que venir las dos: {r:?}");
+    assert_eq!(r.len(), 2, "with no filters both have to come: {r:?}");
 
     // And the topic filter, which `--scope topic:` added to `filters_for`.
     conn.execute("update memories set topic = 'clave' where project = 'uno'", []).unwrap();
@@ -433,7 +433,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         ..Default::default()
     };
     let r = anathem::vecstore::search_vectors(&conn, &query_, &with_topic, 50).unwrap();
-    assert_eq!(r.len(), 1, "el filtro de topic tiene que valer también acá: {r:?}");
+    assert_eq!(r.len(), 1, "the topic filter has to apply here too: {r:?}");
 
     // And the date bounds. The vector side is the one that answers whatever
     // the query, since it orders the whole corpus by distance: a date filter
@@ -447,7 +447,7 @@ fn the_vector_side_respects_the_same_filters_as_the_lexical_one() {
         ..Default::default()
     };
     let r = anathem::vecstore::search_vectors(&conn, &query_, &old, 50).unwrap();
-    assert_eq!(r.len(), 1, "el filtro de fecha tiene que valer también acá: {r:?}");
+    assert_eq!(r.len(), 1, "the date filter has to apply here too: {r:?}");
 }
 
 #[test]

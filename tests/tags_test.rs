@@ -87,16 +87,16 @@ fn it_classifies_code_review_with_a_reviewer() {
     assert!(t.contains(&"code-review".to_string()), "tags: {t:?}");
 }
 
-/// Las siete reglas por defecto tienen que disparar en los dos idiomas.
+/// The seven default rules have to fire in both languages.
 ///
-/// La taxonomía por defecto es, a propósito, de ingeniería general: sin
-/// nombres propios ni vocabulario de un stack o equipo. Pero sus patrones
-/// nacieron escritos contra memorias en español, así que para alguien que
-/// guarda en inglés varias quedaban mudas — y una herramienta que dice
-/// clasificar sola y no clasifica nada parece rota, no neutral.
+/// The default taxonomy is deliberately general engineering: no proper nouns,
+/// no vocabulary from one stack or team. But its patterns were written
+/// against Spanish notes, so for someone saving in English several stayed
+/// mute — and a tool that claims to classify on its own and classifies
+/// nothing looks broken, not neutral.
 ///
-/// Un `tags.json` propio sigue reemplazándolas por completo; esto es solo
-/// qué pasa cuando no hay ninguno.
+/// A `tags.json` of your own still replaces them entirely; this is only what
+/// happens when there is none.
 #[test]
 fn the_default_taxonomy_fires_in_both_languages() {
     // (tag esperado, texto en español, texto en inglés)

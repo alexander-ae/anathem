@@ -39,19 +39,19 @@ fn a_whole_database_survives_the_round_trip() {
     }
     let exp = d.path().join("exp");
     let (ok, _, err) = mem(&source, &["export", "--out", exp.to_str().unwrap()]);
-    assert!(ok, "export falló: {err}");
+    assert!(ok, "export failed: {err}");
 
     let target = d.path().join("destino.db");
     let (ok, out, err) = mem(&target, &["import", "--desde", exp.to_str().unwrap()]);
-    assert!(ok, "import falló: {err}");
+    assert!(ok, "import failed: {err}");
     assert!(out.contains("imported 4"), "salida: {out}");
 
-    assert_eq!(counts(&source), counts(&target), "la base importada tiene que ser equivalente");
+    assert_eq!(counts(&source), counts(&target), "the imported database has to be equivalent");
 
     // And it is searchable: the FTS5 index triggers ran.
     let (ok, out, _) = mem(&target, &["search", "segunda nota"]);
     assert!(ok);
-    assert!(out.contains("segunda nota"), "la búsqueda no encuentra lo importado: {out}");
+    assert!(out.contains("segunda nota"), "search does not find what was imported: {out}");
 }
 
 #[test]
@@ -67,14 +67,14 @@ fn importing_onto_a_nonempty_database_is_rejected_without_merge() {
 
     // The same database, which already has content.
     let (ok, _, err) = mem(&source, &["import", "--desde", exp.to_str().unwrap()]);
-    assert!(!ok, "tenía que negarse: importar encima duplicaría todo");
-    assert!(err.contains("--merge"), "el error tiene que nombrar una bandera que --help muestre: {err}");
+    assert!(!ok, "it had to refuse: importing on top would duplicate everything");
+    assert!(err.contains("--merge"), "the error has to name a flag --help shows: {err}");
 
     // With --fusionar it does, and it does not duplicate what was there.
     let (ok, out, err) = mem(&source, &["import", "--desde", exp.to_str().unwrap(), "--fusionar"]);
     assert!(ok, "{err}");
-    assert!(out.contains("imported 0"), "no tenía que insertar nada: {out}");
-    assert_eq!(counts(&source).0, 1, "seguía habiendo una sola memoria");
+    assert!(out.contains("imported 0"), "it did not have to insert anything: {out}");
+    assert_eq!(counts(&source).0, 1, "there was still only one memory");
 }
 
 #[test]
@@ -97,7 +97,7 @@ fn a_file_without_frontmatter_does_not_break_the_import() {
 #[test]
 fn the_fields_export_writes_are_read_back() {
     let txt = "---\nid: 7\nproject: \"api\"\ndescription: \"el titulo\"\ntags: [\"uno\", \"dos\"]\ncreated: \"2026-01-02\"\nupdated: \"2026-01-03\"\nstatus: \"superseded\"\nsource: \"migrated\"\npinned: true\ntopic: \"la-clave\"\next_id: \"ext-9\"\nsupersedes: 3\nevent_start: \"2026-01-01\"\nrefs:\n  - kind: \"ticket\"\n    value: \"ABC-1\"\n---\n\nel cuerpo de la memoria\n";
-    let m = import::parse(txt).expect("tenía que leerse");
+    let m = import::parse(txt).expect("it had to parse");
     assert_eq!(m.old_id, Some(7));
     assert_eq!(m.project, "api");
     assert_eq!(m.title, "el titulo");

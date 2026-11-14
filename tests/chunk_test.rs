@@ -10,7 +10,7 @@ fn short_text_yields_one_chunk() {
 fn respeta_tamano_y_paso() {
     let text: String = std::iter::repeat('a').take(1000).collect();
     let c = chunk::split(&text, 500, 400);
-    assert_eq!(c.len(), 3, "1000 chars con paso 400 dan 3 chunks");
+    assert_eq!(c.len(), 3, "1000 chars with step 400 gives 3 chunks");
     assert_eq!(c[0].chars().count(), 500);
     assert_eq!(c[2].chars().count(), 200); // 800..1000
 }
@@ -66,7 +66,7 @@ fn ingesta_crea_memoria_chunks_tags_y_refs() {
     let n_fts: i64 = conn
         .query_row("select count(*) from chunks_fts where chunks_fts match 'justifica'", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(n_fts, 1, "el trigger de FTS5 no pobló el índice");
+    assert_eq!(n_fts, 1, "the FTS5 trigger did not populate the index");
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn a_ref_with_an_invalid_kind_fails_instead_of_being_ignored() {
 
     // the whole transaction is discarded: not even the inserted memory remains
     let n_memorias: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
-    assert_eq!(n_memorias, 0, "un ref inválido debe hacer rollback de toda la transacción");
+    assert_eq!(n_memorias, 0, "an invalid ref has to roll back the whole transaction");
 }
 
 #[test]
@@ -111,7 +111,7 @@ fn duplicate_valid_refs_insert_cleanly() {
         source: "migrated".into(),
         ext_id: None,
         tags: vec![],
-        // el mismo par (kind, value) dos veces, como puede pasar tras extracción
+        // the same (kind, value) pair twice, as can happen after extraction
         refs: vec![("ticket".into(), "PROJ-482".into()), ("ticket".into(), "PROJ-482".into())],
     };
 
@@ -120,5 +120,5 @@ fn duplicate_valid_refs_insert_cleanly() {
     let n_refs: i64 = conn
         .query_row("select count(*) from memory_refs where memory_id = ?1", [id], |r| r.get(0))
         .unwrap();
-    assert_eq!(n_refs, 1, "el duplicado válido no debe fallar ni duplicarse");
+    assert_eq!(n_refs, 1, "a valid duplicate must neither fail nor duplicate");
 }

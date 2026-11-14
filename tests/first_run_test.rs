@@ -22,8 +22,8 @@ fn a_search_with_no_results_says_so() {
     let db = dir.path().join("m.db");
     mem(&db, &["init"]);
     let (out, _, ok) = mem(&db, &["search", "cualquier cosa"]);
-    assert!(ok, "search debería salir 0 aunque no haya resultados");
-    assert!(!out.trim().is_empty(), "search no imprimió nada; el usuario no puede saber si funcionó");
+    assert!(ok, "search should exit 0 even with no results");
+    assert!(!out.trim().is_empty(), "search printed nothing; the user cannot tell if it worked");
 }
 
 /// `eval` without an eval set has to explain what one is and how to build
@@ -48,10 +48,10 @@ fn the_minimal_cycle_works_with_nothing_configured() {
     let db = dir.path().join("m.db");
     mem(&db, &["init"]);
     let (out, _, ok) = mem(&db, &["save", "Se decidió usar SQLite por un bug de concurrencia"]);
-    assert!(ok && out.contains("saved"), "no guardó: {out}");
-    assert!(out.contains('['), "no clasificó con las reglas por defecto: {out}");
+    assert!(ok && out.contains("saved"), "it did not save: {out}");
+    assert!(out.contains('['), "it did not classify with the default rules: {out}");
     let (out, _, _) = mem(&db, &["search", "SQLite concurrencia"]);
-    assert!(out.contains("SQLite"), "no encontró lo que acababa de guardar: {out}");
+    assert!(out.contains("SQLite"), "it did not find what it had just saved: {out}");
 }
 
 #[test]

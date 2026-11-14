@@ -18,10 +18,10 @@ fn forget_removes_from_search_without_deleting() {
     maint::forget(&conn, id).unwrap();
 
     let q = search::Query { text: "cache".into(), ..Default::default() };
-    assert!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().is_empty(), "forget debe sacarla de la búsqueda");
+    assert!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().is_empty(), "forget has to take it out of search");
 
     let n: i64 = conn.query_row("select count(*) from memories where id=?1", [id], |r| r.get(0)).unwrap();
-    assert_eq!(n, 1, "forget no debe borrar la fila");
+    assert_eq!(n, 1, "forget must not delete the row");
 }
 
 #[test]
@@ -76,14 +76,14 @@ fn save_explicit_classifies_and_extracts_refs() {
     let text = "Se decidió revertir: había un bug en los tests de ABC-42 (PR #7).";
 
     let (id, used) = anathem::ingest::save_explicit(&conn, text, "p", Vec::new()).unwrap();
-    assert!(!used.is_empty(), "no clasificó: {used:?}");
+    assert!(!used.is_empty(), "it did not classify: {used:?}");
 
     let n_tags: i64 = conn.query_row(
         "select count(*) from memory_tags where memory_id=?1", [id], |r| r.get(0)).unwrap();
     let n_refs: i64 = conn.query_row(
         "select count(*) from memory_refs where memory_id=?1", [id], |r| r.get(0)).unwrap();
-    assert!(n_tags > 0, "la memoria quedó sin tags en la base");
-    assert!(n_refs >= 2, "no extrajo el ticket ABC-42 ni el PR #7: {n_refs} refs");
+    assert!(n_tags > 0, "the memory ended up with no tags in the database");
+    assert!(n_refs >= 2, "it did not extract ticket ABC-42 or PR #7: {n_refs} refs");
 }
 
 /// When explicit tags are passed they are respected and NOT classified over.
@@ -97,7 +97,7 @@ fn save_explicit_respects_the_given_tags() {
     let tags: Vec<String> = conn
         .prepare("select tag from memory_tags where memory_id=?1").unwrap()
         .query_map([id], |r| r.get(0)).unwrap().collect::<Result<_,_>>().unwrap();
-    assert_eq!(tags, vec!["mio".to_string()], "clasificó encima de los tags dados");
+    assert_eq!(tags, vec!["mio".to_string()], "it classified on top of the given tags");
 }
 
 /// The CLI and MCP have to use the SAME default project. The CLI used to use

@@ -44,7 +44,7 @@ fn with_timestamp(conn: &Connection, ext: &str, ts: &str) {
     let n = conn
         .execute("update memories set created_ts = ?1 where ext_id = ?2", rusqlite::params![ts, ext])
         .unwrap();
-    assert_eq!(n, 1, "no existe la memoria {ext}");
+    assert_eq!(n, 1, "there is no memory {ext}");
 }
 
 /// Three notes about one subject, written on three different days. They
@@ -91,7 +91,7 @@ fn without_a_bound_nothing_changes() {
     // `all` is the word `mem recent` already uses for "no bound", and it has
     // to mean the same here: byte for byte the answer with no bound at all.
     let unbounded = call(&conn, json!({"query": "payment provider", "project": p, "since": "all"}));
-    assert_eq!(unbounded, plain, "«all» tiene que ser idéntico a no filtrar");
+    assert_eq!(unbounded, plain, "«all» has to be identical to not filtering");
 }
 
 #[test]
@@ -136,11 +136,11 @@ fn a_migrated_memory_is_found_by_the_date_it_carries_and_not_by_its_import() {
 
     let a = call(&conn, json!({
         "query": "payment provider", "project": p, "until": "2026-06-01"}));
-    assert!(a.contains("finance"), "la fecha de la memoria es la de abril, no la de hoy:\n{a}");
+    assert!(a.contains("finance"), "the memory date is April's, not today's:\n{a}");
 
     let b = call(&conn, json!({
         "query": "payment provider", "project": p, "since": "2026-06-01"}));
-    assert!(!b.contains("finance"), "no puede entrar por la fecha en que se importó:\n{b}");
+    assert!(!b.contains("finance"), "it cannot come in by the date it was imported:\n{b}");
 }
 
 #[test]
@@ -154,7 +154,7 @@ fn the_newest_one_is_reachable_by_its_own_day() {
     let b = call(&conn, json!({
         "query": "payment provider", "project": p,
         "since": "2026-10-20", "until": "2026-10-20"}));
-    assert_eq!(eras_in(&b), vec!["new"], "un solo día tiene que contenerse a sí mismo: {b}");
+    assert_eq!(eras_in(&b), vec!["new"], "a single day has to contain itself: {b}");
 }
 
 #[test]
@@ -166,9 +166,9 @@ fn windows_narrow_monotonically() {
     let wide = eras_in(&call(&conn, json!({"query": "payment provider", "project": p, "since": "3650d"})));
     let narrow = eras_in(&call(&conn, json!({"query": "payment provider", "project": p, "since": "7d"})));
     for e in &narrow {
-        assert!(wide.contains(e), "{e} está en la ventana corta y no en la larga");
+        assert!(wide.contains(e), "{e} is in the short window and not in the long one");
     }
-    assert_eq!(wide.len(), 3, "diez años tienen que abarcarlo todo: {wide:?}");
+    assert_eq!(wide.len(), 3, "ten years have to cover everything: {wide:?}");
 }
 
 #[test]
@@ -179,7 +179,7 @@ fn a_date_and_a_scope_combine_in_either_order() {
     let a = call(&conn, json!({
         "query": "payment provider", "scope": [format!("project:{p}")], "until": "2026-08-01"}));
     assert_eq!(eras_in(&a), vec!["old", "mid"], "{a}");
-    assert!(!a.contains("paypal"), "el scope tiene que seguir filtrando: {a}");
+    assert!(!a.contains("paypal"), "the scope has to keep filtering: {a}");
 
     let b = call(&conn, json!({
         "query": "payment provider", "project": p, "since": "2026-07-01", "until": "2026-08-01"}));
@@ -207,8 +207,8 @@ fn a_date_that_cannot_be_read_comes_back_explained() {
     // search that worked.
     let a = call(&conn, json!({"query": "payment provider", "project": p, "since": "ayer"}));
     assert!(a.starts_with("Invalid since"), "{a}");
-    assert!(a.contains("2026-09-01"), "el error tiene que decir qué sí acepta: {a}");
-    assert!(!a.contains("stripe"), "no puede contestar como si hubiera filtrado: {a}");
+    assert!(a.contains("2026-09-01"), "the error has to say what it does accept: {a}");
+    assert!(!a.contains("stripe"), "it cannot answer as if it had filtered: {a}");
 
     let b = call(&conn, json!({"query": "payment provider", "project": p, "until": "2026-13-45"}));
     assert!(b.starts_with("Invalid until"), "{b}");
@@ -245,6 +245,6 @@ fn the_cli_spells_the_window_the_same_way() {
     // An unreadable window stops the command instead of answering about the
     // wrong era.
     let (ok, out) = mem(d.path(), &["search", "payment provider", "--since", "ayer"]);
-    assert!(!ok, "tenía que fallar: {out}");
+    assert!(!ok, "it had to fail: {out}");
     assert!(out.contains("cannot read the date"), "{out}");
 }

@@ -22,7 +22,7 @@ fn mark_follow_up_does_not_match_by_substring() {
     let followed_up: i64 = conn
         .query_row("select followed_up from search_log where id = 1", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(followed_up, 0, "id=1 no debería matchear vía substring dentro de 131/132");
+    assert_eq!(followed_up, 0, "id=1 should not match by substring inside 131/132");
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn mark_follow_up_matches_a_genuine_id_in_the_list() {
     let followed_up: i64 = conn
         .query_row("select followed_up from search_log where id = 1", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(followed_up, 1, "id=1 está genuinamente en la lista y debe marcarse");
+    assert_eq!(followed_up, 1, "id=1 is genuinely in the list and has to be marked");
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +66,7 @@ fn mem(dir: &Path, args: &[&str]) -> (bool, String, String) {
 
 fn mem_ok(dir: &Path, args: &[&str]) -> String {
     let (ok, out, err) = mem(dir, args);
-    assert!(ok, "mem {args:?} falló: {err}");
+    assert!(ok, "mem {args:?} failed: {err}");
     out
 }
 
@@ -90,9 +90,9 @@ fn log_lists_the_searches_newest_first_with_what_came_back() {
 
     let out = mem_ok(d.path(), &["log", "--since", "all"]);
     let primera = out.lines().find(|l| l.contains("query=")).unwrap();
-    assert!(primera.contains("la nueva"), "la más nueva va primero: {out}");
-    assert!(out.contains("returned=3"), "cuántos volvieron: {out}");
-    assert!(out.contains("tokens=1301"), "y cuánto presupuesto costó: {out}");
+    assert!(primera.contains("la nueva"), "the newest goes first: {out}");
+    assert!(out.contains("returned=3"), "how many came back: {out}");
+    assert!(out.contains("tokens=1301"), "and what budget it cost: {out}");
     assert!(out.contains("project=p"), "{out}");
 }
 
@@ -100,7 +100,7 @@ fn log_lists_the_searches_newest_first_with_what_came_back() {
 fn log_on_a_database_never_searched_says_so_and_exits_zero() {
     let (d, _conn) = empty_conn();
     let (ok, out, _) = mem(d.path(), &["log"]);
-    assert!(ok, "un log vacío no es un error");
+    assert!(ok, "an empty log is not an error");
     assert!(
         out.to_lowercase().contains("mcp"),
         "y tiene que decir por qué puede estar vacío: solo se registran las búsquedas por MCP: {out}"
@@ -117,8 +117,8 @@ fn log_respects_the_window_and_the_project() {
 
     let out = mem_ok(d.path(), &["log", "--since", "24h", "--project", "p"]);
     assert!(out.contains("de recién"), "{out}");
-    assert!(!out.contains("antiquísima"), "fuera de la ventana: {out}");
-    assert!(!out.contains("de otro lado"), "de otro proyecto: {out}");
+    assert!(!out.contains("antiquísima"), "outside the window: {out}");
+    assert!(!out.contains("de otro lado"), "from another project: {out}");
 }
 
 #[test]
@@ -129,7 +129,7 @@ fn why_names_the_queries_that_returned_a_memory_and_its_position() {
 
     let out = mem_ok(d.path(), &["why", "42"]);
     assert!(out.contains("caída de la caché"), "{out}");
-    assert!(out.contains("2 of 3") || out.contains("2 de 3"), "en qué posición salió: {out}");
+    assert!(out.contains("2 of 3") || out.contains("2 de 3"), "what position it came out in: {out}");
 }
 
 #[test]
@@ -142,8 +142,8 @@ fn why_on_a_memory_that_never_came_back_says_so() {
     let (ok, out, _) = mem(d.path(), &["why", "42"]);
     assert!(ok);
     assert!(out.contains("42"), "{out}");
-    assert!(out.to_lowercase().contains("never"), "tiene que decirlo, no salir vacío: {out}");
-    assert!(out.to_lowercase().contains("mcp"), "y por qué puede ser: {out}");
+    assert!(out.to_lowercase().contains("never"), "it has to say it, not come out empty: {out}");
+    assert!(out.to_lowercase().contains("mcp"), "and why it may be: {out}");
 }
 
 #[test]
@@ -153,16 +153,16 @@ fn a_search_then_a_get_memory_shows_in_the_log_as_followed_up() {
     let (id, _tags) =
         ingest::save_explicit(&conn, "la caché se cae con 50 conexiones", "p", Vec::new()).unwrap();
     let ctx = search::SearchContext::bm25_only();
-    let buscar = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+    let request = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
         "params":{"name":"search_memory","arguments":{"query":"caché"}}});
-    mcp::handle(&conn, &ctx, &Config::default(), &buscar).unwrap();
+    mcp::handle(&conn, &ctx, &Config::default(), &request).unwrap();
     let abrir = serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/call",
         "params":{"name":"get_memory","arguments":{"id":id}}});
     mcp::handle(&conn, &ctx, &Config::default(), &abrir).unwrap();
     drop(conn);
 
     let out = mem_ok(d.path(), &["log", "--since", "all"]);
-    assert!(out.contains(&format!("opened={id}")), "el seguimiento tiene que verse: {out}");
+    assert!(out.contains(&format!("opened={id}")), "the follow-up has to be visible: {out}");
 
     let why = mem_ok(d.path(), &["why", &id.to_string()]);
     assert!(
@@ -181,10 +181,10 @@ fn log_prune_needs_a_window_and_removes_only_what_is_older() {
     // Without a window it cannot run: deleting retrieval history is
     // something a person asks for, with a number.
     let (ok, _, _) = mem(d.path(), &["log", "--prune"]);
-    assert!(!ok, "--prune sin ventana no puede borrar nada");
+    assert!(!ok, "--prune with no window cannot delete anything");
 
     let out = mem_ok(d.path(), &["log", "--prune", "30d"]);
-    assert!(out.contains('1'), "tiene que decir cuántas sacó: {out}");
+    assert!(out.contains('1'), "it has to say how many it removed: {out}");
 
     let quedan = mem_ok(d.path(), &["log", "--since", "all"]);
     assert!(quedan.contains("de recién"), "{quedan}");
@@ -200,6 +200,6 @@ fn doctor_reports_how_big_the_search_log_is() {
 
     let (_ok, out, _) = mem(d.path(), &["doctor"]);
     assert!(out.contains("search log") || out.contains("search_log"), "{out}");
-    assert!(out.contains('2'), "cuántas filas tiene: {out}");
-    assert!(out.contains("2026-11-01"), "y desde cuándo viene creciendo: {out}");
+    assert!(out.contains('2'), "how many rows it has: {out}");
+    assert!(out.contains("2026-11-01"), "and since when it has been growing: {out}");
 }

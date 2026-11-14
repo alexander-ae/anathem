@@ -25,17 +25,17 @@ fn mem(db: &Path, args: &[&str]) -> bool {
 #[test]
 fn the_database_and_its_directory_are_private() {
     let dir = tempfile::tempdir().unwrap();
-    let casa = dir.path().join("anathem");
-    let db = casa.join("mem.db");
+    let home = dir.path().join("anathem");
+    let db = home.join("mem.db");
     assert!(mem(&db, &["init"]));
     assert!(mem(&db, &["save", "una nota con algo privado adentro"]));
 
-    assert_eq!(mode(&db), 0o600, "la base tiene que ser 0600");
-    assert_eq!(mode(&casa), 0o700, "el directorio tiene que ser 0700");
+    assert_eq!(mode(&db), 0o600, "the database has to be 0600");
+    assert_eq!(mode(&home), 0o700, "the directory has to be 0700");
     for sufijo in ["-wal", "-shm"] {
-        let p = casa.join(format!("mem.db{sufijo}"));
+        let p = home.join(format!("mem.db{sufijo}"));
         if p.exists() {
-            assert_eq!(mode(&p), 0o600, "{sufijo} tiene el mismo contenido que la base");
+            assert_eq!(mode(&p), 0o600, "{sufijo} has the same content as the database");
         }
     }
 }
@@ -45,16 +45,16 @@ fn an_existing_database_left_world_readable_gets_narrowed() {
     // The case that matters: not a fresh install, but the one that has been
     // accumulating notes under an earlier version that created it 0644.
     let dir = tempfile::tempdir().unwrap();
-    let casa = dir.path().join("anathem");
-    let db = casa.join("mem.db");
+    let home = dir.path().join("anathem");
+    let db = home.join("mem.db");
     assert!(mem(&db, &["init"]));
 
     std::fs::set_permissions(&db, std::fs::Permissions::from_mode(0o644)).unwrap();
-    std::fs::set_permissions(&casa, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o755)).unwrap();
 
     assert!(mem(&db, &["search", "lo que sea"]));
-    assert_eq!(mode(&db), 0o600, "abrir una base vieja tiene que restringirla");
-    assert_eq!(mode(&casa), 0o700, "y también su directorio");
+    assert_eq!(mode(&db), 0o600, "opening an old database has to narrow it");
+    assert_eq!(mode(&home), 0o700, "and its directory too");
 }
 
 #[test]
@@ -75,8 +75,8 @@ fn mem_edit_leaves_nothing_behind_in_the_shared_temp_directory() {
         .arg("--db").arg(&db).args(["edit", "1"])
         .env("EDITOR", "false")
         .output().unwrap().status.success();
-    assert!(!ok, "un editor que falla tiene que hacer fallar el comando");
-    assert_eq!(viejo.exists(), habia, "no puede quedar nada en la ruta predecible de antes");
+    assert!(!ok, "a failing editor has to fail the command");
+    assert_eq!(viejo.exists(), habia, "nothing can be left at the old predictable path");
 }
 
 /// B-2: an installed pack cannot be written over in place. It stays mapped
@@ -92,8 +92,8 @@ fn an_installed_pack_is_read_only_and_still_replaceable() {
     support::write_pack_mini(&origen, "mini-es");
     assert!(mem(&db, &["model", "install", origen.to_str().unwrap()]));
 
-    let instalado = anathem::packstore::packs_dir(dir.path()).join("mini-es.anathem-pack");
-    assert_eq!(mode(&instalado), 0o400, "el paquete instalado tiene que ser 0400");
+    let installed = anathem::packstore::packs_dir(dir.path()).join("mini-es.anathem-pack");
+    assert_eq!(mode(&installed), 0o400, "the installed pack has to be 0400");
 
     // Writing over it in place is what the mode prevents — for everyone
     // except root, who ignores permission bits entirely. CI runs inside a
@@ -110,7 +110,7 @@ fn an_installed_pack_is_read_only_and_still_replaceable() {
         eprintln!("saltado: root ignora los bits de permiso, el 0400 no lo detiene");
     } else {
         assert!(
-            std::fs::OpenOptions::new().write(true).truncate(true).open(&instalado).is_err(),
+            std::fs::OpenOptions::new().write(true).truncate(true).open(&installed).is_err(),
             "no tendría que poder truncarse en su lugar"
         );
     }
@@ -122,17 +122,17 @@ fn an_installed_pack_is_read_only_and_still_replaceable() {
         mem(&db, &["model", "install", otro.to_str().unwrap()]),
         "reinstalar tiene que seguir funcionando: el rename pide permiso sobre el directorio"
     );
-    assert_eq!(mode(&instalado), 0o400);
+    assert_eq!(mode(&installed), 0o400);
 }
 
-/// `mem doctor` tiene que decir cuando la base está abierta a otros usuarios.
+/// `mem doctor` has to say when the database is open to other users.
 ///
-/// El diagnóstico abre la base en `immutable=1`, así que NO pasa por
-/// `db::open` y por lo tanto no aplica la corrección de permisos. Eso está
-/// bien —su contrato dice que no modifica nada— pero callarlo no: una
-/// instalación con la base en 0644 recibía dieciocho líneas en verde y un
-/// «All good.» sin una palabra sobre el asunto. Medido sobre una instalación
-/// real que venía de una versión anterior.
+/// The diagnosis opens the database with `immutable=1`, so it does NOT go
+/// through `db::open` and therefore does not apply the permission fix. That
+/// is right — its contract says it changes nothing — but staying silent is
+/// not: an installation with the database at 0644 got eighteen green lines
+/// and an "All good." without a word about it. Measured on a real
+/// installation that came from an earlier version.
 #[test]
 fn doctor_reports_a_world_readable_database() {
     let d = tempfile::tempdir().unwrap();
@@ -141,7 +141,7 @@ fn doctor_reports_a_world_readable_database() {
     assert!(mem(&db, &["init"]));
     assert!(mem(&db, &["save", "una nota"]));
 
-    // Como la dejaría una versión anterior al arreglo.
+    // As a version before the fix would leave it.
     std::fs::set_permissions(&db, std::fs::Permissions::from_mode(0o644)).unwrap();
     std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o755)).unwrap();
 
@@ -149,17 +149,17 @@ fn doctor_reports_a_world_readable_database() {
         .arg("--db").arg(&db).arg("doctor").output().unwrap();
     let out = String::from_utf8_lossy(&o.stdout).to_string();
 
-    assert!(out.contains("0644"), "tiene que decir qué permisos tiene: {out}");
+    assert!(out.contains("0644"), "it has to say which mode it has: {out}");
     assert!(
         out.to_lowercase().contains("readable") || out.to_lowercase().contains("other users"),
-        "y qué significa: {out}"
+        "and what it means: {out}"
     );
-    // Es un aviso y no un problema: la base funciona perfectamente.
-    assert_eq!(o.status.code(), Some(0), "no puede hacer fallar el diagnóstico: {out}");
+    // A notice, not a problem: the database works.
+    assert_eq!(o.status.code(), Some(0), "it cannot fail the diagnosis: {out}");
 
-    // Y no la corrige: doctor no modifica nada.
-    let modo = std::fs::metadata(&db).unwrap().permissions().mode() & 0o777;
-    assert_eq!(modo, 0o644, "doctor no tiene que cambiar los permisos");
+    // And it does not correct it: doctor changes nothing.
+    let current = std::fs::metadata(&db).unwrap().permissions().mode() & 0o777;
+    assert_eq!(current, 0o644, "doctor must not change the mode");
 }
 
 #[test]
@@ -170,5 +170,5 @@ fn doctor_says_nothing_when_the_permissions_are_right() {
     let o = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--db").arg(&db).arg("doctor").output().unwrap();
     let out = String::from_utf8_lossy(&o.stdout).to_string();
-    assert!(!out.contains("0644"), "con 0600 no hay nada que decir: {out}");
+    assert!(!out.contains("0644"), "at 0600 there is nothing to say: {out}");
 }

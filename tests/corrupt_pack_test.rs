@@ -33,8 +33,8 @@ fn a_corrupt_pack_degrades_to_bm25_without_breaking_search() {
     std::fs::write(packs.join("mini-es.anathem-pack"), b"esto no es un paquete valido").unwrap();
 
     let (out, err, ok) = mem(&db, &["search", "cache staleness"]);
-    assert!(ok, "un paquete corrupto no puede tumbar la búsqueda: stderr={err}");
-    assert!(out.contains("cache"), "la búsqueda debería seguir devolviendo resultados de bm25: {out}");
+    assert!(ok, "a corrupt pack cannot bring search down: stderr={err}");
+    assert!(out.contains("cache"), "search should keep returning bm25 results: {out}");
     assert!(
         err.contains("mini-es"),
         "el aviso debe nombrar el paquete que no se pudo abrir: {err}"
@@ -64,8 +64,8 @@ fn a_poisoned_pack_name_in_the_database_degrades_to_bm25() {
     }
 
     let (out, err, ok) = mem(&db, &["search", "cache staleness"]);
-    assert!(ok, "un nombre envenenado no puede tumbar la búsqueda: stderr={err}");
-    assert!(out.contains("cache"), "la búsqueda debe seguir devolviendo bm25: {out}");
+    assert!(ok, "a poisoned name cannot bring search down: stderr={err}");
+    assert!(out.contains("cache"), "search has to keep returning bm25: {out}");
     assert!(
         err.contains("escapado"),
         "el aviso debe nombrar el registro que rechazó: {err}"

@@ -31,7 +31,7 @@ fn mem(dir: &Path, args: &[&str]) -> (bool, String, String) {
 
 fn mem_ok(dir: &Path, args: &[&str]) -> String {
     let (ok, out, err) = mem(dir, args);
-    assert!(ok, "mem {args:?} falló: {err}");
+    assert!(ok, "mem {args:?} failed: {err}");
     out
 }
 
@@ -69,13 +69,13 @@ fn an_external_memory_arrives_as_draft_and_search_does_not_see_it() {
         d.path(),
         &["save", NOTA, "--external", "--from", REMITENTE, "--project", "dell"],
     );
-    assert!(out.contains("draft") || out.contains("accept"), "tiene que decir que no está activa: {out}");
+    assert!(out.contains("draft") || out.contains("accept"), "it has to say it is not active: {out}");
     assert_eq!(status_of(d.path(), 1), "draft");
 
-    let buscar = mem_ok(d.path(), &["search", "nginx", "--project", "dell"]);
+    let found = mem_ok(d.path(), &["search", "nginx", "--project", "dell"]);
     assert!(
-        !buscar.contains("8443"),
-        "una memoria que nadie aceptó no puede salir en una búsqueda: {buscar}"
+        !found.contains("8443"),
+        "a memory nobody accepted cannot show up in a search: {found}"
     );
 }
 
@@ -85,7 +85,7 @@ fn external_without_a_project_is_refused() {
     // else's note under whatever repository you happen to be standing in.
     let d = tempfile::tempdir().unwrap();
     let (ok, _out, err) = mem(d.path(), &["save", NOTA, "--external", "--from", REMITENTE]);
-    assert!(!ok, "sin --project no se puede saber dónde va");
+    assert!(!ok, "without --project there is no way to know where it goes");
     assert!(err.contains("--project"), "{err}");
 }
 
@@ -93,7 +93,7 @@ fn external_without_a_project_is_refused() {
 fn external_without_a_sender_is_refused() {
     let d = tempfile::tempdir().unwrap();
     let (ok, _out, err) = mem(d.path(), &["save", NOTA, "--external", "--project", "dell"]);
-    assert!(!ok, "una memoria externa sin remitente no tiene procedencia, que es todo el punto");
+    assert!(!ok, "an external memory with no sender has no provenance, which is the whole point");
     assert!(err.contains("--from"), "{err}");
 }
 
@@ -136,8 +136,8 @@ fn accepting_one_makes_it_searchable() {
     assert!(out.contains('1'), "{out}");
     assert_eq!(status_of(d.path(), 1), "active");
 
-    let buscar = mem_ok(d.path(), &["search", "nginx", "--project", "dell"]);
-    assert!(buscar.contains("8443"), "aceptada, ya tiene que salir: {buscar}");
+    let found = mem_ok(d.path(), &["search", "nginx", "--project", "dell"]);
+    assert!(found.contains("8443"), "accepted, it has to show up now: {found}");
 }
 
 #[test]
@@ -145,7 +145,7 @@ fn accepting_something_that_is_not_waiting_fails_instead_of_saying_nothing() {
     let d = tempfile::tempdir().unwrap();
     mem_ok(d.path(), &["save", "una nota local", "--project", "dell"]);
     let (ok, _out, err) = mem(d.path(), &["accept", "1"]);
-    assert!(!ok, "aceptar algo que ya está activo no es una operación con sentido");
+    assert!(!ok, "accepting something already active makes no sense");
     assert!(err.contains("active") || err.contains("draft"), "{err}");
 
     let (ok, _out, err) = mem(d.path(), &["accept", "99"]);
@@ -161,9 +161,9 @@ fn show_by_id_prints_a_draft_so_it_can_be_read_before_accepting() {
     mem_ok(d.path(), &["save", NOTA, "--external", "--from", REMITENTE, "--project", "dell"]);
 
     let out = mem_ok(d.path(), &["show", "1"]);
-    assert!(out.contains(NOTA), "el cuerpo entero: {out}");
-    assert!(out.contains(REMITENTE), "y de dónde vino: {out}");
-    assert!(out.contains("draft"), "y que está esperando: {out}");
+    assert!(out.contains(NOTA), "the whole body: {out}");
+    assert!(out.contains(REMITENTE), "and where it came from: {out}");
+    assert!(out.contains("draft"), "and that it is waiting: {out}");
 }
 
 #[test]
@@ -183,7 +183,7 @@ fn an_accepted_memory_still_says_where_it_came_from() {
     mem_ok(d.path(), &["accept", "1"]);
 
     let out = mem_ok(d.path(), &["search", "nginx", "--project", "dell"]);
-    assert!(out.contains(REMITENTE), "la búsqueda tiene que marcarla: {out}");
+    assert!(out.contains(REMITENTE), "search has to mark it: {out}");
 }
 
 #[test]
@@ -193,7 +193,7 @@ fn the_mcp_output_marks_a_received_memory_too() {
     let conn = db::open(&d.path().join("t.db")).unwrap();
     let g = match ingest::save_received(&conn, NOTA, "dell", Vec::new(), REMITENTE, None).unwrap() {
         ingest::Received::Stored(g) => g,
-        otro => panic!("tenía que guardarla: {otro:?}"),
+        otro => panic!("it had to save it: {otro:?}"),
     };
     anathem::maint::accept(&conn, g.id).unwrap();
 
@@ -203,7 +203,7 @@ fn the_mcp_output_marks_a_received_memory_too() {
         .unwrap()
         .unwrap();
     let text = r["result"]["content"][0]["text"].as_str().unwrap();
-    assert!(text.contains(REMITENTE), "el modelo tiene que saber que se lo contaron: {text}");
+    assert!(text.contains(REMITENTE), "the model has to know it was told: {text}");
 }
 
 #[test]
@@ -225,7 +225,7 @@ fn export_and_import_keep_the_provenance() {
             escrito.push_str(&std::fs::read_to_string(&p).unwrap());
         }
     }
-    assert!(escrito.contains(REMITENTE), "el frontmatter tiene que llevarlo: {escrito}");
+    assert!(escrito.contains(REMITENTE), "the frontmatter has to carry it: {escrito}");
 
     let otro = tempfile::tempdir().unwrap();
     mem_ok(otro.path(), &["import", "--from", out.to_str().unwrap()]);
@@ -235,8 +235,8 @@ fn export_and_import_keep_the_provenance() {
             Ok((r.get(0)?, r.get(1)?))
         })
         .unwrap();
-    assert_eq!(from.as_deref(), Some(REMITENTE), "la procedencia no puede perderse al migrar");
-    assert_eq!(status, "draft", "y tampoco el hecho de que estaba esperando");
+    assert_eq!(from.as_deref(), Some(REMITENTE), "provenance cannot be lost in a migration");
+    assert_eq!(status, "draft", "nor the fact that it was waiting");
 }
 
 #[test]
@@ -246,7 +246,7 @@ fn recent_external_lists_only_what_arrived_including_drafts() {
     mem_ok(d.path(), &["save", NOTA, "--external", "--from", REMITENTE, "--project", "dell"]);
 
     let out = mem_ok(d.path(), &["recent", "--external", "--project", "dell"]);
-    assert!(out.contains(REMITENTE), "tiene que listar la recibida: {out}");
+    assert!(out.contains(REMITENTE), "it has to list the received one: {out}");
     assert!(
         !out.contains("una nota propia"),
         "y solo las recibidas, que es para lo que sirve la bandera: {out}"
@@ -261,10 +261,10 @@ fn accept_all_from_one_sender_promotes_that_batch_and_nothing_else() {
     mem_ok(d.path(), &["save", "de otro lado", "--external", "--from", "otro@host", "--project", "dell"]);
 
     let out = mem_ok(d.path(), &["accept", "--all", "--from", REMITENTE]);
-    assert!(out.contains('2'), "tiene que decir cuántas aceptó: {out}");
+    assert!(out.contains('2'), "it has to say how many it accepted: {out}");
     assert_eq!(status_of(d.path(), 1), "active");
     assert_eq!(status_of(d.path(), 2), "active");
-    assert_eq!(status_of(d.path(), 3), "draft", "las de otro remitente no se tocan");
+    assert_eq!(status_of(d.path(), 3), "draft", "those from another sender are not touched");
 }
 
 #[test]
@@ -283,8 +283,8 @@ fn doctor_says_how_many_are_waiting_to_be_accepted() {
     mem_ok(d.path(), &["save", NOTA, "--external", "--from", REMITENTE, "--project", "dell"]);
 
     let (ok, out, _) = mem(d.path(), &["doctor"]);
-    assert!(ok, "una memoria esperando no es un problema, es información");
-    assert!(out.contains("accept"), "tiene que mencionar que hay algo esperando: {out}");
+    assert!(ok, "a waiting memory is not a problem, it is information");
+    assert!(out.contains("accept"), "it has to mention something is waiting: {out}");
     assert!(out.contains('1'), "{out}");
 }
 
@@ -316,17 +316,17 @@ fn the_same_ext_id_twice_writes_one_draft_and_says_so() {
     // The retry. It has to succeed — a mailbox reads the exit code — and it
     // has to be distinguishable from the first, which is the whole point.
     let (ok2, out2, err2) = mem(d.path(), &args);
-    assert!(ok2, "un reintento tiene que salir en 0: {out2}{err2}");
+    assert!(ok2, "a retry has to exit 0: {out2}{err2}");
     assert!(out2.contains("already received"), "{out2}");
-    assert!(!out2.contains("saved as a draft"), "no puede decir que guardó: {out2}");
+    assert!(!out2.contains("saved as a draft"), "it cannot say it saved: {out2}");
 
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let n: i64 = conn
         .query_row("select count(*) from memories where ext_id = ?1", [ID_EXTERNO], |r| r.get(0))
         .unwrap();
-    assert_eq!(n, 1, "el reintento escribió un segundo borrador");
+    assert_eq!(n, 1, "the retry wrote a second draft");
     let total: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
-    assert_eq!(total, 1, "no puede haber quedado ninguna fila suelta");
+    assert_eq!(total, 1, "no stray row can be left");
 }
 
 /// Two producers using the same value is a collision, and a collision drops
@@ -343,8 +343,8 @@ fn a_collision_between_two_senders_is_pointed_at() {
                                        "--project", "api", "--ext-id", ID_EXTERNO]);
     assert!(ok, "{out}");
     assert!(out.contains("already received"), "{out}");
-    assert!(out.contains("uno@dell"), "tiene que decir de quién era la primera: {out}");
-    assert!(out.contains("same --ext-id"), "tiene que avisar de la colisión: {out}");
+    assert!(out.contains("uno@dell"), "it has to say whose the first one was: {out}");
+    assert!(out.contains("same --ext-id"), "it has to warn about the collision: {out}");
 }
 
 #[test]
@@ -360,17 +360,17 @@ fn ext_id_needs_external_and_a_usable_value() {
     for malo in ["", "   "] {
         let (ok, out, err) = mem(d.path(), &["save", "algo", "--external", "--from", "a",
                                              "--project", "p", "--ext-id", malo]);
-        assert!(!ok, "un --ext-id vacío tiene que fallar: {out}{err}");
+        assert!(!ok, "an empty --ext-id has to fail: {out}{err}");
     }
     let largo = "x".repeat(201);
     let (ok, _, err) = mem(d.path(), &["save", "algo", "--external", "--from", "a",
                                        "--project", "p", "--ext-id", &largo]);
-    assert!(!ok, "un --ext-id larguísimo tiene que fallar: {err}");
+    assert!(!ok, "a very long --ext-id has to fail: {err}");
 
     // And nothing partial was left behind by any of the refusals.
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let total: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
-    assert_eq!(total, 0, "un rechazo no puede dejar media fila");
+    assert_eq!(total, 0, "a rejection cannot leave half a row");
 }
 
 /// Without `--ext-id` nothing changes: two deliveries of the same text are
@@ -431,12 +431,12 @@ fn two_deliveries_at_once_leave_one_row_and_both_succeed() {
         salidas.iter().map(|o| String::from_utf8_lossy(&o.stdout).to_string()).collect();
     let guardaron = textos.iter().filter(|t| t.contains("saved as a draft")).count();
     let ya_estaba = textos.iter().filter(|t| t.contains("already received")).count();
-    assert_eq!(guardaron, 1, "exactamente uno tenía que escribir:\n{textos:?}");
-    assert_eq!(ya_estaba, 1, "el otro tenía que encontrarla:\n{textos:?}");
+    assert_eq!(guardaron, 1, "exactly one had to write:\n{textos:?}");
+    assert_eq!(ya_estaba, 1, "the other had to find it:\n{textos:?}");
 
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let total: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
-    assert_eq!(total, 1, "quedaron dos filas para un solo mensaje");
+    assert_eq!(total, 1, "two rows were left for a single message");
 }
 
 // -------------------- standing in the wrong directory, with mail waiting
@@ -470,9 +470,9 @@ fn an_empty_project_says_where_the_mail_actually_is() {
     // Implicit project, standing somewhere with no mail: the hint.
     let (ok, out) = mem_en(d.path(), otro.path(), &["recent", "--since", "all", "--external"]);
     assert!(ok, "{out}");
-    assert!(out.contains("no external memories in project"), "falta la pista: {out}");
-    assert!(out.contains("2 are in other projects"), "falta el conteo: {out}");
-    assert!(out.contains("--all --external"), "tiene que decir el comando: {out}");
+    assert!(out.contains("no external memories in project"), "the hint is missing: {out}");
+    assert!(out.contains("2 are in other projects"), "the count is missing: {out}");
+    assert!(out.contains("--all --external"), "it has to give the command: {out}");
     assert!(!out.contains("primera") && !out.contains("segunda"),
             "no puede filtrar contenido de los borradores: {out}");
 

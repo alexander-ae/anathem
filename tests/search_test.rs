@@ -28,7 +28,7 @@ fn it_finds_by_term() {
     let (_d, conn) = fixture();
     let q = search::Query { text: "cache staleness".into(), ..Default::default() };
     let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
-    assert!(!hits.is_empty(), "sin resultados");
+    assert!(!hits.is_empty(), "no results");
     assert_eq!(hits[0].ext_id.as_deref(), Some("a"));
 }
 
@@ -40,7 +40,7 @@ fn it_filters_by_project() {
         project: Some("acme-billing".into()),
         ..Default::default()
     };
-    assert!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().is_empty(), "no debe cruzar de proyecto cuando se filtra");
+    assert!(search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().is_empty(), "it must not cross projects when filtering");
 }
 
 #[test]
@@ -52,7 +52,7 @@ fn it_deduplicates_by_memory() {
     seed(&conn, "x", "p", &largo);
     let q = search::Query { text: "cache".into(), ..Default::default() };
     let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
-    assert_eq!(hits.len(), 1, "una memoria debe aparecer una sola vez, hubo {}", hits.len());
+    assert_eq!(hits.len(), 1, "a memory has to appear once, got {}", hits.len());
 }
 
 #[test]
@@ -74,8 +74,8 @@ fn it_respects_the_token_budget() {
     let q = search::Query { text: "cache".into(), budget_tokens: 300, ..Default::default() };
     let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
     let tokens: usize = hits.iter().map(|h| (h.title.len() + h.snippet.len()) / 4).sum();
-    assert!(tokens <= 300, "se pasó del presupuesto: {tokens} tokens");
-    assert!(!hits.is_empty(), "el presupuesto no debe vaciar el resultado");
+    assert!(tokens <= 300, "it went over the budget: {tokens} tokens");
+    assert!(!hits.is_empty(), "the budget must not empty the result");
 }
 
 #[test]
@@ -88,7 +88,7 @@ fn pinned_ones_come_first() {
         ..Default::default()
     };
     let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
-    assert_eq!(hits[0].ext_id.as_deref(), Some("b"), "la pinned debe ir primero");
+    assert_eq!(hits[0].ext_id.as_deref(), Some("b"), "the pinned one has to come first");
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn the_order_is_deterministic_on_bm25_ties() {
     let primera: Vec<Option<String>> = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().into_iter().map(|h| h.ext_id).collect();
     for _ in 0..5 {
         let siguiente: Vec<Option<String>> = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap().into_iter().map(|h| h.ext_id).collect();
-        assert_eq!(primera, siguiente, "el orden cambió entre corridas idénticas");
+        assert_eq!(primera, siguiente, "the order changed between identical runs");
     }
 }
 
@@ -171,12 +171,12 @@ fn with_a_pack_what_bm25_misses_shows_up() {
 
     let q = search::Query { text: "hola".into(), ..Default::default() };
     let solo = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
-    assert_eq!(solo.len(), 1, "bm25 solo encuentra la que comparte la palabra");
+    assert_eq!(solo.len(), 1, "bm25 only finds the one sharing the word");
 
     let ctx = search::SearchContext::for_reading(Some(&p), 0.25);
     let covered = search::run(&conn, &q, &ctx).unwrap();
-    assert_eq!(covered.len(), 2, "la fusión debe traer también la vectorial");
-    assert_eq!(covered[0].ext_id.as_deref(), Some("x"), "la exacta sigue primera");
+    assert_eq!(covered.len(), 2, "the fusion has to bring the vector one too");
+    assert_eq!(covered[0].ext_id.as_deref(), Some("x"), "the exact one still comes first");
 }
 
 #[test]
@@ -194,7 +194,7 @@ fn pinned_memories_still_come_first_under_fusion() {
     let q = search::Query { text: "hola".into(), ..Default::default() };
     let ctx = search::SearchContext::for_reading(Some(&p), 0.25);
     let hits = search::run(&conn, &q, &ctx).unwrap();
-    assert_eq!(hits[0].ext_id.as_deref(), Some("y"), "la fijada va primera igual");
+    assert_eq!(hits[0].ext_id.as_deref(), Some("y"), "the pinned one comes first anyway");
 }
 
 #[test]
@@ -265,7 +265,7 @@ fn the_excerpt_lets_more_candidates_fit_in_the_same_budget() {
         hits_sin.len(),
         hits_con.len()
     );
-    assert_eq!(hits_con.len(), 12, "con extractos de 20 caracteres las 12 memorias caben en el presupuesto");
+    assert_eq!(hits_con.len(), 12, "with 20-character excerpts the 12 memories fit in the budget");
 }
 
 #[test]
@@ -280,7 +280,7 @@ fn the_excerpt_trims_the_chunk_to_n_characters() {
         ..Default::default()
     };
     let hits = search::run_explained(&conn, &q, &ctx).unwrap();
-    assert!(!hits.is_empty(), "sin resultados");
+    assert!(!hits.is_empty(), "no results");
     for e in &hits {
         assert_eq!(
             e.hit.snippet.chars().count(),
@@ -317,7 +317,7 @@ fn the_excerpt_does_not_split_a_multibyte_character() {
             ..Default::default()
         };
         let hits = search::run_explained(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
-        assert_eq!(hits.len(), 1, "n={n}: se esperaba 1 resultado");
+        assert_eq!(hits.len(), 1, "n={n}: expected 1 result");
         assert_eq!(
             hits[0].hit.snippet.chars().count(),
             n,
@@ -338,7 +338,7 @@ fn excerpt_none_leaves_the_whole_chunk_as_before() {
 
     assert_eq!(hits_viejo.len(), hits_explicito.len());
     for (a, b) in hits_viejo.iter().zip(hits_explicito.iter()) {
-        assert_eq!(a.hit.snippet, b.hit.snippet, "extracto: None no debe alterar el fragmento");
+        assert_eq!(a.hit.snippet, b.hit.snippet, "excerpt: None must not change the snippet");
     }
     // And the chunk is still the whole body, not a trimmed one.
     assert!(
@@ -385,7 +385,7 @@ fn an_unknown_scope_key_is_an_error_and_not_a_filter_dropped_in_silence() {
     // finds out.
     let e = anathem::search::parse_scopes(&["autor:alexander".to_string()]).unwrap_err();
     let msg = e.to_string();
-    assert!(msg.contains("autor"), "tiene que nombrar la clave que no entiende: {msg}");
+    assert!(msg.contains("autor"), "it has to name the key it does not understand: {msg}");
     assert!(msg.contains("project") && msg.contains("tag") && msg.contains("topic"),
         "y cuáles acepta: {msg}");
 }
@@ -420,7 +420,7 @@ fn two_scopes_narrow_with_and() {
     let s = scoped(&["project:acme-billing", "tag:decision"]);
     let q = search::Query { text: "cache breakdown".into(), ..s.onto(search::Query::default()).unwrap() };
     let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
-    assert_eq!(hits.len(), 1, "solo la que cumple las dos: {hits:?}");
+    assert_eq!(hits.len(), 1, "only the one meeting both: {hits:?}");
     assert_eq!(hits[0].ext_id.as_deref(), Some("d"));
 }
 
@@ -458,7 +458,7 @@ fn project_given_twice_and_differently_is_refused() {
     let (d, _conn) = fixture();
     let (ok, _out, err) =
         mem(d.path(), &["search", "cache", "--project", "a", "--scope", "project:b"]);
-    assert!(!ok, "dos proyectos distintos no pueden cumplirse a la vez");
+    assert!(!ok, "two different projects cannot be met at once");
     assert!(err.contains("project"), "{err}");
 }
 
@@ -489,15 +489,15 @@ fn the_cli_and_the_mcp_filter_identically_through_the_same_parser() {
     let r = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req)
         .unwrap()
         .unwrap();
-    let texto = r["result"]["content"][0]["text"].as_str().unwrap().to_string();
-    let por_mcp: Vec<i64> = texto
+    let text = r["result"]["content"][0]["text"].as_str().unwrap().to_string();
+    let por_mcp: Vec<i64> = text
         .lines()
         .filter_map(|l| l.strip_prefix("[id:"))
         .filter_map(|l| l.split(']').next())
         .filter_map(|n| n.parse().ok())
         .collect();
 
-    assert_eq!(por_biblioteca, por_mcp, "las dos superficies tienen que filtrar igual: {texto}");
+    assert_eq!(por_biblioteca, por_mcp, "both surfaces have to filter the same: {text}");
 }
 
 #[test]
@@ -509,8 +509,8 @@ fn an_invalid_scope_over_mcp_is_an_explained_error_and_not_a_crash() {
     let r = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req)
         .unwrap()
         .unwrap();
-    let texto = serde_json::to_string(&r).unwrap();
-    assert!(texto.contains("autor"), "el modelo tiene que poder corregirlo: {texto}");
+    let text = serde_json::to_string(&r).unwrap();
+    assert!(text.contains("autor"), "the model has to be able to correct it: {text}");
 }
 
 // ---------------------------------------------------------------------------
@@ -530,7 +530,7 @@ largo de verdad y la prueba mida lo que dice medir, no un caso de borde. El umbr
 
 #[test]
 fn a_long_memory_shows_its_headings_in_the_outline() {
-    let o = anathem::search::outline(LARGA, 120).expect("esta memoria sí tiene qué indexar");
+    let o = anathem::search::outline(LARGA, 120).expect("this memory does have something to index");
     assert!(o.contains("Síntomas") && o.contains("Remedio"), "{o}");
     assert!(
         o.contains("runbook"),

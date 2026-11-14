@@ -1,81 +1,79 @@
-//! No queda español en lo que anathem imprime.
+//! No Spanish is left in what anathem prints.
 //!
-//! Es el modo de falla que esta migración produjo tres veces, y las tres
-//! fueron la misma forma: una capa traducida envolviendo otra que no. Un
-//! aviso del servidor con la primera línea en inglés y el resto en español;
-//! `recent_memories` imprimiendo `[tema:` mientras las otras dos tools
-//! decían `[topic:`; un `Not saved:` con el cuerpo del error en español.
-//! Ninguna la encontró quien escribió el cambio.
+//! This is the failure mode the migration produced three times, and all three
+//! had the same shape: a translated layer wrapping one that was not. A server
+//! notice with its first line in English and the rest in Spanish;
+//! `recent_memories` printing `[tema:` while the other two tools said
+//! `[topic:`; a `Not saved:` with the error body in Spanish. None of them was
+//! found by whoever wrote the change.
 //!
-//! Mira solo cadenas y saltea comentarios: los comentarios del repositorio
-//! ya están en inglés por otra vía, y mezclar las dos cosas haría fallar el
-//! guardia por razones que no son las suyas.
+//! It looks at strings only and skips comments: the repository's comments are
+//! in English by another route, and mixing the two would fail the guard for
+//! reasons that are not its own.
 
-/// Palabras que no existen en inglés y sí en el español que había. Son
-/// deliberadamente comunes: lo que se quiere cazar es una frase entera que
-/// se quedó sin traducir, no una palabra suelta.
+/// Words that do not exist in English and did exist in the Spanish that was
+/// here. Deliberately common: what is being hunted is a whole sentence left
+/// untranslated, not a stray word.
 const TELLTALE: &[&str] = &[
     "memoria", "búsqueda", "guardar", "guardada", "archivo", "paquete",
     "clave", "proyecto", "ventana", "tema", "ninguna", "ningún",
     "no se pudo", "no existe", "está", "tiene", "hay que", "según",
 ];
 
-/// `tags.rs` lleva los patrones de la taxonomía por defecto, que son regex
-/// pensadas para reconocer texto en español dentro de las memorias. Son
-/// datos, no mensajes: traducirlas cambiaría qué se etiqueta.
+/// `tags.rs` holds the default taxonomy's patterns, regexes meant to
+/// recognise Spanish text inside memories. They are data, not messages:
+/// translating them would change what gets tagged.
 const EXEMPT: &[&str] = &["src/tags.rs"];
 
-/// Cadenas en español que se quedan, cada una por una razón que no es
-/// pereza. Van aparte de `EXEMPT` a propósito: eximir un archivo entero
-/// esconde lo que venga después, y estas son pocas y conocidas.
+/// Spanish strings that stay, each for a reason that is not laziness. They
+/// are kept apart from `EXEMPT` on purpose: exempting a whole file hides
+/// whatever comes after it, and these are few and known.
 const ALLOWED: &[(&str, &str)] = &[
-    // Compatibilidad: son los nombres de clave que tenía `config.json`
-    // antes de 0.2.1 y que `serde(alias)` sigue aceptando. Traducirlos
-    // dejaría de leer los archivos que la gente ya tiene.
-    ("traspaso_items", "alias de config.json anterior a 0.2.1"),
-    ("traspaso_ventana", "alias de config.json anterior a 0.2.1"),
-    ("soltar_paquete_tras", "alias de config.json anterior a 0.2.1"),
-    // Migración: son los nombres de columna que la base tuvo y que
-    // `rename_columns_to_english` busca para renombrarlos. Si cambian, una
-    // base vieja deja de migrarse.
-    ("clave", "nombre de columna que la migración busca"),
-    ("valor", "nombre de columna que la migración busca"),
-    ("agente", "nombre de columna que la migración busca"),
-    ("creado_ts", "nombre de columna que la migración busca"),
-    // Dato almacenado: es el valor que va a `memories.project` cuando no se
-    // puede derivar uno. Cambiarlo partiría en dos los proyectos de
-    // cualquier base existente, lo cual es una migración de datos y no una
-    // traducción.
-    ("sin-proyecto", "valor guardado en memories.project"),
-    // Delimitadores del bloque de traspaso. Son marcadores, no prosa, y
-    // cambiarlos no mejora nada para quien los lee: el modelo solo tiene
-    // que verlos aparecer una vez.
-    ("<<<memorias-anathem>>>", "delimitador del bloque de datos"),
-    ("<<<fin-memorias-anathem>>>", "delimitador del bloque de datos"),
-    // Restos de una instalación interrumpida: el nombre del archivo lateral
-    // que `replace_file` crea. `doctor` los busca por este nombre, así que
-    // cambiarlo dejaría sin detectar los que ya estén en disco.
-    (".reemplazando-", "nombre de archivo que doctor busca"),
-    // El directorio donde viven los paquetes, en disco: `~/.anathem/paquetes/`.
-    // Renombrarlo dejaría a toda instalación existente sin encontrar su
-    // paquete, así que es una migración de archivos y no una traducción. El
-    // fallback de `replace_file` lo acompaña por la misma razón.
-    ("paquetes", "directorio en disco de las instalaciones existentes"),
-    ("paquete", "fallback del nombre de archivo lateral"),
+    // Compatibility: the key names `config.json` had before 0.2.1, which
+    // `serde(alias)` still accepts. Translating them would stop reading the
+    // files people already have.
+    ("traspaso_items", "config.json alias from before 0.2.1"),
+    ("traspaso_ventana", "config.json alias from before 0.2.1"),
+    ("soltar_paquete_tras", "config.json alias from before 0.2.1"),
+    // Migration: column names the database had and that
+    // `rename_columns_to_english` looks for to rename them. If they change, an
+    // old database stops migrating.
+    ("clave", "column name the migration looks for"),
+    ("valor", "column name the migration looks for"),
+    ("agente", "column name the migration looks for"),
+    ("creado_ts", "column name the migration looks for"),
+    // Stored data: the value `memories.project` gets when none can be
+    // derived. Changing it would split every existing database's projects in
+    // two, which is a data migration and not a translation.
+    ("sin-proyecto", "value stored in memories.project"),
+    // Delimiters of the handoff block. They are markers, not prose, and
+    // changing them improves nothing for whoever reads them: the model only
+    // has to see them appear once.
+    ("<<<memorias-anathem>>>", "delimiter of the data block"),
+    ("<<<fin-memorias-anathem>>>", "delimiter of the data block"),
+    // Leftovers of an interrupted installation: the name of the side file
+    // `replace_file` creates. `doctor` looks for them by this name, so
+    // changing it would stop detecting the ones already on disk.
+    (".reemplazando-", "file name doctor looks for"),
+    // The directory packs live in, on disk: `~/.anathem/paquetes/`.
+    // Renaming it would leave every existing installation unable to find its
+    // pack, so it is a file migration and not a translation. `replace_file`'s
+    // fallback comes along for the same reason.
+    ("paquetes", "on-disk directory of existing installations"),
+    ("paquete", "fallback of the side file name"),
 ];
 
-/// Las partes de `text` que están dentro de una cadena, con su número de
-/// línea.
+/// The parts of `text` that are inside a string, with their line number.
 ///
-/// Recorre el archivo entero llevando cuenta de si está adentro de una
-/// cadena, en vez de mirar cada línea por su cuenta. La primera versión de
-/// esto hacía `find('"')` y `rfind('"')` sobre cada línea y devolvía nada
-/// cuando no había dos: o sea que saltaba TODAS las líneas de una cadena
-/// multilínea, que es justo donde vivía el español que quedaba. El guardia
-/// pasaba en verde con cinco mensajes enteros sin traducir.
+/// It walks the whole file keeping track of whether it is inside a string,
+/// instead of looking at each line on its own. The first version did
+/// `find('"')` and `rfind('"')` per line and returned nothing when there were
+/// not two: it skipped EVERY line of a multi-line string, which is exactly
+/// where the remaining Spanish lived. The guard passed green with five whole
+/// messages untranslated.
 ///
-/// `'"'` se neutraliza antes de recorrer: es un literal de carácter y no
-/// abre nada, pero el recorrido lo contaría como si abriera.
+/// `'"'` is neutralised before walking: it is a character literal and opens
+/// nothing, but the walk would count it as opening.
 fn strings_in(text: &str) -> Vec<(usize, String)> {
     let mut out = Vec::new();
     let mut inside = false;
@@ -95,8 +93,8 @@ fn strings_in(text: &str) -> Vec<(usize, String)> {
                 esc = true;
             } else if c == '"' {
                 if inside && !part.trim().is_empty() {
-                    // Cierra: se emite este literal y no se mezcla con el
-                    // siguiente de la misma línea.
+                    // Closes: emit this literal and do not merge it with the
+                    // next one on the same line.
                     out.push((start, std::mem::take(&mut part)));
                 } else {
                     part.clear();
@@ -107,8 +105,8 @@ fn strings_in(text: &str) -> Vec<(usize, String)> {
                 part.push(c);
             }
         }
-        // Una cadena multilínea sigue abierta: se guarda lo de esta línea
-        // para que el mensaje señale dónde está, y se sigue acumulando.
+        // A multi-line string is still open: keep this line's part so the
+        // message can point at where it is, and keep accumulating.
         if inside && !part.trim().is_empty() {
             out.push((n + 1, std::mem::take(&mut part)));
         }
@@ -129,14 +127,14 @@ fn no_spanish_left_in_any_user_facing_string() {
             continue;
         }
         for (n, s) in strings_in(&std::fs::read_to_string(&p).unwrap()) {
-            // Coincidencia exacta y no `contains`: una entrada como «clave»
-            // comparada con `contains` eximiría cualquier cadena futura que
-            // tuviera esa palabra, y con ella las dieciocho delatoras. Las
-            // tres que sí son fragmentos van aparte y dicen por qué.
+            // Exact match, not `contains`: an entry like «clave» compared
+            // with `contains` would exempt any future string holding that
+            // word, and the eighteen telltales with it. The three that are
+            // genuinely fragments sit apart and say why.
             const FRAGMENTS: &[&str] = &[
-                // Aparece embebido en el nombre del archivo lateral.
+                // Appears embedded in the side file's name.
                 ".reemplazando-",
-                // Los delimitadores viajan dentro del texto de traspaso.
+                // The delimiters travel inside the handoff text.
                 "<<<memorias-anathem>>>",
                 "<<<fin-memorias-anathem>>>",
             ];
@@ -147,26 +145,26 @@ fn no_spanish_left_in_any_user_facing_string() {
             let lower = s.to_lowercase();
             for t in TELLTALE {
                 if lower.contains(t) {
-                    offenders.push(format!("{}:{} «{t}» en {}", as_str, n, s.trim()));
+                    offenders.push(format!("{}:{} «{t}» in {}", as_str, n, s.trim()));
                 }
             }
         }
     }
     assert!(
         offenders.is_empty(),
-        "quedó español en cadenas que ve el usuario:\n{}",
+        "Spanish left in strings the user sees:\n{}",
         offenders.join("\n")
     );
 }
 
-/// Lo mismo para los scripts. Un instalador a medio traducir es peor que uno
-/// entero en español: quien lo corre ve media frase que entiende y media que
-/// no, y no sabe si el problema es suyo.
+/// The same for the scripts. A half-translated installer is worse than one
+/// entirely in Spanish: whoever runs it sees half a sentence they understand
+/// and half they do not, and cannot tell whether the problem is theirs.
 ///
-/// Acá no hay cadenas que separar de los comentarios —todo el archivo es
-/// texto— así que mira el archivo entero menos las líneas que son
-/// claramente identificadores, y se apoya en que el español lleva acentos
-/// con mucha más frecuencia que el inglés lleva caracteres no-ASCII.
+/// Here there are no strings to separate from the comments — the whole file
+/// is text — so it looks at the whole file except the lines that are clearly
+/// identifiers, and relies on Spanish carrying accents far more often than
+/// English carries non-ASCII characters.
 #[test]
 fn no_spanish_left_in_the_scripts() {
     let mut offenders = Vec::new();
@@ -176,8 +174,8 @@ fn no_spanish_left_in_the_scripts() {
             continue;
         }
         for (n, line) in std::fs::read_to_string(&p).unwrap().lines().enumerate() {
-            // Las banderas viejas siguen aceptándose en el `case`, a
-            // propósito: son compatibilidad, no texto sin traducir.
+            // The old flags are still accepted in the `case`, on purpose:
+            // they are compatibility, not untranslated text.
             if line.contains("--compilar") || line.contains("--etiqueta")
                 || line.contains("--paquete") || line.contains("--sin-paquete")
                 || line.contains("--configurar-path") || line.contains("--conectar")
@@ -192,7 +190,7 @@ fn no_spanish_left_in_the_scripts() {
     }
     assert!(
         offenders.is_empty(),
-        "quedó español en los scripts:\n{}",
+        "Spanish left in the scripts:\n{}",
         offenders.join("\n")
     );
 }

@@ -23,7 +23,7 @@ fn a_single_token_yields_its_axis() {
     support::write_pack_mini(&r, "mini-es");
     let p = Pack::open_pack(&r).unwrap();
     let v = p.embed("hola").unwrap();
-    assert!((v[0] - 1.0).abs() < 1e-5, "esperaba el eje 0, salió {v:?}");
+    assert!((v[0] - 1.0).abs() < 1e-5, "expected axis 0, got {v:?}");
     assert!(v[1].abs() < 1e-5 && v[2].abs() < 1e-5 && v[3].abs() < 1e-5);
 }
 
@@ -35,8 +35,8 @@ fn two_tokens_average_their_rows() {
     let p = Pack::open_pack(&r).unwrap();
     let v = p.embed("hola mundo").unwrap();
     let expected = 1.0f32 / 2f32.sqrt();
-    assert!((v[0] - expected).abs() < 1e-5, "salió {v:?}");
-    assert!((v[1] - expected).abs() < 1e-5, "salió {v:?}");
+    assert!((v[0] - expected).abs() < 1e-5, "got {v:?}");
+    assert!((v[1] - expected).abs() < 1e-5, "got {v:?}");
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn the_suffix_is_re_segmented_instead_of_falling_back_to_unknown() {
     support::write_pack_mini(&r, "mini-es");
     let p = Pack::open_pack(&r).unwrap();
     let v = p.embed("mundos").unwrap();
-    assert!(v[1] > 0.1 && v[2] > 0.1, "esperaba mezcla de ▁mundo y s, salió {v:?}");
+    assert!(v[1] > 0.1 && v[2] > 0.1, "expected a mix of ▁mundo and s, got {v:?}");
 }
 
 #[test]
@@ -59,7 +59,7 @@ fn empty_text_yields_a_null_vector_without_failing() {
     let p = Pack::open_pack(&r).unwrap();
     let v = p.embed("").unwrap();
     assert_eq!(v.len(), 4);
-    assert!(cos(&v, &v) < 1e-9, "esperaba el vector nulo, salió {v:?}");
+    assert!(cos(&v, &v) < 1e-9, "expected the null vector, got {v:?}");
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn it_rejects_a_file_without_the_magic() {
     let r = d.path().join("basura.anathem-pack");
     std::fs::write(&r, b"esto no es un paquete en absoluto").unwrap();
     let e = Pack::open_pack(&r).unwrap_err().to_string();
-    assert!(e.contains("ANPK"), "el error debe nombrar la marca: {e}");
+    assert!(e.contains("ANPK"), "the error has to name the magic: {e}");
 }
 
 #[test]
@@ -78,7 +78,7 @@ fn it_rejects_a_version_it_does_not_understand() {
     support::write_pack_mini(&r, "mini-es");
     support::corrupt_byte(&r, 4, 99); // el primer byte de la versión
     let e = Pack::open_pack(&r).unwrap_err().to_string();
-    assert!(e.contains("version"), "el error debe nombrar la versión: {e}");
+    assert!(e.contains("version"), "the error has to name the version: {e}");
 }
 
 #[test]
@@ -89,8 +89,8 @@ fn it_rejects_a_truncated_file() {
     let b = std::fs::read(&r).unwrap();
     std::fs::write(&r, &b[..b.len() - 5]).unwrap();
     let e = Pack::open_pack(&r).unwrap_err().to_string();
-    assert!(e.contains("truncated"), "el error debe nombrar la causa: {e}");
-    assert!(e.contains("mini.anathem-pack"), "el error debe nombrar el archivo: {e}");
+    assert!(e.contains("truncated"), "the error has to name the cause: {e}");
+    assert!(e.contains("mini.anathem-pack"), "the error has to name the file: {e}");
 }
 
 #[test]
@@ -109,8 +109,8 @@ fn it_rejects_a_corrupt_tokenizer_length_without_panicking() {
         support::corrupt_byte(&r, base + i, 0xFF);
     }
     let e = Pack::open_pack(&r).unwrap_err().to_string();
-    assert!(e.contains("tokenizer"), "el error debe nombrar la causa: {e}");
-    assert!(e.contains("mini.anathem-pack"), "el error debe nombrar el archivo: {e}");
+    assert!(e.contains("tokenizer"), "the error has to name the cause: {e}");
+    assert!(e.contains("mini.anathem-pack"), "the error has to name the file: {e}");
 }
 
 #[test]
@@ -137,8 +137,8 @@ fn it_rejects_a_table_smaller_than_the_vocabulary() {
     let r = d.path().join("corto.anathem-pack");
     support::write_pack_rows(&r, "corto-es", 4, &[vec![0, 0, 0, 0], vec![10, 0, 0, 0]]);
     let e = Pack::open_pack(&r).unwrap_err().to_string();
-    assert!(e.contains("tokenizer"), "el error debe explicar la incoherencia: {e}");
-    assert!(e.contains("corto.anathem-pack"), "el error debe nombrar el archivo: {e}");
+    assert!(e.contains("tokenizer"), "the error has to explain the mismatch: {e}");
+    assert!(e.contains("corto.anathem-pack"), "the error has to name the file: {e}");
 }
 
 #[test]
@@ -160,14 +160,14 @@ fn it_accepts_an_added_token_whose_id_is_outside_the_table() {
         &[vec![0, 0, 0, 0], vec![10, 0, 0, 0], vec![0, 10, 0, 0], vec![0, 0, 10, 0]],
         support::TOKENIZER_CON_AGREGADO_FUERA_DE_RANGO,
     );
-    let p = Pack::open_pack(&r).expect("un added_token fuera de rango no invalida la tabla");
+    let p = Pack::open_pack(&r).expect("an out-of-range added_token does not invalidate the table");
     assert_eq!(p.name(), "agregados-es");
     // And it still embeds just like the usual fixture.
     let v = p.embed("hola").unwrap();
-    assert!((v[0] - 1.0).abs() < 1e-5, "esperaba el eje 0, salió {v:?}");
+    assert!((v[0] - 1.0).abs() < 1e-5, "expected axis 0, got {v:?}");
     // The added token has no row and breaks nothing.
     let v = p.embed("<mask> hola").unwrap();
-    assert!((v[0] - 1.0).abs() < 1e-5, "esperaba el eje 0, salió {v:?}");
+    assert!((v[0] - 1.0).abs() < 1e-5, "expected axis 0, got {v:?}");
 }
 
 // --- A-1: the declared name is a path, and has to be an inert one ---------
@@ -220,7 +220,7 @@ fn it_accepts_the_names_real_packs_use() {
         let r = d.path().join("bueno.anathem-pack");
         support::write_pack_mini(&r, name);
         let p = Pack::open_pack(&r)
-            .unwrap_or_else(|e| panic!("{name:?} es un nombre legítimo y fue rechazado: {e}"));
+            .unwrap_or_else(|e| panic!("{name:?} is a legitimate name and was rejected: {e}"));
         assert_eq!(p.name(), name);
     }
 }

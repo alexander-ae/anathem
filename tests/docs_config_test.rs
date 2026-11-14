@@ -57,12 +57,12 @@ fn config_blocks() -> Vec<(String, String)> {
 #[test]
 fn every_documented_config_is_one_the_binary_accepts() {
     let bloques = config_blocks();
-    assert!(!bloques.is_empty(), "no se encontró ningún ejemplo de config.json en los docs");
+    assert!(!bloques.is_empty(), "no config.json example was found in the docs");
     for (donde, cuerpo) in bloques {
         let d = tempfile::tempdir().unwrap();
         std::fs::write(d.path().join("config.json"), &cuerpo).unwrap();
         config::load(d.path()).unwrap_or_else(|e| {
-            panic!("{donde} muestra un config.json que el binario rechaza: {e}\n{cuerpo}")
+            panic!("{donde} shows a config.json the binary rejects: {e}\n{cuerpo}")
         });
     }
 }

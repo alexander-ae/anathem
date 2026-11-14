@@ -23,8 +23,8 @@ fn install_registers_the_pack_and_reports_it() {
 
     let s = mem(d.path(), &["model", "status"]);
     let txt = String::from_utf8_lossy(&s.stdout).to_string();
-    assert!(txt.contains("mini-es"), "status debe nombrar el paquete: {txt}");
-    assert!(txt.contains("1/1"), "status debe reportar cobertura completa: {txt}");
+    assert!(txt.contains("mini-es"), "status has to name the pack: {txt}");
+    assert!(txt.contains("1/1"), "status has to report full coverage: {txt}");
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn install_rejects_a_sha256_that_does_not_match() {
     )
     .unwrap();
     let o = mem(d.path(), &["model", "install", r.to_str().unwrap()]);
-    assert!(!o.status.success(), "un sha que no coincide tiene que fallar");
+    assert!(!o.status.success(), "a sha that does not match has to fail");
     assert!(String::from_utf8_lossy(&o.stderr).contains("sha256"));
 }
 
@@ -57,7 +57,7 @@ fn status_with_no_pack_says_so_and_does_not_fail() {
     let o = mem(d.path(), &["model", "status"]);
     assert!(o.status.success());
     let txt = String::from_utf8_lossy(&o.stdout).to_string();
-    assert!(txt.contains("no pack"), "salió: {txt}");
+    assert!(txt.contains("no pack"), "exit: {txt}");
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn removing_the_pack_falls_back_to_bm25_without_breaking_search() {
     assert!(String::from_utf8_lossy(&s.stdout).contains("no pack"));
 
     let b = mem(d.path(), &["search", "hola"]);
-    assert!(b.status.success(), "la búsqueda tiene que seguir andando");
+    assert!(b.status.success(), "search has to keep working");
     assert!(String::from_utf8_lossy(&b.stdout).contains("hola"));
 }
 
@@ -89,7 +89,7 @@ fn a_missing_pack_file_degrades_search_to_bm25() {
     std::fs::remove_file(anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack")).unwrap();
 
     let o = mem(d.path(), &["search", "hola"]);
-    assert!(o.status.success(), "buscar no puede fallar por un paquete ausente");
+    assert!(o.status.success(), "search cannot fail because a pack is missing");
     assert!(String::from_utf8_lossy(&o.stderr).contains("warning"));
 }
 
@@ -144,15 +144,15 @@ fn switching_packs_rebuilds_the_index_instead_of_mixing() {
 
     let s = mem(d.path(), &["model", "status"]);
     let txt = String::from_utf8_lossy(&s.stdout).to_string();
-    assert!(txt.contains("ancho-es"), "debe quedar el último instalado: {txt}");
-    assert!(txt.contains("1/1"), "el índice debe estar completo y rehecho: {txt}");
+    assert!(txt.contains("ancho-es"), "the last installed one has to remain: {txt}");
+    assert!(txt.contains("1/1"), "the index has to be complete and rebuilt: {txt}");
 
     // And the stored vectors have to be 8-dimensional, not 4.
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let largo: i64 = conn
         .query_row("select length(vec) from chunk_vectors limit 1", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(largo, 8 * 4, "los vectores viejos de 4 dimensiones sobrevivieron");
+    assert_eq!(largo, 8 * 4, "the old 4-dimension vectors survived");
 }
 
 #[test]
@@ -165,8 +165,8 @@ fn a_pack_swapped_by_hand_triggers_the_reindex() {
     mem(d.path(), &["save", "hola mundo"]);
     mem(d.path(), &["model", "install", a.to_str().unwrap()]);
 
-    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
-    write_pack_wide(&instalado, "mini-es"); // mismo name, otras dimensiones
+    let installed = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
+    write_pack_wide(&installed, "mini-es"); // same name, other dimensions
 
     let o = mem(d.path(), &["search", "hola"]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
@@ -174,7 +174,7 @@ fn a_pack_swapped_by_hand_triggers_the_reindex() {
     let largo: i64 = conn
         .query_row("select length(vec) from chunk_vectors limit 1", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(largo, 8 * 4, "debió reindexar con el paquete que está de verdad");
+    assert_eq!(largo, 8 * 4, "it had to reindex with the pack that is actually there");
 }
 
 #[test]
@@ -190,8 +190,8 @@ fn a_name_mismatch_leaves_the_registry_consistent_with_disk() {
     mem(d.path(), &["save", "hola mundo"]);
     mem(d.path(), &["model", "install", a.to_str().unwrap()]);
 
-    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
-    support::write_pack_mini(&instalado, "otro-es"); // mismas dims, otro name
+    let installed = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
+    support::write_pack_mini(&installed, "otro-es"); // mismas dims, otro name
 
     let o1 = mem(d.path(), &["search", "hola"]);
     assert!(o1.status.success(), "{}", String::from_utf8_lossy(&o1.stderr));
@@ -200,7 +200,7 @@ fn a_name_mismatch_leaves_the_registry_consistent_with_disk() {
     // registered name and the name of the file on disk have to match.
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let (name, _sha, _dims) = anathem::vecstore::registered_pack(&conn).unwrap().unwrap();
-    assert_eq!(name, "otro-es", "el registro debe reflejar el nombre real del paquete");
+    assert_eq!(name, "otro-es", "the registry has to reflect the pack real name");
     let registered_path = anathem::packstore::packs_dir(d.path()).join(format!("{name}.anathem-pack"));
     assert!(
         registered_path.exists(),
@@ -235,30 +235,30 @@ fn reinstalling_from_the_installed_path_does_not_destroy_the_pack() {
     let o = mem(d.path(), &["model", "install", r.to_str().unwrap()]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
 
-    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
-    let tam = std::fs::metadata(&instalado).unwrap().len();
+    let installed = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
+    let tam = std::fs::metadata(&installed).unwrap().len();
     assert!(tam > 0);
 
-    let o = mem(d.path(), &["model", "install", instalado.to_str().unwrap()]);
+    let o = mem(d.path(), &["model", "install", installed.to_str().unwrap()]);
     assert!(
         o.status.success(),
         "reinstalar desde la ruta ya instalada tiene que funcionar: {}",
         String::from_utf8_lossy(&o.stderr)
     );
     assert_eq!(
-        std::fs::metadata(&instalado).unwrap().len(),
+        std::fs::metadata(&installed).unwrap().len(),
         tam,
         "el paquete quedó truncado en disco"
     );
 
     let s = mem(d.path(), &["model", "status"]);
     let txt = String::from_utf8_lossy(&s.stdout).to_string();
-    assert!(txt.contains("1/1"), "los vectores tienen que seguir estando: {txt}");
+    assert!(txt.contains("1/1"), "the vectors have to still be there: {txt}");
 
     let b = mem(d.path(), &["search", "hola"]);
     assert!(b.status.success());
     let err = String::from_utf8_lossy(&b.stderr).to_string();
-    assert!(!err.contains("warning"), "no puede quedar avisando para siempre: {err}");
+    assert!(!err.contains("warning"), "it cannot keep warning for ever: {err}");
 
     // And the install leaves no temporaries lying around in `packs/` — the
     // pack and the sidecar it writes beside it are the whole contents.
@@ -299,7 +299,7 @@ fn a_pack_that_recognizes_nothing_is_rejected_without_touching_the_current_one()
         txt.contains("mini-es"),
         "el paquete que estaba tiene que sobrevivir a una instalación rechazada: {txt}"
     );
-    assert!(txt.contains("1/1"), "y sus vectores también: {txt}");
+    assert!(txt.contains("1/1"), "and its vectors too: {txt}");
 }
 
 #[test]
@@ -356,14 +356,14 @@ fn an_install_cut_short_after_the_rename_does_not_keep_querying_the_old_build() 
     let old = d.path().join("viejo.anathem-pack");
     let new_id = d.path().join("nuevo.anathem-pack");
     support::write_pack_mini(&old, "mini-es"); // ▁hola -> eje 0
-    support::write_pack_permuted(&new_id, "mini-es"); // mismo name y dims, ▁hola -> eje 3
+    support::write_pack_permuted(&new_id, "mini-es"); // same name and dims, ▁hola -> axis 3
 
     mem(d.path(), &["save", "hola mundo"]);
     assert!(mem(d.path(), &["model", "install", old.to_str().unwrap()]).status.success());
     {
         let conn = rusqlite::Connection::open(&db).unwrap();
         let v = support::read_vector(&conn, "select vec from chunk_vectors");
-        assert!(v[0] > 0.5, "precondición: el índice es del build viejo, salió {v:?}");
+        assert!(v[0] > 0.5, "precondition: the index is from the old build, got {v:?}");
         // Killing the process exactly between the rename and the
         // `adopt_pack` is not something a test can ask for. Instead the
         // `adopt_pack` is made to fail, which leaves precisely the same
@@ -377,10 +377,10 @@ fn an_install_cut_short_after_the_rename_does_not_keep_querying_the_old_build() 
     }
 
     let o = mem(d.path(), &["model", "install", new_id.to_str().unwrap()]);
-    assert!(!o.status.success(), "esta instalación tenía que quedar cortada");
-    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
+    assert!(!o.status.success(), "this installation had to be cut short");
+    let installed = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
     assert_eq!(
-        std::fs::read(&instalado).unwrap(),
+        std::fs::read(&installed).unwrap(),
         std::fs::read(&new_id).unwrap(),
         "precondición: el rename ya pasó y en disco está el build nuevo"
     );
@@ -423,10 +423,10 @@ fn a_complete_install_leaves_no_mark_behind() {
     mem(d.path(), &["save", "hola mundo"]);
     assert!(mem(d.path(), &["model", "install", r.to_str().unwrap()]).status.success());
 
-    assert_eq!(install_marks(&db), 0, "la instalación terminó: la marca sobra");
+    assert_eq!(install_marks(&db), 0, "the installation finished: the mark is left over");
     let o = mem(d.path(), &["search", "hola"]);
     let err = String::from_utf8_lossy(&o.stderr).to_string();
-    assert!(err.is_empty(), "una instalación sana no puede dejar avisando a cada búsqueda: {err}");
+    assert!(err.is_empty(), "a healthy install cannot keep warning on every search: {err}");
 }
 
 #[test]
@@ -451,8 +451,8 @@ fn an_install_failing_before_touching_the_file_leaves_no_mark() {
     std::fs::write(target.join("ocupado"), b"x").unwrap();
 
     let o = mem(d.path(), &["model", "install", r.to_str().unwrap()]);
-    assert!(!o.status.success(), "el rename imposible tiene que hacer fallar la instalación");
-    assert_eq!(install_marks(&db), 0, "el archivo no se tocó: la marca no corresponde");
+    assert!(!o.status.success(), "the impossible rename has to fail the installation");
+    assert_eq!(install_marks(&db), 0, "the file was not touched: the mark does not belong");
 
     // And no temporaries are left lying around either.
     let extras: Vec<String> = std::fs::read_dir(&packs)
@@ -477,10 +477,10 @@ fn install_refuses_a_pack_with_no_sha256_beside_it() {
     mem(d.path(), &["save", "hola mundo"]);
 
     let o = mem(d.path(), &["model", "install", r.to_str().unwrap()]);
-    assert!(!o.status.success(), "sin sha256 al lado no se puede verificar nada");
+    assert!(!o.status.success(), "with no sha256 beside it nothing can be verified");
     let err = String::from_utf8_lossy(&o.stderr).to_string();
-    assert!(err.contains("sha256"), "tiene que decir qué falta: {err}");
-    assert!(err.contains("--no-verify"), "y cómo seguir igual a propósito: {err}");
+    assert!(err.contains("sha256"), "it has to say what is missing: {err}");
+    assert!(err.contains("--no-verify"), "and how to carry on anyway on purpose: {err}");
 }
 
 #[test]
@@ -509,14 +509,14 @@ fn the_installed_pack_carries_its_sha256_so_reinstalling_still_verifies() {
     mem(d.path(), &["save", "hola mundo"]);
     assert!(mem(d.path(), &["model", "install", r.to_str().unwrap()]).status.success());
 
-    let instalado = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
+    let installed = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack");
     let firma = anathem::packstore::packs_dir(d.path()).join("mini-es.anathem-pack.sha256");
-    assert!(firma.exists(), "el paquete instalado tiene que quedar verificable");
+    assert!(firma.exists(), "the installed pack has to stay verifiable");
     assert!(
-        std::fs::read_to_string(&firma).unwrap().contains(&anathem::pack::sha256(&instalado).unwrap()),
+        std::fs::read_to_string(&firma).unwrap().contains(&anathem::pack::sha256(&installed).unwrap()),
         "y el sha que dice tiene que ser el del archivo que está"
     );
 
-    let o = mem(d.path(), &["model", "install", instalado.to_str().unwrap()]);
+    let o = mem(d.path(), &["model", "install", installed.to_str().unwrap()]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
 }

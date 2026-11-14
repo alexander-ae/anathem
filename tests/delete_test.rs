@@ -54,16 +54,16 @@ fn the_body_is_gone_from_everywhere_that_could_show_it() {
 
     // It is there first, or the rest of this test proves nothing.
     let (_, before) = mem(d.path(), &["search", NEEDLE]);
-    assert!(before.contains(NEEDLE), "la memoria tenía que estar antes: {before}");
+    assert!(before.contains(NEEDLE), "the memory had to be there before: {before}");
 
     let (ok, out) = mem(d.path(), &["delete", &i]);
     assert!(ok, "{out}");
 
     let (_, after) = mem(d.path(), &["search", NEEDLE]);
-    assert!(!after.contains(NEEDLE), "sigue en search: {after}");
+    assert!(!after.contains(NEEDLE), "still in search: {after}");
 
     let (ok, show) = mem(d.path(), &["show", &i]);
-    assert!(!show.contains(NEEDLE), "sigue en `mem show`: {show}");
+    assert!(!show.contains(NEEDLE), "still in `mem show`: {show}");
     assert!(!ok || show.contains("no memory") || show.contains("There is no"), "{show}");
 
     // The export is the other route the body used to leave by: `forget`
@@ -79,10 +79,10 @@ fn the_body_is_gone_from_everywhere_that_could_show_it() {
             found.push(f);
         }
     }
-    assert!(found.is_empty(), "el export todavía lo trae: {found:?}");
+    assert!(found.is_empty(), "the export still has it: {found:?}");
     // And the export is not empty, so the assertion above is about the
     // delete and not about an export that wrote nothing.
-    assert!(!walk(&out_dir).is_empty(), "el export no escribió nada");
+    assert!(!walk(&out_dir).is_empty(), "the export wrote nothing");
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn the_words_leave_the_index_and_the_file() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(hits, 0, "la palabra sigue en el índice FTS");
+    assert_eq!(hits, 0, "the word is still in the FTS index");
     drop(conn);
 
     // And the bytes. SQLite does not promise to return the pages to the
@@ -129,12 +129,12 @@ fn deleting_what_another_memory_supersedes_is_refused() {
                             "--project", "p", "--topic", "pay"]).0);
 
     let (ok, out) = mem(d.path(), &["delete", "1"]);
-    assert!(!ok, "tenía que negarse: {out}");
+    assert!(!ok, "it had to refuse: {out}");
     assert!(out.contains("superseded by 2"), "{out}");
-    assert!(out.contains("--force"), "el error tiene que decir la salida: {out}");
+    assert!(out.contains("--force"), "the error has to say the way out: {out}");
     // And nothing was removed by the refusal.
     let (_, show) = mem(d.path(), &["show", "1"]);
-    assert!(show.contains("stripe"), "la negativa no puede haber borrado nada: {show}");
+    assert!(show.contains("stripe"), "the refusal cannot have deleted anything: {show}");
 
     let (ok, out) = mem(d.path(), &["delete", "1", "--force"]);
     assert!(ok, "{out}");
@@ -155,7 +155,7 @@ fn the_database_stays_healthy_after_a_delete() {
     assert!(mem(d.path(), &["delete", &id.to_string()]).0);
 
     let (ok, out) = mem(d.path(), &["doctor"]);
-    assert!(ok, "doctor tenía que salir en 0:\n{out}");
+    assert!(ok, "doctor had to exit 0:\n{out}");
     assert!(out.contains("All good."), "{out}");
     assert!(out.contains("no orphans"), "{out}");
     assert!(out.contains("FTS5 index in sync"), "{out}");
@@ -179,13 +179,13 @@ fn forget_says_plainly_that_it_is_not_a_delete() {
     let (ok, out) = mem(d.path(), &["forget", &i]);
     assert!(ok, "{out}");
     assert!(out.contains("not a delete"), "{out}");
-    assert!(out.contains("mem delete"), "tiene que decir dónde está la otra: {out}");
+    assert!(out.contains("mem delete"), "it has to say where the other one is: {out}");
 
     // And it keeps meaning what it meant: out of search, still readable.
     let (_, search) = mem(d.path(), &["search", NEEDLE]);
     assert!(!search.contains(NEEDLE), "{search}");
     let (_, show) = mem(d.path(), &["show", &i]);
-    assert!(show.contains(NEEDLE), "`forget` no puede haber borrado el cuerpo: {show}");
+    assert!(show.contains(NEEDLE), "`forget` cannot have deleted the body: {show}");
 }
 
 #[test]
