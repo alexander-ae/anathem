@@ -26,6 +26,9 @@ struct Cli {
     /// Prints what was stored, control characters and all
     #[arg(long, global = true)]
     raw: bool,
+    /// Prints one JSON document instead of prose, for a program to read
+    #[arg(long, global = true)]
+    json: bool,
     #[command(subcommand)]
     cmd: Cmd,
 }
@@ -462,6 +465,30 @@ fn default_editor(is_windows: bool) -> &'static str {
     }
 }
 
+/// Whether a command has a document for `--json`.
+///
+/// A list kept by hand on purpose: the alternative is a default that grows
+/// silently, and a caller cannot tell a command that speaks JSON from one
+/// that happens to print something a parser tolerates. Adding one is a line
+/// here, a test and a paragraph in the doc — the same edit, three places,
+/// which is what keeps them in step.
+fn json_supported(cmd: &Cmd) -> bool {
+    matches!(
+        cmd,
+        Cmd::Search { .. }
+            | Cmd::Show { .. }
+            | Cmd::Recent { .. }
+            | Cmd::Topics
+            | Cmd::Log { .. }
+            | Cmd::Why { .. }
+            | Cmd::History { .. }
+            | Cmd::Stats { .. }
+            | Cmd::Stale { .. }
+            | Cmd::Save { .. }
+            | Cmd::Accept { .. }
+    )
+}
+
 /// Fills in whatever vectors are missing after a write path.
 ///
 /// The four paths that write (migrate, save, edit, reindex) call this and
@@ -472,7 +499,7 @@ fn default_editor(is_windows: bool) -> &'static str {
 /// Trouble in the vector layer is reported, it does not bring the command
 /// down: the memory is already saved, and losing the warning would be worse
 /// than losing the vector.
-fn sync_after_write(conn: &rusqlite::Connection, dir: &Path) {
+fn sync_after_write(conn: &rusqlite::Connection, dir: &Path, json: bool) {
     use anathem::vecstore::SyncOutcome;
     let active = anathem::packstore::resolve(conn, dir);
     active.warn();
@@ -481,6 +508,10 @@ fn sync_after_write(conn: &rusqlite::Connection, dir: &Path) {
     };
     match anathem::vecstore::sync(conn, p, identity) {
         Ok(SyncOutcome::Complete(0)) => {}
+        // stdout carries one JSON document under `--json`, and a line of
+        // prose in the middle of it is a document no parser will read. It
+        // still gets said, on the stream that is not the answer.
+        Ok(SyncOutcome::Complete(n)) if json => eprintln!("new vectors: {n}"),
         Ok(SyncOutcome::Complete(n)) => println!("new vectors: {n}"),
         // Another process installed or removed the pack while this one was
         // embedding. What was written before the change its `adopt_pack`
@@ -543,6 +574,19 @@ fn main() {
 fn run(cli: Cli) -> Result<()> {
     let path = resolve(&cli.db, dirs_home().as_deref())?;
     let raw = cli.raw;
+    // `--json` reaches the commands through this, not through a field on
+    // each one: it is one switch for the whole program, like `--raw`.
+    let json = cli.json;
+    // Printing prose into a pipe that asked for a document is the one
+    // failure nobody sees: the caller parses nothing, or parses the wrong
+    // thing later. A command without a document says so instead.
+    if json && !json_supported(&cli.cmd) {
+        anyhow::bail!(
+            "`--json` has no document for this command. The ones that have one are \
+             search, show, recent, topics, log, why, history, stats, stale, save and \
+             accept; `docs/integrations.md` says what each returns."
+        );
+    }
     // If there is a `tags.json` next to the database, its rules replace the
     // default taxonomy in `tags::classify` outright. It has to be set before
     // any operation that classifies memories (migrate, save, serve).
@@ -568,7 +612,7 @@ fn run(cli: Cli) -> Result<()> {
                     println!("  {ext_id}  {title}");
                 }
             }
-            sync_after_write(&conn, &dir);
+            sync_after_write(&conn, &dir, json);
         }
         Cmd::Search { query, project, tag, scope, since, until, limit, explain, budget } => {
             let conn = anathem::db::open(&path)?;
@@ -599,6 +643,17 @@ fn run(cli: Cli) -> Result<()> {
             };
             let q = scopes.onto(q)?;
             let hits = anathem::search::run_explained(&conn, &q, &ctx)?;
+            if json {
+                // The same two facts the prose branches on below, read once
+                // here so a program gets them as fields instead of having to
+                // tell three sentences apart.
+                let total: i64 = conn.query_row(
+                    "select count(*) from memories where status = 'active'", [], |r| r.get(0))?;
+                let scope_empty = anathem::search::scope_is_empty(&conn, &q)?;
+                anathem::jsonout::print(&anathem::jsonout::search(
+                    &conn, &q, &hits, total, scope_empty)?)?;
+                return Ok(());
+            }
             if hits.is_empty() {
                 // An empty scope is its own answer. "No results among 300
                 // memories" would send someone rephrasing a query that was
@@ -704,18 +759,31 @@ fn run(cli: Cli) -> Result<()> {
                     &conn, &text, &project, tag, &from, ext_id.as_deref())?;
                 match got {
                     anathem::ingest::Received::Stored(g) => {
-                        println!(
-                            "received memory {} in {project}, from {from}, saved as a draft",
-                            g.id
-                        );
-                        println!("Nothing searches it until you accept it: `mem show {}` to read it, `mem accept {}` to let it in.", g.id, g.id);
-                        sync_after_write(&conn, &dir);
+                        if json {
+                            anathem::jsonout::print(&anathem::jsonout::received(
+                                g.id, &project, &from))?;
+                        } else {
+                            println!(
+                                "received memory {} in {project}, from {from}, saved as a draft",
+                                g.id
+                            );
+                            println!("Nothing searches it until you accept it: `mem show {}` to read it, `mem accept {}` to let it in.", g.id, g.id);
+                        }
+                        sync_after_write(&conn, &dir, json);
                     }
                     // Said plainly, and said differently from a save, because
                     // a mailbox reads this to decide whether the delivery
                     // landed. The id is printed either way so the two
                     // outcomes are equally actionable.
                     anathem::ingest::Received::AlreadyHere { id, from: before, when } => {
+                        if json {
+                            // Exit 0, like the prose: a retry that finds its
+                            // own earlier delivery landed. `written` is what
+                            // tells the two apart.
+                            anathem::jsonout::print(&anathem::jsonout::received_already(
+                                id, before.as_deref(), when.as_deref(), &from))?;
+                            return Ok(());
+                        }
                         println!("already received: memory {id} already carries that --ext-id; nothing was written");
                         let who = before.unwrap_or_else(|| "an unrecorded sender".into());
                         let fecha = when.map(|w| w.get(..16).unwrap_or(&w).to_string());
@@ -738,13 +806,17 @@ fn run(cli: Cli) -> Result<()> {
             let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
             let project = anathem::project::resolve(project, &cwd);
             let g = anathem::ingest::save_with_topic(&conn, &text, &project, tag, topic.as_deref(), None)?;
-            let labels = if g.tags.is_empty() { String::new() } else { format!(" [{}]", g.tags.join(", ")) };
-            let how = if explicit { "" } else { " (detected)" };
-            println!("saved memory {} in {project}{how}{labels}", g.id);
-            if let Some(msg) = g.describe() {
-                println!("{msg}");
+            if json {
+                anathem::jsonout::print(&anathem::jsonout::saved(&g))?;
+            } else {
+                let labels = if g.tags.is_empty() { String::new() } else { format!(" [{}]", g.tags.join(", ")) };
+                let how = if explicit { "" } else { " (detected)" };
+                println!("saved memory {} in {project}{how}{labels}", g.id);
+                if let Some(msg) = g.describe() {
+                    println!("{msg}");
+                }
             }
-            sync_after_write(&conn, &dir);
+            sync_after_write(&conn, &dir, json);
         }
         Cmd::Edit { id } => {
             let conn = anathem::db::open(&path)?;
@@ -787,7 +859,7 @@ fn run(cli: Cli) -> Result<()> {
                 // search until the next `mem reindex`.
                 anathem::edit::replace_body(&conn, id, &new_id)?;
                 println!("memory {id} updated");
-                sync_after_write(&conn, &dir);
+                sync_after_write(&conn, &dir, json);
             } else {
                 println!("no changes");
             }
@@ -813,12 +885,16 @@ fn run(cli: Cli) -> Result<()> {
             }
             let n = anathem::edit::reindex(&conn)?;
             println!("reindexed {n} memories");
-            sync_after_write(&conn, &dir);
+            sync_after_write(&conn, &dir, json);
         }
         Cmd::Stats { since, empty } => {
             let conn = anathem::db::open(&path)?;
             let cutoff = anathem::stats::cutoff_for(since.as_deref())?;
             let s = anathem::stats::collect(&conn, cutoff.as_deref())?;
+            if json {
+                anathem::jsonout::print(&anathem::jsonout::stats(&s))?;
+                return Ok(());
+            }
             if s.searches == 0 {
                 println!("No searches logged{}.\n\nOnly the MCP server writes to the log; \
                           searches run from this CLI are not recorded.",
@@ -1007,6 +1083,10 @@ every other key the file has, or put it in {} yourself:",
         Cmd::Stale { project, limit } => {
             let conn = anathem::db::open(&path)?;
             let filas = anathem::stale::never_read(&conn, project.as_deref(), limit)?;
+            if json {
+                anathem::jsonout::print(&anathem::jsonout::stale(&filas))?;
+                return Ok(());
+            }
             if filas.is_empty() {
                 println!("no active memories to show.");
                 return Ok(());
@@ -1125,6 +1205,10 @@ every other key the file has, or put it in {} yourself:",
         Cmd::Topics => {
             let conn = anathem::db::open(&path)?;
             let topics = anathem::maint::topics(&conn)?;
+            if json {
+                anathem::jsonout::print(&anathem::jsonout::topics(&topics))?;
+                return Ok(());
+            }
             if topics.is_empty() {
                 println!("No topic keys. They are created by saving with `mem save \"...\" --topic <key>`.");
             } else {
@@ -1144,7 +1228,11 @@ every other key the file has, or put it in {} yourself:",
             match (id, all) {
                 (Some(id), _) => {
                     let from = anathem::maint::accept(&conn, id)?;
-                    println!("accepted memory {id}, received from {from}; searches can see it now");
+                    if json {
+                        anathem::jsonout::print(&anathem::jsonout::accepted(&[id], &from))?;
+                    } else {
+                        println!("accepted memory {id}, received from {from}; searches can see it now");
+                    }
                 }
                 (None, true) => {
                     // No sender, no batch. "Everything waiting, from
@@ -1155,19 +1243,27 @@ every other key the file has, or put it in {} yourself:",
                                        whatever sent it, is the one decision this gate is for");
                     };
                     let n = anathem::maint::accept_all_from(&conn, &from)?;
-                    println!("accepted {n} memories received from {from}");
+                    if json {
+                        anathem::jsonout::print(&anathem::jsonout::accepted_all(n, &from))?;
+                    } else {
+                        println!("accepted {n} memories received from {from}");
+                    }
                 }
                 (None, false) => {
                     anyhow::bail!("`mem accept` needs a memory id, or --all --from <label>");
                 }
             }
-            sync_after_write(&conn, &dir);
+            sync_after_write(&conn, &dir, json);
         }
         Cmd::Show { id: Some(id), .. } => {
             let conn = anathem::db::open(&path)?;
             let Some(m) = anathem::maint::memory(&conn, id)? else {
                 anyhow::bail!("there is no memory with id:{id}");
             };
+            if json {
+                anathem::jsonout::print(&anathem::jsonout::show(&conn, &m)?)?;
+                return Ok(());
+            }
             println!("id: {}", m.id);
             println!("project: {}", m.project);
             println!("status: {}", m.status);
@@ -1194,7 +1290,12 @@ every other key the file has, or put it in {} yourself:",
             let conn = anathem::db::open(&path)?;
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let project = anathem::project::resolve(project, &cwd);
-            match anathem::maint::topic_state(&conn, &project, &topic)? {
+            let lookup = anathem::maint::topic_state(&conn, &project, &topic)?;
+            if json {
+                anathem::jsonout::print(&anathem::jsonout::topic(&project, &topic, &lookup))?;
+                return Ok(());
+            }
+            match lookup {
                 anathem::maint::TopicLookup::Unknown(keys) => {
                     // Exit 0, like every other read command here: nothing
                     // went wrong, the answer is simply that the key is not
@@ -1277,6 +1378,10 @@ every other key the file has, or put it in {} yourself:",
             let cfg = anathem::config::load(dir)?;
             let items = anathem::recent::list_recent_filtered(
                 &conn, project_.as_deref(), window, limit, cfg.excerpt, external)?;
+            if json {
+                anathem::jsonout::print(&anathem::jsonout::recent(&items))?;
+                return Ok(());
+            }
             // An empty answer under an implicit project is ambiguous: it is
             // either an empty mailbox or the wrong directory, and today both
             // print the same line. Only when the project was NOT asked for:
@@ -1299,6 +1404,10 @@ every other key the file has, or put it in {} yourself:",
         Cmd::History { id } => {
             let conn = anathem::db::open(&path)?;
             let chain = anathem::maint::history(&conn, id)?;
+            if json {
+                anathem::jsonout::print(&anathem::jsonout::history(id, &chain))?;
+                return Ok(());
+            }
             for (i, title, status) in chain {
                 anathem::output::print_line(&format!("{i:5}  [{status:10}]  {title}"), raw);
             }
@@ -1308,7 +1417,11 @@ every other key the file has, or put it in {} yourself:",
             if let Some(window) = prune {
                 let seconds = anathem::recent::duration_in_seconds(&window)?;
                 let n = anathem::logsearch::prune(&conn, project.as_deref(), seconds)?;
-                println!("removed {n} log entries older than {window}");
+                if json {
+                    anathem::jsonout::print(&anathem::jsonout::pruned(n, &window))?;
+                } else {
+                    println!("removed {n} log entries older than {window}");
+                }
             } else {
                 let unbounded = ["all", "todo"];
                 let window = if unbounded.iter().any(|k| since.trim().eq_ignore_ascii_case(k)) {
@@ -1318,6 +1431,10 @@ every other key the file has, or put it in {} yourself:",
                 };
                 let entries =
                     anathem::logsearch::list(&conn, project.as_deref(), window, limit)?;
+                if json {
+                    anathem::jsonout::print(&anathem::jsonout::log(&entries))?;
+                    return Ok(());
+                }
                 if entries.is_empty() {
                     println!("no searches logged in this window. {ONLY_MCP_IS_LOGGED}");
                 }
@@ -1343,6 +1460,10 @@ every other key the file has, or put it in {} yourself:",
         Cmd::Why { id } => {
             let conn = anathem::db::open(&path)?;
             let appearances = anathem::logsearch::why(&conn, id, 50)?;
+            if json {
+                anathem::jsonout::print(&anathem::jsonout::why(id, &appearances))?;
+                return Ok(());
+            }
             if appearances.is_empty() {
                 println!("id:{id} never came back from a logged search.");
                 println!("{ONLY_MCP_IS_LOGGED}");

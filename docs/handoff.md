@@ -285,3 +285,12 @@ and no API key for this: whoever can run `mem save` on a host can already
 run anything there, and a listening process would replace "the access
 control is the filesystem" with a surface that exists while you sleep. See
 [`security.md`](security.md).
+
+## When the sender is a program
+
+Everything above reads like prose because a person reads it. A mailbox is a
+program, and it needs to tell "written" from "already here" without parsing
+a sentence: `mem save --external --json` answers with `written`,
+`already_received` and the id, on one line, and `--json` does the same for
+the reading commands. The contract is in
+[`integrations.md`](integrations.md).
