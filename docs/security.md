@@ -147,6 +147,13 @@ What this does not cover: it is the CLI printing path. `get_memory` over MCP
 still returns the body unsanitized, on purpose — it is the content the agent
 asked for, and the model is not a terminal.
 
+`--json` is the third destination, and it follows the pipe rule: the bytes are
+the memory, escaped by JSON rather than by the caret notation, because a
+document a machine parses has no terminal to protect. It is still text
+somebody else may have written. Whoever reads it decides what it means, and an
+integration that treats a note as an instruction is the injection this page is
+about — see [`integrations.md`](integrations.md).
+
 ## What you can do
 
 - **Look at what comes in.** `mem recent` shows the latest along with who
