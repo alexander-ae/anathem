@@ -22,18 +22,18 @@ fn mem(db: &Path, args: &[&str]) -> std::process::Output {
 #[cfg(target_os = "linux")]
 fn vmrss_kb(pid: u32) -> u64 {
     let content = std::fs::read_to_string(format!("/proc/{pid}/status"))
-        .unwrap_or_else(|e| panic!("no se pudo leer /proc/{pid}/status: {e}"));
+        .unwrap_or_else(|e| panic!("could not read /proc/{pid}/status: {e}"));
     for line_ in content.lines() {
         if let Some(resto) = line_.strip_prefix("VmRSS:") {
             return resto
                 .split_whitespace()
                 .next()
-                .unwrap_or_else(|| panic!("línea VmRSS sin valor: {line_:?}"))
+                .unwrap_or_else(|| panic!("VmRSS line with no value: {line_:?}"))
                 .parse()
-                .unwrap_or_else(|e| panic!("VmRSS no numérico ({line_:?}): {e}"));
+                .unwrap_or_else(|e| panic!("non-numeric VmRSS ({line_:?}): {e}"));
         }
     }
-    panic!("/proc/{pid}/status no tiene línea VmRSS");
+    panic!("/proc/{pid}/status has no VmRSS line");
 }
 
 #[cfg(target_os = "linux")]
@@ -69,7 +69,7 @@ fn the_server_opens_the_pack_only_on_the_first_search() {
     let db = d.path().join("mem.db");
     assert!(mem(&db, &["init"]).status.success());
     let o = mem(&db, &["model", "install", PAQUETE_REAL]);
-    assert!(o.status.success(), "no se pudo instalar el paquete real: {}", String::from_utf8_lossy(&o.stderr));
+    assert!(o.status.success(), "could not install the real pack: {}", String::from_utf8_lossy(&o.stderr));
 
     let mut hijo = Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--db")
@@ -85,11 +85,11 @@ fn the_server_opens_the_pack_only_on_the_first_search() {
 
     send_(&mut entry, r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#);
     let resp = read_line(&mut out_text);
-    assert!(resp.contains("protocolVersion"), "el servidor no arrancó: {resp}");
+    assert!(resp.contains("protocolVersion"), "the server did not start: {resp}");
 
     send_(&mut entry, r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#);
     let resp = read_line(&mut out_text);
-    assert!(resp.contains("search_memory"), "tools/list no respondió bien: {resp}");
+    assert!(resp.contains("search_memory"), "tools/list did not answer properly: {resp}");
 
     // With a pack installed, `initialize` and `tools/list` do not need it:
     // neither of the two tools they expose has been called yet. The
@@ -109,7 +109,7 @@ fn the_server_opens_the_pack_only_on_the_first_search() {
         r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search_memory","arguments":{"query":"hola"}}}"#,
     );
     let resp = read_line(&mut out_text);
-    assert!(resp.contains("\"content\""), "la búsqueda no respondió bien: {resp}");
+    assert!(resp.contains("\"content\""), "the search did not answer properly: {resp}");
 
     let rss_despues = vmrss_kb(pid);
     assert!(

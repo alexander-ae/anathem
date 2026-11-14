@@ -65,8 +65,8 @@ fn a_database_from_an_earlier_version_opens_and_stays_healthy() {
     let d = database_from_fixture();
 
     let (ok, out) = mem(d.path(), &["doctor"]);
-    assert!(ok, "doctor falló sobre una base anterior:\n{out}");
-    assert!(!out.contains('✗'), "doctor encontró algo roto:\n{out}");
+    assert!(ok, "doctor failed on an older database:\n{out}");
+    assert!(!out.contains('✗'), "doctor found something broken:\n{out}");
 
     // The memories are all there, with the statuses they had. A migration
     // that silently dropped the drafts would also pass a health check.
@@ -75,13 +75,13 @@ fn a_database_from_an_earlier_version_opens_and_stays_healthy() {
     // And they are findable, which is the part a health check does not
     // cover: the FTS index has to have survived too.
     let (_, found) = mem(d.path(), &["search", "payment provider"]);
-    assert!(found.contains("Adyen"), "la memoria vigente no aparece:\n{found}");
-    assert!(!found.contains("Stripe"), "la superseded no puede volver a buscar:\n{found}");
+    assert!(found.contains("Adyen"), "the current memory does not appear:\n{found}");
+    assert!(!found.contains("Stripe"), "the superseded one cannot come back in search:\n{found}");
 
     // The supersession chain still walks backwards past the hole.
     let (ok, hist) = mem(d.path(), &["history", "2"]);
     assert!(ok, "{hist}");
-    assert!(hist.contains("Stripe"), "la cadena se perdió:\n{hist}");
+    assert!(hist.contains("Stripe"), "the chain was lost:\n{hist}");
 
     // Accents survived whatever the migration did to the index.
     let (_, enie) = mem(d.path(), &["search", "acentos"]);
@@ -105,12 +105,12 @@ fn an_export_from_an_earlier_version_imports_with_nothing_lost() {
         d.path(),
         &["import", "--from", "tests/fixtures/export-1.0"],
     );
-    assert!(ok, "la importación falló:\n{out}");
+    assert!(ok, "the import failed:\n{out}");
 
     let conn = rusqlite::Connection::open(d.path().join("mem.db")).unwrap();
     let count = |sql: &str| -> i64 { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
 
-    assert_eq!(count("select count(*) from memories"), 5, "falta alguna memoria");
+    assert_eq!(count("select count(*) from memories"), 5, "a memory is missing");
     assert_eq!(
         count("select count(*) from memories where status = 'active'"),
         3,
@@ -133,7 +133,7 @@ fn an_export_from_an_earlier_version_imports_with_nothing_lost() {
         2,
         "la clave de tema se perdió"
     );
-    assert!(count("select count(*) from memory_tags") >= 3, "se perdieron etiquetas");
+    assert!(count("select count(*) from memory_tags") >= 3, "tags were lost");
     assert_eq!(
         count("select count(*) from memories where received_from is not null"),
         1,
@@ -154,13 +154,13 @@ fn an_export_from_an_earlier_version_imports_with_nothing_lost() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(dangling, 0, "quedó un supersedes_id apuntando a nada");
+    assert_eq!(dangling, 0, "a supersedes_id was left pointing at nothing");
     drop(conn);
 
     // Searchable after the import, not merely stored: the chunks and the
     // index are rebuilt on the way in.
     let (_, found) = mem(d.path(), &["search", "migration before the code"]);
-    assert!(found.contains("migration"), "lo importado no se busca:\n{found}");
+    assert!(found.contains("migration"), "what was imported is not searchable:\n{found}");
 }
 
 // --------------------------------------------------- 3. the five tools
@@ -270,7 +270,7 @@ fn every_command_and_flag_the_readme_documents_still_runs() {
         }
 
         let (ok, help) = mem(d.path(), &[command, "--help"]);
-        assert!(ok, "el README documenta `mem {command}`, que ya no existe:\n{help}");
+        assert!(ok, "the README documents `mem {command}`, which no longer exists:\n{help}");
         checked += 1;
 
         for flag in flags {
@@ -284,5 +284,5 @@ fn every_command_and_flag_the_readme_documents_still_runs() {
     }
 
     // A parser that quietly matched nothing would pass this test forever.
-    assert!(checked >= 10, "solo se comprobaron {checked} comandos del README");
+    assert!(checked >= 10, "only {checked} README commands were checked");
 }

@@ -52,10 +52,10 @@ fn the_old_flags_are_hidden_from_help() {
     let d = tempfile::tempdir().unwrap();
     let (help, ok) = mem(&d.path().join("m.db"), &["recent", "--help"]);
     assert!(ok, "{help}");
-    assert!(help.contains("--since"), "la nueva tiene que aparecer: {help}");
-    assert!(help.contains("--limit"), "la nueva tiene que aparecer: {help}");
-    assert!(!help.contains("--desde"), "la vieja no puede aparecer: {help}");
-    assert!(!help.contains("--limite"), "la vieja no puede aparecer: {help}");
+    assert!(help.contains("--since"), "the new one has to appear: {help}");
+    assert!(help.contains("--limit"), "the new one has to appear: {help}");
+    assert!(!help.contains("--desde"), "the old one cannot appear: {help}");
+    assert!(!help.contains("--limite"), "the old one cannot appear: {help}");
 }
 
 #[test]
@@ -66,7 +66,7 @@ fn the_help_is_english_and_well_formed() {
     // The first line of each doc comment is the subcommand's summary: if one
     // is cut badly during a translation it disappears from the help.
     for sub in ["save", "search", "recent", "doctor", "export", "import", "model", "serve"] {
-        assert!(help.contains(sub), "falta el subcomando {sub}: {help}");
+        assert!(help.contains(sub), "missing subcommand {sub}: {help}");
     }
     for word in ["memoria", "búsqueda", "proyecto", "Guarda", "archivo", "paquete"] {
         assert!(!help.contains(word), "Spanish left in the help: «{word}»\n{help}");
@@ -95,14 +95,14 @@ fn the_unbounded_window_keyword_is_the_one_the_help_advertises() {
 #[test]
 fn the_help_and_doctor_say_where_the_project_lives() {
     let url = env!("CARGO_PKG_REPOSITORY");
-    assert!(url.starts_with("https://"), "el repositorio tiene que ser una URL: {url}");
+    assert!(url.starts_with("https://"), "the repository has to be a URL: {url}");
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
         .arg("--help")
         .output()
         .unwrap();
     let ayuda = String::from_utf8_lossy(&output.stdout);
-    assert!(ayuda.contains(url), "`mem --help` no dice dónde vive el proyecto:\n{ayuda}");
+    assert!(ayuda.contains(url), "`mem --help` does not say where the project lives:\n{ayuda}");
 
     let d = tempfile::tempdir().unwrap();
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_mem"))
@@ -112,7 +112,7 @@ fn the_help_and_doctor_say_where_the_project_lives() {
         .output()
         .unwrap();
     let doctor = String::from_utf8_lossy(&output.stdout);
-    assert!(doctor.contains(url), "`mem doctor` tampoco lo dice:\n{doctor}");
+    assert!(doctor.contains(url), "`mem doctor` does not say it either:\n{doctor}");
 }
 
 /// And `--version` does not, because its output is parsed: `mem update`
@@ -125,6 +125,6 @@ fn the_version_stays_machine_readable() {
         .output()
         .unwrap();
     let v = String::from_utf8_lossy(&output.stdout);
-    assert!(!v.contains("http"), "--version tiene que seguir siendo una línea sin URL: {v}");
+    assert!(!v.contains("http"), "--version has to stay one line with no URL: {v}");
     assert!(v.starts_with("mem "), "{v}");
 }

@@ -21,8 +21,8 @@ fn it_migrates_only_curated_ones_and_reports() {
     assert_eq!(rep.failed, 2, "fff, ggg");
 
     assert!(migrated_one(&conn, "aaa").is_some());
-    assert!(migrated_one(&conn, "ccc").is_none(), "no debe migrar session_turn");
-    assert!(migrated_one(&conn, "fff").is_none(), "no debe migrar status failed");
+    assert!(migrated_one(&conn, "ccc").is_none(), "it must not migrate session_turn");
+    assert!(migrated_one(&conn, "fff").is_none(), "it must not migrate status failed");
 }
 
 #[test]
@@ -33,8 +33,8 @@ fn it_uses_the_date_from_the_save_prefix() {
 
     let (_, title, created) = migrated_one(&conn, "aaa").unwrap();
     assert_eq!(created, "2026-09-21");
-    assert!(!title.contains("[SAVE:"), "el prefijo quedó en el título: {title}");
-    assert!(title.starts_with("El cache de PROJ-482"), "título: {title}");
+    assert!(!title.contains("[SAVE:"), "the prefix stayed in the title: {title}");
+    assert!(title.starts_with("El cache de PROJ-482"), "title: {title}");
 }
 
 #[test]
@@ -81,5 +81,5 @@ fn is_idempotent() {
     migrate::run(&conn, p).unwrap();
     migrate::run(&conn, p).unwrap();
     let n: i64 = conn.query_row("select count(*) from memories", [], |r| r.get(0)).unwrap();
-    assert_eq!(n, 3, "correr dos veces no debe duplicar");
+    assert_eq!(n, 3, "running twice must not duplicate");
 }
