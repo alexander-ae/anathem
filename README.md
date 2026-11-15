@@ -42,13 +42,16 @@ competing with the new one in searches. It is also far smaller and faster,
 and *What it costs*, below, says by how much without rounding in its own
 favour.
 
-Whether those are the right bets for you is a different question, and three
+Whether those are the right bets for you is a different question, and four
 documents answer it with numbers instead of adjectives:
 [supermemory](docs/comparison-with-supermemory.md),
 [Engram](docs/comparison-with-engram.md) — the nearest neighbour, which took
 the same decisions separately — and
 [OpenViking](docs/comparison-with-openviking.md), which takes the opposite
-ones at a far larger scale.
+ones at a far larger scale, and
+[Living Brain](docs/comparison-with-livingbrain.md), which makes the same
+argument about decoupling memory from the model and then compiles it with a
+model.
 
 ## When a text file is enough
 
@@ -343,6 +346,15 @@ question searches some 476 sessions instead of some 50, the same two runs are
 **78.0% and 81.6%**. That is the same code against a deeper haystack, and it
 is the number to carry if your memory is going to get large.
 
+**A second corpus, and a less comfortable one.** On [LoCoMo](docs/benchmarks.md),
+whose questions are written against 600-turn conversations and mark their
+evidence per turn, the same binary scores **87.6%** with the evidence in the
+top five when a memory is a session and **50.7%** when it is a turn. The unit
+decides the number more than the ranker does, and the vocabulary pack *costs*
+2.1 and 5.3 points there instead of gaining them — the third corpus to show
+that shape. LoCoMo's licence is CC BY-NC, so the numbers travel and the corpus
+does not.
+
 **And a real corpus is harder than either.** Measured over the author's own
 notes, asked in prose rather than in keywords, recall@5 is **52%** — 449
 memories and 50 queries, in
@@ -455,7 +467,7 @@ two years of notes was false in the direction nobody warns you about.
 - The research this was built on, including the papers that argue against it: [`docs/research.md`](docs/research.md)
 - The export format, which is complete enough to rebuild the database elsewhere: [`docs/export-format.md`](docs/export-format.md)
 - Windows: what the operating system forced to change, and why: [`docs/windows.md`](docs/windows.md)
-- Compared with [supermemory](docs/comparison-with-supermemory.md), [Engram](docs/comparison-with-engram.md) and [OpenViking](docs/comparison-with-openviking.md)
+- Compared with [supermemory](docs/comparison-with-supermemory.md), [Engram](docs/comparison-with-engram.md), [OpenViking](docs/comparison-with-openviking.md) and [Living Brain](docs/comparison-with-livingbrain.md)
 - What changed in each version: [`CHANGELOG.md`](CHANGELOG.md)
 - Where the tests run: on the GitHub mirror, through
   [`.github/workflows/test.yml`](.github/workflows/test.yml). GitLab has no

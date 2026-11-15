@@ -7,7 +7,9 @@ they cannot see.
 
 This is the reproducible one. It uses **LongMemEval**, which asks the same
 question anathem exists to answer — can the assistant find what it was told
-earlier — and ships the ground truth for it.
+earlier — and ships the ground truth for it. A second corpus, **LoCoMo**,
+follows below: a different shape of history, a different licence, and a
+result that does not flatter the same choices.
 
 ## The dataset
 
@@ -31,6 +33,7 @@ small IR alternative, but its licence is unresolved — the BEIR authors list it
 as "not reported", the source page permits academic use only, and the
 underlying NutritionFacts.org material carries separate terms. A benchmark
 whose terms you cannot state is not one you can ask other people to run.
+LoCoMo is the one that survived, and its terms are stated in its own section.
 
 ## Running it
 
@@ -428,6 +431,129 @@ above remains the only estimate for those. It is also one dataset of prose
 sessions; a corpus of technical notes divides into projects differently, and
 somebody whose whole memory is one repository gets the pooled row rather
 than the scoped one.
+
+## A second corpus: LoCoMo
+
+Everything above is one dataset, and someone could reasonably ask how much of
+it is a fact about anathem and how much is a fact about LongMemEval's shape:
+fifty sessions per question, each a block of prose. So the same questions were
+asked of **LoCoMo**, the benchmark from *Evaluating Very Long-Term
+Conversational Memory of LLM Agents* (Maharana et al., ACL 2024).
+
+It is a different animal. Ten conversations between two people, each running
+across 19 to 32 sessions and 369 to 689 turns, with 1,540 questions written
+against them, and the evidence marked **per turn** (`D12:3`) rather than per
+session. Its questions are split into multi-hop (282), temporal (321),
+open-domain (92) and single-hop (841) — the same 1,540-question, four-category
+subset the vendors quote, since its fifth category is adversarial and has no
+correct answer.
+
+**Its licence is stricter than LongMemEval's: CC BY-NC 4.0.** The figures here
+can be published with attribution; the corpus cannot travel with them. Nothing
+of it is in this repository, and `tools/locomo_to_memories.py` reads a file you
+download yourself. Measured on `data/locomo10.json`, sha256
+`79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4`,
+on 2026-11-15.
+
+Four of the 1,540 questions carry no evidence and are not cases. Six more
+need care with their evidence field: four pack several ids into one string
+(`["D8:6; D9:17"]`, `["D9:1 D4:4 D4:6"]`) and two carry a token that is not an
+id (`D`, `D:11:26`). The converter splits on `;` and spaces and reports the two
+malformed tokens, because reading the field as it comes would have dropped the
+second half of those questions' evidence and blamed the ranking for it.
+
+### Two units, and they are not interchangeable
+
+`--unit session` puts one memory per session: 272 memories, about 27
+candidates per question, which is what a memory is in anathem and what the
+LongMemEval conversion does. `--unit turn` puts one per dialog turn: 5,882
+memories and around 600 candidates per question, which is the setting the
+paper's own retrieval evaluation uses, since its context ids are dia_ids.
+
+Both are honest. Quoting one against a number measured the other way is how a
+benchmark gets misread, so both are here, in order.
+
+| | session bm25 | session hybrid | turn bm25 | turn hybrid |
+|---|--:|--:|--:|--:|
+| recall@5, any evidence | 87.6% | 86.2% | 50.7% | 44.9% |
+| recall@5, fraction of evidence | 81.5% | 79.4% | 45.6% | 40.3% |
+| recall@5, every evidence | 76.0% | 73.2% | 41.7% | 36.7% |
+| recall@50, any evidence | 100% | 100% | 75.5% | 75.5% |
+| MRR | 0.749 | 0.704 | 0.395 | 0.352 |
+| p50 per query | 10 ms | 11 ms | 14 ms | 17 ms |
+
+recall@5 by question type, as the mean fraction of the evidence, bm25:
+
+| question type | n | session | turn |
+|---|--:|--:|--:|
+| single-hop | 841 | 94.2% | 55.0% |
+| temporal | 321 | 83.7% | 55.0% |
+| multi-hop | 282 | **49.1%** | **15.3%** |
+| open-domain | 92 | 56.2% | 20.6% |
+
+### What those four columns say
+
+**The granularity decides the number, not the ranker.** Same corpus, same
+1,536 questions, same binary: 87.6% or 50.7% depending on whether a memory is
+a session or a turn. A note someone wrote is already an aggregation, and that
+aggregation is half of what answering a multi-hop question needs. Turn-level
+retrieval is the harder and more honest measure of a *retriever*; session-level
+is the one that describes a *memory*, which is what anathem is.
+
+**Multi-hop is the floor at both granularities, and the second piece of
+evidence is what goes missing.** At session level, 88% of questions have *some*
+evidence in the top 5 and only 24% of the multi-hop ones have *all* of it;
+at turn level, 3.5% do. This is the same shape as LongMemEval's
+`multi-session` row, reproduced on a dataset built by somebody else, and it
+says the binding constraint is assembling several places into one answer
+rather than finding any one of them.
+
+**The pack costs here, and that is worth publishing.** On LongMemEval the
+vector layer bought +2.4 points of fraction recall on -S and +3.6 on -M. On
+LoCoMo it costs 2.1 points at session level and 5.3 at turn level, and takes
+MRR down with it. The regression is the one already reported for
+`single-session-assistant`: a conversation is full of turns that are *about*
+the same thing without saying it, the vector half pulls those in, and RRF
+dilutes a BM25 rank-1 that was already right. Three datasets now show the same
+shape, which makes it a property of the fusion and not of one corpus. It does
+not make the pack a bad default — it makes it a per-corpus decision, and
+`mem tune` is the instrument for that decision.
+
+**And the 20-candidate protocol covers this corpus almost completely.**
+`mem eval` measures the ranking; what a model actually receives is
+`search_memory`, and `mem eval --as-mcp` measures that: same twenty
+candidates, 120-character excerpts, 1,200-token budget.
+
+| | session | turn |
+|---|--:|--:|
+| the expected memory is among the candidates | 99.7% | 71.2% |
+| it came first | 64.2% | 29.2% |
+| tokens spent, median | 1,163 | 1,182 |
+
+The first row is nearly tautological at session level and should be read that
+way: twenty candidates out of the twenty-seven a conversation has. What it
+says is that the payload is not where this dataset is lost. Counted strictly
+— every expected session among the candidates, which is what a multi-hop
+answer needs — it is **94.3%** for the same 1,536 questions; the binary
+reports the loose count, and the strict one was computed from the same cases.
+
+That remains a ceiling and not an accuracy: what the model sees is 120
+characters per candidate, and reading the fact itself costs a `get_memory`
+call.
+
+### What this section does not show
+
+It measures retrieval, like everything else in this file. LoCoMo's own scoring
+is answer accuracy, judged by a model against a reference answer, and that
+needs a model in the loop — which anathem does not have and this document
+cannot pay for. `tools/answer_eval.py` exists for that measurement and is
+documented in its own header; the figures it produces are not in this file.
+
+Session-level hits are also coarser than the dataset's own definition: the
+evidence is marked per turn, and a hit at session level says the right 600-turn
+block was found, not the right sentence. And 27 candidates per question is a
+small pool, which is why the session row should not be read as "anathem is at
+87.6% on LoCoMo" without the unit attached.
 
 ## Against published numbers
 
