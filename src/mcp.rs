@@ -351,17 +351,7 @@ fn call_tool(
                 ),
                 None => body,
             };
-            // The description of the tool says this too, and it is repeated
-            // here on purpose: the description is read once, when the client
-            // lists the tools, while this line is read at the moment the
-            // decision is made. Measured over LoCoMo: answering from the
-            // excerpts gets 17% of questions right and opening the bodies
-            // gets 45%, so the step worth spending a sentence on is the one
-            // between them.
-            Ok(text_result(format!(
-                "{body}\n\nThese are excerpts, not the memories. If the answer depends on what one \
-                 of them says, open it with `get_memory` before answering."
-            )))
+            Ok(text_result(body))
         }
         "save_memory" => {
             let text = args["text"].as_str().unwrap_or_default();

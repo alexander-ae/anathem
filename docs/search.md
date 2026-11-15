@@ -106,13 +106,13 @@ LoCoMo, putting the date where the model could see it — it had been living in
 the frontmatter, which `get_memory` does not return — took temporal questions
 from 29 % to 68 % in the arm that reads everything, with nothing else changed.
 
-**One sentence at the end of the result**: *these are excerpts, not the
-memories; if the answer depends on what one of them says, open it with
-`get_memory` before answering*. The tool description says the same thing and
-that is not the same sentence: the description is read once, when the client
-lists the tools, and this one is read where the decision is taken. Measured
-over LoCoMo: answering from the excerpts gets 17 % of questions right, opening
-the bodies gets 45 %.
+**What is *not* there: a sentence asking for the body.** It was added and
+then measured away. The tool description already says the result is excerpts
+and that `get_memory` returns the body, and repeating it in every result
+changed nothing: an agent given the choice answered **68.0 %** of LoCoMo's
+questions with the sentence in the payload and **69.0 %** without it, which
+is the same number twice. It cost about thirty tokens per search, so it went.
+The description stays, and the list keeps its own two stages.
 
 **A batch read.** `get_memory` takes `ids` as well as `id`, up to ten in one
 call, because three round trips is exactly the cost that makes an agent skip

@@ -46,14 +46,11 @@ live in the database, not in the binary.
   it the other way, by compiling pages with a model. Where it wins, where the
   numbers cannot be put side by side, and what was taken from it.
 
-- **The payload says what it could not say before.** Every candidate carries
-  the date its memory was created, and `get_memory` repeats it in the header;
-  the result ends with one sentence saying that these are excerpts and that
-  the answer may need the body. Over LoCoMo, putting the date where the model
-  could see it took temporal questions from 29 % to 68 % in the arm that read
-  everything — it had been in the frontmatter, which `get_memory` does not
-  return — and answering from the excerpts rather than opening them is the
-  difference between 17 % and 45 % of questions answered.
+- **Every candidate carries the date its memory was created**, and so does
+  the header `get_memory` returns. It had been in the frontmatter, which
+  `get_memory` does not return, so the model never saw it: over LoCoMo,
+  putting it where it can be seen took temporal questions from 29 % to 68 %
+  in the arm that read everything, with nothing else changed.
 
 - **`get_memory` reads several memories in one call.** It takes `ids` as well
   as `id`, up to ten, because three round trips is the cost that makes an
