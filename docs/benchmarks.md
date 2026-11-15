@@ -598,7 +598,17 @@ budget did not move at all — the last two rows are the same shape at two
 budgets, and 400 more tokens bought 1.9 points, inside the noise. That change
 is the one this measurement produced.
 
-**One thing was measured and thrown away:** a sentence at the end of the
+**Two things were built, measured and left out.** The first was a graduated
+payload: 300 characters for the top five candidates and 120 for the other
+fifteen, so that twenty of them fit in the same budget. It did what it was
+supposed to do and it did not help — strict coverage rose from 85.8% to 91.1%
+(all of it, 47.9% to 69.1% on multi-hop) and the answers *fell*, from 68.0% to
+65.3%. An agent decides what to open from what it reads, and fifteen
+candidates that read like the old payload pull it in the wrong direction: the
+quality of each candidate matters more than how many there are. The code is
+not in the binary; the measurement is here.
+
+**And so was the other thing:** a sentence at the end of the
 result asking the agent to open the body when the answer depends on it. It
 changed nothing — 68.0% with it, 69.0% without it — and it cost thirty tokens
 on every search, so it is not in the payload. The tool description already

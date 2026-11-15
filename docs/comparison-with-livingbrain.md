@@ -89,6 +89,13 @@ was measured here on 2026-11-15:
 | accuracy, judged | 92.2% | not measured |
 | full-context baseline accuracy | not reported | not measured |
 
+The distance to their number is now measurable from this side. A model at
+GPT-5's price point reading the whole history of each conversation answers
+**85.0%** of 100 of these questions; the same model with anathem's 1,200 tokens
+answers 76.0%. Their 92.2% is seven points above what raw history gives at a
+comparable tier, and that margin — if it survives a second run — is the most
+their architecture can be adding.
+
 Two things follow, and neither is a victory.
 
 **Their architecture is defensible on that table.** Compiling pages is how you
