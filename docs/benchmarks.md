@@ -612,6 +612,27 @@ candidates that read like the old payload pull it in the wrong direction: the
 quality of each candidate matters more than how many there are. The code is
 not in the binary; the measurement is here.
 
+**Multi-hop was attacked four times and did not move.** The arm where the
+model decides was also given the ability to search again with different words,
+up to twice, and then told to use it when a question needs facts from several
+conversations. Neither helped:
+
+| arm | answered | multi-hop |
+|---|--:|--:|
+| agent, decides whether to open bodies | 68.0% | 36.1% |
+| the same, and it may search again | 67.8% | 41.7% |
+| the same, and it is told to for multi-fact questions | 65.5% | 32.4% |
+
+Multi-hop is 37 questions in this sample, so a ±26-point interval covers all
+three rows: what the table says is that nothing here is signal, not that the
+hint does damage. Together with the query expansion and the greedy coverage
+selection that were measured and rejected in the same week, it settles the
+question for this design: multi-hop does not improve by asking the same
+retriever twice, by reformatting what it returns, or by instructing the model
+harder. The published methods that do improve it put a *model* at query time —
+a decision model in SAG2, extracted evidence requirements in EviCover — and
+that component is the one this project exists without.
+
 **And so was the other thing:** a sentence at the end of the
 result asking the agent to open the body when the answer depends on it. It
 changed nothing — 68.0% with it, 69.0% without it — and it cost thirty tokens
