@@ -256,6 +256,21 @@ AGENT_SYSTEM = (
     "the question, reply exactly: not in memory."
 )
 
+#: The sentence under test: does telling the agent to search again help the
+#: questions whose answer is spread over several memories?
+MULTIHOP_HINT = (
+    "If the question needs facts from more than one conversation — asking for "
+    "several things, a comparison, or a chain — one search is not enough: "
+    "search again with different nouns before answering, by replying with ONLY "
+    "{\"search\": \"<other words>\"}."
+)
+
+#: Braces doubled because this one goes through `str.format`.
+SEARCH_REQUEST = (
+    "You may also reply with ONLY {{\"search\": \"<other words>\"}} to look "
+    "again, at most {s} times."
+)
+
 PICK_SYSTEM = (
     "You are reading a list of numbered memory candidates. Reply with a JSON "
     "array of the ids whose full text you need in order to answer the "
@@ -320,7 +335,23 @@ def f1(pred, ref):
     return 2 * precision * recall / (precision + recall)
 
 
-def answer(model, arm, question, material, mem, project, batch_get=False, max_reads=3):
+def parse_request(text):
+    """What the agent asked for, if it asked for anything: {"search": ...} or ids."""
+    body = text.strip()
+    if body.startswith("{"):
+        try:
+            req = json.loads(body)
+        except Exception:
+            return {}
+        if isinstance(req, dict):
+            return req
+        return {}
+    ids = parse_ids(body, 10)
+    return {"ids": ids} if ids else {}
+
+
+def answer(model, arm, question, material, mem, project, batch_get=False, max_reads=3,
+           allow_search=False, hint=False, searches=2, limit=0):
     """One case in one arm. Returns (answer, ids_read)."""
     read = []
     if arm == "none":
@@ -337,14 +368,33 @@ def answer(model, arm, question, material, mem, project, batch_get=False, max_re
         return complete(model, [{"role": "system", "content": ANSWER_SYSTEM},
                                 {"role": "user", "content": user}], 400), read
     if arm == "agent":
-        # One call decides: answer, or ask for bodies. That decision is what
-        # the protocol sentence exists to move, and it is invisible to the
-        # arms that have the decision hard-coded.
-        said = complete(model, [{"role": "system", "content": AGENT_SYSTEM.format(n=max_reads)},
-                                {"role": "user", "content": f"Material:\n{cards}\n\nQuestion: {question}"}],
-                        400)
-        ids = parse_ids(said, max_reads)
-        if not ids:
+        # One call decides: answer, ask for bodies, or — when the harness lets
+        # it — search again with different words. That last move is what the
+        # hint is about.
+        system = AGENT_SYSTEM.format(n=max_reads)
+        if allow_search:
+            system += " " + SEARCH_REQUEST.format(s=searches)
+            if hint:
+                system += " " + MULTIHOP_HINT
+        material = cards
+        for _ in range(searches + 2):
+            said = complete(model, [{"role": "system", "content": system},
+                                    {"role": "user", "content": f"Material:\n{material}\n\nQuestion: {question}"}],
+                            400)
+            req = parse_request(said)
+            if not req:
+                return said, read
+            if "search" in req and allow_search and searches > 0:
+                searches -= 1
+                q2 = str(req["search"])[:300]
+                more = mem.search(q2, project, limit)
+                material += f"\n\nMore results for «{q2}»:\n{more}"
+                continue
+            ids = [int(x) for x in (req.get("ids") or [])][:max_reads]
+            if not ids:
+                return said, read
+            break
+        else:
             return said, read
         bodies = []
         if ids and batch_get:
@@ -419,6 +469,10 @@ def main(argv):
                     help="candidates per search; 0 leaves it to config.json")
     ap.add_argument("--batch-get", action="store_true",
                     help="read the picked bodies with one `ids` call instead of one per id")
+    ap.add_argument("--allow-search", action="store_true",
+                    help="let the agent arm search again with different words")
+    ap.add_argument("--hint-multihop", action="store_true",
+                    help="tell it, in the system prompt, to search again when the question needs several facts")
     ap.add_argument("--no-nudge", action="store_true",
                     help="strip the protocol sentence from the material, to see what it is worth")
     ap.add_argument("--max-reads", type=int, default=3,
@@ -470,7 +524,8 @@ def main(argv):
                         if a.no_nudge:
                             material = re.sub(r"\n\nThese are excerpts.*$", "", material, flags=re.S)
                     said, read = answer(a.model, arm, c["query"], material, mem,
-                                        c["project"], a.batch_get, a.max_reads)
+                                        c["project"], a.batch_get, a.max_reads,
+                                        a.allow_search, a.hint_multihop, 2, a.limit)
                     row[arm] = {"answer": said.strip(), "read": read, "f1": f1(said, ref)}
                 except OutOfBudget:
                     # Keep the answers already paid for and stop spending:
