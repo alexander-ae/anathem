@@ -101,7 +101,7 @@ Two things follow, and neither is a victory.
 **Their architecture is defensible on that table.** Compiling pages is how you
 answer a question whose evidence is spread over several sessions without
 handing the model the sessions. anathem's 95.9% is a ceiling — the evidence is
-*somewhere in the twenty candidates*, at 120 characters each — and a model
+*somewhere in the twenty candidates*, at 300 characters each — and a model
 reading only those excerpts answers far less often than that. What
 the two-stage protocol buys is that the model can ask for the three bodies it
 needs; what it costs is a round trip the compiled page does not need.

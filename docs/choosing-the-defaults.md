@@ -1,8 +1,13 @@
 # How the defaults were chosen
 
-Two numbers in `config.json` are not arbitrary and not guesses:
-`bm25_weight`, and the size of the vocabulary pack. This is the measurement
-behind each, including the part where the first answer was wrong.
+Three numbers in `config.json` are not arbitrary and not guesses:
+`bm25_weight`, the size of the vocabulary pack, and the `excerpt` that
+`search_memory` returns. This is the measurement behind each, including the
+part where the first answer was wrong — and the excerpt's answer *was* wrong
+for a year, because it was measured against whether the right memory appeared
+among the candidates instead of whether the model then answered. That
+correction is in [`benchmarks.md`](benchmarks.md) and summarised at the end of
+this document.
 
 It is kept because the code points here. `src/config.rs` and `src/fusion.rs`
 cite it for why the lexical and vector rankings are fused the way they are,
@@ -144,3 +149,20 @@ measured, and it suits prose. The tables are in the `bm25_weight` section of
 Both measurements ran on copies, outside the repository, against
 `~/anathem-bench/`, and the personal database was fingerprinted before and
 after and left untouched.
+
+## The excerpt, where the first answer was measured against the wrong thing
+
+It was 120 characters, chosen by measuring whether the memory a query needed
+landed among the candidates: twenty of them reached 82% where eight full
+snippets reached 72%, for the same tokens. That is the step *before* the one
+that matters. The agent still has to recognise which candidate to open and
+decide to open it, and 120 characters of a long memory are its salutation.
+
+Measured against answers — LoCoMo, 1,536 questions, one cheap model answering
+and a second one judging — the ordering inverts: 20 candidates of 120
+characters answered 44.7%, and 300 characters at the same 1,200-token budget
+answered 62.6%. What decides is the length of the excerpt, not how many fit.
+
+The whole measurement, including the coverage it costs and the two variants
+that were built and thrown away, is in the LoCoMo section of
+[`benchmarks.md`](benchmarks.md).

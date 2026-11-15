@@ -526,13 +526,14 @@ candidates, 120-character excerpts, 1,200-token budget.
 
 | | session | turn |
 |---|--:|--:|
-| the expected memory is among the candidates | 98.6% | 69.4% |
+| the expected memory is among the candidates | 95.9% | 67.0% |
 | it came first | 65.6% | 30.6% |
-| tokens spent, median | 1,195 | 1,179 |
+| tokens spent, median | 1,152 | 1,161 |
 
 The first row is nearly tautological at session level and should be read that
-way: twenty candidates out of the twenty-seven a conversation has. What it
-says is that the payload is not where this dataset is lost. Counted strictly
+way: twelve candidates out of the twenty-seven a conversation has, at the
+shipped 300-character excerpt. What it says is that the payload is not where
+this dataset is lost. Counted strictly
 — every expected session among the candidates, which is what a multi-hop
 answer needs — it is **94.5%** for the same 1,536 questions; the binary
 reports the loose count, and the strict one was computed from the same cases.
