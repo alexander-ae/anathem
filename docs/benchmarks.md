@@ -541,19 +541,83 @@ That remains a ceiling and not an accuracy: what the model sees is 120
 characters per candidate, and reading the fact itself costs a `get_memory`
 call.
 
+### Do the answers get better: four arms and one model
+
+Everything above measures whether the evidence reached the model. It cannot
+measure whether the model then answered, and that is the axis on which every
+memory product publishes a number. `tools/answer_eval.py` measures it here:
+200 questions sampled evenly inside each type, **one model answering every
+arm** so the difference is the memory and not the model, judged by a second
+model, with token F1 against the reference answer as a second opinion.
+
+| arm | answered | F1 | multi-hop | temporal | single-hop | open-domain |
+|---|--:|--:|--:|--:|--:|--:|
+| the whole conversation in the prompt (17,837 tokens) | **78.8%** | 63.7 | 61.1% | 68.3% | 93.6% | 33.3% |
+| what `search_memory` returns, then up to 3 bodies | 44.7% | 39.2 | 30.6% | 38.1% | 54.6% | 18.2% |
+| what `search_memory` returns, and nothing else | 17.2% | 16.4 | 11.1% | 21.4% | 17.6% | 16.7% |
+| no memory at all | 0.0% | 0.6 | — | — | — | — |
+
+`gpt-6-luna` answering, `gpt-6.1-sol` judging, n=200, ±6 points. The two
+smaller arms are the protocol's own two stages, and the distance between them
+is the finding: **an agent that reads the excerpts and answers from them gets
+17% of the answers right; one that opens three bodies gets 45%.** The memory
+that was needed was among the candidates 98.6% of the time. What fails is
+the step between, and it fails because 120 characters of a long memory are
+usually its salutation — which is what the next table is about.
+
+| shape of the payload | tokens | the needed memory is among them | answered |
+|---|--:|--:|--:|
+| 20 × 120 (the old default) | 1,195 | 98.6% | 44.7% |
+| 15 × 200 | 1,197 | 97.5% | 58.0% |
+| 10 × 300 | 1,048 | 95.4% | 61.9% |
+| 20 × 300, budget 1,200 (**the default now**) | 1,152 | 95.9% | **62.6%** |
+| 20 × 300, budget 1,600 | 1,571 | 97.5% | 64.5% |
+
+At a fixed budget, the length of the excerpt does the work and the number of
+candidates barely matters: three and a half points of coverage bought
+seventeen points of answers. That is why `excerpt` moved to 300 and the budget
+did not move at all — the last two rows are the same shape at two budgets, and
+400 more tokens bought 1.9 points, inside the noise. That change is the one
+this measurement produced.
+
+**And full context still wins, at every model tried.** At `gpt-6-luna` the
+whole conversation is 78.8% against 62.6%; at `gpt-6.1-terra` — a model at
+GPT-5's price point, 50 questions — it is 88.0% against 69.4%. The gap is
+about the same at both, so it is not a fact about the model: it is what one
+kilobyte of excerpts costs against eighteen kilobytes of everything. A memory
+layer that compiles what it read into a page, and hands over the page, is
+spending tokens in the other place — and this measurement is what that design
+is buying.
+
+**One of those points came from a defect worth naming.** The first run of
+this experiment scored 29.3% on temporal questions in its best arm. The cause
+was not retrieval: the conversion had put each session's date in the
+frontmatter, where `created` lives, and `get_memory` returns the body. The
+model never saw a single date, on any arm, for questions that ask *when*.
+Putting the date in the body took the full-context arm from 29.3% to 68.3%
+without changing anything else. anathem has the same shape of hole today: its
+candidates and its bodies reach the model without their date.
+
 ### What this section does not show
 
-It measures retrieval, like everything else in this file. LoCoMo's own scoring
-is answer accuracy, judged by a model against a reference answer, and that
-needs a model in the loop — which anathem does not have and this document
-cannot pay for. `tools/answer_eval.py` exists for that measurement and is
-documented in its own header; the figures it produces are not in this file.
+It measures retrieval, and (above) answer accuracy for one cheap model and one
+judge. Neither is a verdict on whether a memory is *useful*: the answers are
+judged against a reference string, which rewards the fact and not the
+judgement around it.
 
 Session-level hits are also coarser than the dataset's own definition: the
 evidence is marked per turn, and a hit at session level says the right 600-turn
 block was found, not the right sentence. And 27 candidates per question is a
 small pool, which is why the session row should not be read as "anathem is at
-87.6% on LoCoMo" without the unit attached.
+88.8% on LoCoMo" without the unit attached.
+
+The answer arms have their own limits, and they are listed here rather than
+under the tables: the answering model is a cheap one, so the absolute numbers
+are low and a GPT-5-class model would lift all four arms; `cards+` reads at
+most three bodies, which is a choice of the harness and not of the binary; and
+the judge is a model, with a model's opinion of what "the same thing" means.
+Token F1 is printed next to it for that reason, and the two agree in ordering
+in every table above.
 
 ## Against published numbers
 

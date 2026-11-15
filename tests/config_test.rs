@@ -38,7 +38,7 @@ fn with_no_file_it_uses_twenty_candidates_and_a_excerpt_of_one_twenty() {
     let d = tempfile::tempdir().unwrap();
     let cfg = config::load(d.path()).unwrap();
     assert_eq!(cfg.candidates, 20);
-    assert_eq!(cfg.excerpt, 120);
+    assert_eq!(cfg.excerpt, 300);
 }
 
 #[test]

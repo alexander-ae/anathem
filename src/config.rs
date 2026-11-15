@@ -37,6 +37,17 @@ pub struct Config {
     /// `search_memory`, before its cost counts against the token budget
     /// (`search::run_explained`). See `candidates` above for why it is
     /// trimmed at all.
+    ///
+    /// It was 120 until it was measured against answers instead of against
+    /// coverage, and the two disagree. Over LoCoMo, at the same token budget,
+    /// 20 candidates of 120 characters put the memory a question needed among
+    /// the candidates 98.6% of the time and answered 44.7% of the questions;
+    /// the same budget at 300 characters reaches 95.9% and 62.6%. The agent
+    /// has to *recognise* which candidate to open, and 120 characters of a
+    /// long memory are usually its salutation. Nothing else changed: the
+    /// candidate count is still 20, and on a corpus of short notes the budget
+    /// still fits all twenty, because a note shorter than 300 characters is
+    /// shown whole either way. See `docs/benchmarks.md`.
     #[serde(default = "default_excerpt")]
     pub excerpt: usize,
 
@@ -125,7 +136,7 @@ fn default_candidates() -> usize {
 }
 
 fn default_excerpt() -> usize {
-    120
+    300
 }
 
 fn default_budget() -> usize {

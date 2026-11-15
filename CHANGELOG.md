@@ -48,6 +48,17 @@ live in the database, not in the binary.
 
 ### Changed
 
+- **The excerpt `search_memory` returns is 300 characters, not 120.** The
+  old value was chosen by measuring whether the right memory was *among the
+  candidates*; measuring whether the model then **answers** disagrees. Over
+  LoCoMo, at the same token budget, 20 candidates of 120 characters put the
+  needed memory among them 98.6% of the time and answered 44.7% of the
+  questions; 300 characters reach 95.9% and answer 62.6%. Nothing else moved:
+  the candidate count is still 20, the budget is still 1,200, and on a corpus
+  of short notes nothing changes at all, because a note that fits is shown
+  whole either way. The whole measurement, including the two arms it comes
+  from and what it does not prove, is in `docs/benchmarks.md`.
+
 - **The greeting says "Pinned notes first, then the newest within the
   window".** The old sentence said "Newest first, window", which stopped being
   the whole truth once pinned memories started riding ahead of the window.
