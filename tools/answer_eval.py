@@ -62,6 +62,7 @@ PRICES = {
 }
 
 SPENT = 0.0
+ANSWER_CAP = None
 SPENT_LOCK = threading.Lock()
 BUDGET = None
 
@@ -85,13 +86,18 @@ def charge(model, usage):
 
 
 def complete(model, messages, max_tokens=200, retries=4):
-    """One chat completion.
+    """One chat completion, retried once when the model thought instead of answering.
 
     No `temperature`: the 2026 models reject the parameter outright (400),
     and asking for determinism is pointless when the request is a question
-    with one right answer. `max_completion_tokens` is generous because the
-    reasoning tokens are billed and spent out of it: a cap of 120 leaves the
-    model thinking and returning an empty answer.
+    with one right answer.
+
+    `max_completion_tokens` covers the reasoning tokens as well as the answer,
+    and a reasoning model handed a cap that fits a small one spends it all
+    thinking and returns an empty string. That is not a rare edge: it was 23
+    of 48 answers on the first run with `gpt-5` at 400. So an empty answer
+    with `finish_reason == "length"` is retried once with four times the room,
+    and only then given up on.
     """
     body = {"model": model, "messages": messages, "max_completion_tokens": max_tokens}
     data = json.dumps(body).encode()
@@ -104,7 +110,11 @@ def complete(model, messages, max_tokens=200, retries=4):
             with urllib.request.urlopen(req, timeout=180) as r:
                 payload = json.load(r)
             charge(model, payload.get("usage") or {})
-            return payload["choices"][0]["message"].get("content") or ""
+            choice = payload["choices"][0]
+            text = choice["message"].get("content") or ""
+            if not text.strip() and choice.get("finish_reason") == "length" and max_tokens < 4000:
+                return complete(model, messages, max_tokens * 4, retries)
+            return text
         except urllib.error.HTTPError as e:
             if e.code in (429, 500, 502, 503, 504) and attempt < retries - 1:
                 time.sleep(2 ** attempt)
@@ -328,11 +338,17 @@ def main(argv):
     ap.add_argument("--limit", type=int, default=0,
                     help="candidates per search; 0 leaves it to config.json")
     a = ap.parse_args(argv[1:])
+    # Answering and judging share one budget, and the first version let
+    # answering spend all of it: the answers were paid for and then every
+    # judge call hit the cap, which looks exactly like a model that got every
+    # question wrong. A quarter is held back for scoring.
+    global ANSWER_CAP
 
     if not os.environ.get("OPENAI_API_KEY"):
         print("OPENAI_API_KEY is not set: this script cannot run without one.", file=sys.stderr)
         return 2
     BUDGET = a.budget_usd
+    ANSWER_CAP = a.budget_usd * 0.75
 
     cases = json.load(open(a.evalset, encoding="utf-8"))["cases"]
     picked = stratified(cases, a.sample)
@@ -342,6 +358,7 @@ def main(argv):
     out.mkdir(parents=True, exist_ok=True)
 
     arms = [x for x in a.arms.split(",") if x]
+    BUDGET = ANSWER_CAP
     mem = Mem(a.db)
     results, lock = [], threading.Lock()
     queue = list(picked)
@@ -393,6 +410,7 @@ def main(argv):
         json.dumps({"model": a.model, "n": len(results), "arms": arms, "rows": results},
                    ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
+    BUDGET = a.budget_usd
     print(f"answering done: {len(results)} cases, ${SPENT:.3f}; judging", flush=True)
     todo = [(row, arm) for row in results for arm in arms]
     lock2 = threading.Lock()
