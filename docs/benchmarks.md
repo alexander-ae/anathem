@@ -569,6 +569,24 @@ agent that reads the excerpts and answers from them gets 46% of the answers
 right, opening three bodies gets 63%, and letting the model decide when to
 open — up to six — gets 68%.**
 
+**The profile does not depend on the model; the level does.** The same five
+arms, the same 200 questions, with a model from a different family and a
+different price sheet (`deepseek-flash`, judged by the same `gpt-6.1-sol`):
+
+| arm | `gpt-6-luna` | `deepseek-flash` |
+|---|--:|--:|
+| the whole conversation | 78.8% | 79.4% |
+| `search_memory`, agent decides | **68.0%** | **68.5%** |
+| three bodies opened for it | 62.6% | 65.0% |
+| excerpts only | 45.5% | 44.4% |
+| no memory | 0.0% | 0.0% |
+
+Two families, two price sheets, and the numbers land within 2.4 points of each
+other in every arm. The distance between full context and the protocol is
+10.8 points with one and 10.9 with the other, and 9.0 with `gpt-6.1-terra` at
+a higher tier. That is what makes any of these figures quotable: what they
+measure is the protocol, not the model that happened to answer.
+
 That order is worth pausing on. The arm where the *model* decides between the
 two stages beats the arm where the harness decides for it, by 5.4 points. The
 two-stage protocol is not something to impose on an agent; it is something to
