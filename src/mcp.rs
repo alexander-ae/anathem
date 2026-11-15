@@ -100,9 +100,11 @@ pub fn tool_defs() -> Value {
           "since": {"type": "string", "description": "How far back: 6h, 90m, 2d. 24h by default."},
           "limit": {"type": "integer", "description": "At most this many memories; 15 by default."}}}},
       {"name": "get_memory",
-       "description": "Returns the full body of a memory by its id.",
-       "inputSchema": {"type": "object", "required": ["id"], "properties": {
-          "id": {"type": "integer"}}}},
+       "description": "Returns the full body of a memory by its id, with the date it carries and its topic key. Pass `ids` to read several at once: opening the bodies a question needs is what turns a list of excerpts into an answer, and one call is cheaper than three.",
+       "inputSchema": {"type": "object", "properties": {
+          "id": {"type": "integer"},
+          "ids": {"type": "array", "items": {"type": "integer"},
+                  "description": "Several ids; at most 10 per call."}}}},
       {"name": "list_tags",
        "description": "Lists the existing tags with how many memories each one has.",
        "inputSchema": {"type": "object", "properties": {}}}
@@ -114,6 +116,25 @@ pub fn tool_defs() -> Value {
 /// know which key to reuse when saving a correction to what it just found:
 /// without seeing it, it would have to guess, and a guessed key that does
 /// not match replaces nothing.
+/// The date the memory carries, as ` 2023-05-08`, or empty when it has none.
+/// The leading space is part of it, the way the other labels carry theirs, so
+/// a memory without a date does not leave a double space behind.
+///
+/// It rides on every candidate and on every body because it is the one thing
+/// the model cannot infer from the text: a note about a meeting does not
+/// always say when the meeting was, and "when did we decide this" is a
+/// question memory gets asked constantly. Measured over LoCoMo, putting the
+/// date where the model could see it took temporal questions from 29% to 68%
+/// in the arm that reads everything, with nothing else changed.
+fn date_label_of(conn: &Connection, id: i64) -> String {
+    conn.query_row("select created from memories where id = ?1", [id], |r| r.get::<_, String>(0))
+        .ok()
+        .map(|d| d.chars().take(10).collect::<String>())
+        .filter(|d| !d.trim().is_empty())
+        .map(|d| format!(" {d}"))
+        .unwrap_or_default()
+}
+
 fn topic_label_of(conn: &Connection, id: i64) -> String {
     let t: Option<String> = conn
         .query_row("select topic from memories where id = ?1", [id], |r| r.get(0))
@@ -310,9 +331,10 @@ fn call_tool(
             }
             let body = hits.iter()
                 .map(|e| format!(
-                    "[id:{}] [{}]{}{}{}{} {}\n{}",
+                    "[id:{}] [{}]{}{}{}{}{} {}\n{}",
                     e.hit.memory_id,
                     e.hit.project,
+                    date_label_of(conn, e.hit.memory_id),
                     topic_label_of(conn, e.hit.memory_id),
                     received_label_of(conn, e.hit.memory_id),
                     verified_label_of(conn, e.hit.memory_id),
@@ -329,7 +351,17 @@ fn call_tool(
                 ),
                 None => body,
             };
-            Ok(text_result(body))
+            // The description of the tool says this too, and it is repeated
+            // here on purpose: the description is read once, when the client
+            // lists the tools, while this line is read at the moment the
+            // decision is made. Measured over LoCoMo: answering from the
+            // excerpts gets 17% of questions right and opening the bodies
+            // gets 45%, so the step worth spending a sentence on is the one
+            // between them.
+            Ok(text_result(format!(
+                "{body}\n\nThese are excerpts, not the memories. If the answer depends on what one \
+                 of them says, open it with `get_memory` before answering."
+            )))
         }
         "save_memory" => {
             let text = args["text"].as_str().unwrap_or_default();
@@ -441,23 +473,41 @@ fn call_tool(
             Ok(text_result(crate::recent::format_items(&items, false)))
         }
         "get_memory" => {
-            let id = args["id"].as_i64().unwrap_or(-1);
-            let row: rusqlite::Result<(String, String, String)> = conn.query_row(
-                "select project, title, body from memories where id = ?1",
-                [id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)));
-            match row {
-                Ok((project, title, body)) => {
-                    conn.execute(
-                        "update memories set access_count = access_count + 1,
-                                last_accessed = ?2 where id = ?1",
-                        rusqlite::params![id, chrono::Local::now().to_rfc3339()])?;
-                    logsearch::mark_follow_up(conn, id)?;
-                    Ok(text_result(format!(
-                        "[{project}]{} {title}\n\n{body}", topic_label_of(conn, id)
-                    )))
-                }
-                Err(_) => Ok(text_result(format!("There is no memory with id:{id}."))),
+            // `ids` is the batch: reading three bodies used to cost three
+            // round trips, which is exactly the step the excerpt protocol
+            // depends on and the one an agent skips when it is expensive.
+            let mut ids: Vec<i64> = args["ids"].as_array().map(|a| {
+                a.iter().filter_map(|v| v.as_i64()).collect()
+            }).unwrap_or_default();
+            if ids.is_empty() {
+                ids.push(args["id"].as_i64().unwrap_or(-1));
             }
+            // A cap, not a preference: twenty full bodies in one answer is
+            // the context this tool exists to keep small.
+            ids.truncate(10);
+            let mut out = Vec::new();
+            for id in ids {
+                let row: rusqlite::Result<(String, String, String)> = conn.query_row(
+                    "select project, title, body from memories where id = ?1",
+                    [id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)));
+                match row {
+                    Ok((project, title, body)) => {
+                        conn.execute(
+                            "update memories set access_count = access_count + 1,
+                                    last_accessed = ?2 where id = ?1",
+                            rusqlite::params![id, chrono::Local::now().to_rfc3339()])?;
+                        logsearch::mark_follow_up(conn, id)?;
+                        out.push(format!(
+                            "[id:{id}] [{project}]{}{}{} {title}\n\n{body}",
+                            date_label_of(conn, id),
+                            topic_label_of(conn, id),
+                            verified_label_of(conn, id),
+                        ));
+                    }
+                    Err(_) => out.push(format!("There is no memory with id:{id}.")),
+                }
+            }
+            Ok(text_result(out.join("\n\n")))
         }
         "list_tags" => {
             let mut stmt = conn.prepare(

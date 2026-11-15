@@ -173,6 +173,11 @@ class Mem:
                                      "arguments": {"id": memory_id}})
         return r["result"]["content"][0]["text"]
 
+    def bodies(self, ids):
+        r = self.call("tools/call", {"name": "get_memory",
+                                     "arguments": {"ids": list(ids)}})
+        return r["result"]["content"][0]["text"]
+
     def close(self):
         try:
             self.proc.stdin.close()
@@ -278,7 +283,7 @@ def f1(pred, ref):
     return 2 * precision * recall / (precision + recall)
 
 
-def answer(model, arm, question, material, mem, project):
+def answer(model, arm, question, material, mem, project, batch_get=False):
     """One case in one arm. Returns (answer, ids_read)."""
     read = []
     if arm == "none":
@@ -300,9 +305,17 @@ def answer(model, arm, question, material, mem, project):
                     300)
     ids = [int(x) for x in re.findall(r"\d+", pick)][:3]
     bodies = []
-    for mid in ids:
+    if ids and batch_get:
+        # One call for the lot: the tool now takes `ids`, and three round
+        # trips are what makes an agent skip the step that matters.
         try:
-            bodies.append(f"[id:{mid}] {mem.body(mid)}")
+            bodies.append(mem.bodies(ids))
+            read.extend(ids)
+        except Exception:
+            pass
+    for mid in ([] if read else ids):
+        try:
+            bodies.append(mem.body(mid))
             read.append(mid)
         except Exception:
             pass
@@ -337,6 +350,8 @@ def main(argv):
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--limit", type=int, default=0,
                     help="candidates per search; 0 leaves it to config.json")
+    ap.add_argument("--batch-get", action="store_true",
+                    help="read the picked bodies with one `ids` call instead of one per id")
     a = ap.parse_args(argv[1:])
     # Answering and judging share one budget, and the first version let
     # answering spend all of it: the answers were paid for and then every
@@ -381,7 +396,8 @@ def main(argv):
                         material = convs[c["project"]]
                     elif arm in ("cards", "cards+"):
                         material = mem.search(c["query"], c["project"], a.limit)
-                    said, read = answer(a.model, arm, c["query"], material, mem, c["project"])
+                    said, read = answer(a.model, arm, c["query"], material, mem,
+                                        c["project"], a.batch_get)
                     row[arm] = {"answer": said.strip(), "read": read, "f1": f1(said, ref)}
                 except OutOfBudget:
                     # Keep the answers already paid for and stop spending:

@@ -93,6 +93,31 @@ transcripts of conversations, so there is no structure to report, and a
 candidate with no headings keeps the chunk that matched — which is more
 useful than its opening lines at the same price.
 
+## What the payload says besides the candidates
+
+Three things ride along with the candidate list, and each of them exists
+because of something measured.
+
+**The date each memory carries**, as `[id:12] [api-monolito] 2026-05-08 …` and
+again in the header `get_memory` returns. It is the one thing the model cannot
+infer from the text: a note about a meeting rarely says when the meeting was,
+and "when did we decide this" is a question memory is asked constantly. Over
+LoCoMo, putting the date where the model could see it — it had been living in
+the frontmatter, which `get_memory` does not return — took temporal questions
+from 29 % to 68 % in the arm that reads everything, with nothing else changed.
+
+**One sentence at the end of the result**: *these are excerpts, not the
+memories; if the answer depends on what one of them says, open it with
+`get_memory` before answering*. The tool description says the same thing and
+that is not the same sentence: the description is read once, when the client
+lists the tools, and this one is read where the decision is taken. Measured
+over LoCoMo: answering from the excerpts gets 17 % of questions right, opening
+the bodies gets 45 %.
+
+**A batch read.** `get_memory` takes `ids` as well as `id`, up to ten in one
+call, because three round trips is exactly the cost that makes an agent skip
+the step worth 28 points. It changes no tokens — only the number of calls.
+
 ## The vector layer, and what it actually bought
 
 **A vector layer? It is here already, and it is optional.** Those numbers

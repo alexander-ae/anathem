@@ -200,8 +200,14 @@ fn the_five_tools_keep_their_names_and_required_parameters() {
         .collect();
     got.sort();
 
+    // `get_memory` lost `id` from `required` when `ids` was added: either one
+    // names the memory now, so nothing is required. That is additive — a
+    // caller that sends `id` keeps working, and `id` is still in the
+    // properties — but it is still a change to the surface, so it is written
+    // down here and in the CHANGELOG rather than discovered by whoever
+    // validates the schema.
     let expected: Vec<(String, Vec<String>)> = vec![
-        ("get_memory", vec!["id"]),
+        ("get_memory", vec![]),
         ("list_tags", vec![]),
         ("recent_memories", vec![]),
         ("save_memory", vec!["text"]),
