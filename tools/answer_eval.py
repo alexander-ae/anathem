@@ -149,10 +149,13 @@ class Mem:
                 if payload.get("id") == self.n:
                     return payload
 
-    def search(self, query, project, limit=20):
-        r = self.call("tools/call", {"name": "search_memory",
-                                     "arguments": {"query": query, "project": project,
-                                                   "limit": limit}})
+    def search(self, query, project, limit=0):
+        args = {"query": query, "project": project}
+        # No `limit` at all lets the database's `config.json` decide, which is
+        # what a real installation does; passing one overrides `candidates`.
+        if limit:
+            args["limit"] = limit
+        r = self.call("tools/call", {"name": "search_memory", "arguments": args})
         return r["result"]["content"][0]["text"]
 
     def body(self, memory_id):
@@ -319,6 +322,8 @@ def main(argv):
     ap.add_argument("--out", default="bench/answers")
     ap.add_argument("--budget-usd", type=float, default=3.0)
     ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--limit", type=int, default=0,
+                    help="candidates per search; 0 leaves it to config.json")
     a = ap.parse_args(argv[1:])
 
     if not os.environ.get("OPENAI_API_KEY"):
@@ -355,7 +360,7 @@ def main(argv):
                     if arm == "full":
                         material = convs[c["project"]]
                     elif arm in ("cards", "cards+"):
-                        material = mem.search(c["query"], c["project"])
+                        material = mem.search(c["query"], c["project"], a.limit)
                     said, read = answer(a.model, arm, c["query"], material, mem, c["project"])
                     row[arm] = {"answer": said.strip(), "read": read, "f1": f1(said, ref)}
                 except OutOfBudget:
