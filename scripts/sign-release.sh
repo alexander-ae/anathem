@@ -255,8 +255,21 @@ fi
 ROTOS=0
 SINCOMPROBAR=0
 for f in $PRESENTES; do
-  URL="https://gitlab.com/$REPO/-/releases/$ETIQUETA/downloads/$f.minisig"
-  if bajar "$TEMPORAL/bajada-$f.minisig" "$URL"; then codigo=0; else codigo=$?; fi
+  # Through the API, like steps 1 and 2, and for the reason the comment
+  # above gives: this is the likeliest step in the script to be refused,
+  # because the uploads just before it spend the public endpoint's budget.
+  # It still DOWNLOADS rather than reading the local copy — what is being
+  # checked is what the release serves, not what this script wrote.
+  codigo=1
+  if glab release download "$ETIQUETA" --repo "$REPO" --dir "$TEMPORAL/vuelta" \
+       --asset-name "$f.minisig" >/dev/null 2>&1 \
+     && [ -s "$TEMPORAL/vuelta/$f.minisig" ]; then
+    mv "$TEMPORAL/vuelta/$f.minisig" "$TEMPORAL/bajada-$f.minisig"
+    codigo=0
+  else
+    URL="https://gitlab.com/$REPO/-/releases/$ETIQUETA/downloads/$f.minisig"
+    if bajar "$TEMPORAL/bajada-$f.minisig" "$URL"; then codigo=0; else codigo=$?; fi
+  fi
   case $codigo in
     0) : ;;
     2) malo "$f.minisig is not in the release, although it was just uploaded"
