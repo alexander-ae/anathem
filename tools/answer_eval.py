@@ -68,6 +68,12 @@ PRICES = {
 
 SPENT = 0.0
 ANSWER_CAP = None
+BASE_URL = "https://api.openai.com/v1"
+#: The judge may live somewhere else than the answerer, and usually should:
+#: a model grading its own family is a weaker instrument. Empty means "same
+#: place and same key as the answerer".
+JUDGE_BASE_URL = ""
+JUDGE_KEY = ""
 SPENT_LOCK = threading.Lock()
 BUDGET = None
 
@@ -76,8 +82,16 @@ class OutOfBudget(Exception):
     pass
 
 
+#: Overrides the table for one run, in dollars per million. `--prices 0,0`
+#: is what a free route wants; an unknown model otherwise assumes the worst.
+PRICE_OVERRIDE = None
+
+
 def price(model, prompt_tokens, completion_tokens):
-    pin, pout = PRICES.get(model, (10.0, 50.0))  # unknown model: assume the worst
+    if PRICE_OVERRIDE is not None:
+        pin, pout = PRICE_OVERRIDE
+    else:
+        pin, pout = PRICES.get(model, (10.0, 50.0))  # unknown model: assume the worst
     return prompt_tokens / 1e6 * pin + completion_tokens / 1e6 * pout
 
 
@@ -90,7 +104,14 @@ def charge(model, usage):
             raise OutOfBudget(f"spent ${SPENT:.2f}, budget ${BUDGET:.2f}")
 
 
-def complete(model, messages, max_tokens=200, retries=4):
+def key_for(judge):
+    """The API key to use, and the base URL that goes with it."""
+    if judge and JUDGE_BASE_URL:
+        return JUDGE_BASE_URL, JUDGE_KEY
+    return BASE_URL, os.environ["OPENAI_API_KEY"]
+
+
+def complete(model, messages, max_tokens=200, retries=4, judge=False):
     """One chat completion, retried once when the model thought instead of answering.
 
     No `temperature`: the 2026 models reject the parameter outright (400),
@@ -107,9 +128,10 @@ def complete(model, messages, max_tokens=200, retries=4):
     body = {"model": model, "messages": messages, "max_completion_tokens": max_tokens}
     data = json.dumps(body).encode()
     for attempt in range(retries):
+        base, key = key_for(judge)
         req = urllib.request.Request(
-            "https://api.openai.com/v1/chat/completions", data=data,
-            headers={"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}",
+            f"{base}/chat/completions", data=data,
+            headers={"Authorization": f"Bearer {key}",
                      "Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=180) as r:
@@ -118,7 +140,7 @@ def complete(model, messages, max_tokens=200, retries=4):
             choice = payload["choices"][0]
             text = choice["message"].get("content") or ""
             if not text.strip() and choice.get("finish_reason") == "length" and max_tokens < 4000:
-                return complete(model, messages, max_tokens * 4, retries)
+                return complete(model, messages, max_tokens * 4, retries, judge)
             return text
         except urllib.error.HTTPError as e:
             if e.code in (429, 500, 502, 503, 504) and attempt < retries - 1:
@@ -447,7 +469,7 @@ def judge(model, question, ref, said):
     user = (f"Question: {question}\nReference answer: {ref}\n"
             f"Answer to grade: {said}")
     out = complete(model, [{"role": "system", "content": JUDGE_SYSTEM},
-                           {"role": "user", "content": user}], 64)
+                           {"role": "user", "content": user}], 64, judge=True)
     return out.strip().lower().startswith("yes")
 
 
@@ -465,6 +487,14 @@ def main(argv):
     ap.add_argument("--out", default="bench/answers")
     ap.add_argument("--budget-usd", type=float, default=3.0)
     ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--base-url", default="https://api.openai.com/v1",
+                    help="OpenAI-compatible endpoint; the default is OpenAI's")
+    ap.add_argument("--judge-base-url", default="",
+                    help="where the judge lives, when it is not the same endpoint as the answerer")
+    ap.add_argument("--judge-key-file", default="",
+                    help="file holding the judge's API key; the answerer's key comes from OPENAI_API_KEY")
+    ap.add_argument("--prices", default="",
+                    help="input,output in dollars per million, overriding the table (0,0 for a free route)")
     ap.add_argument("--limit", type=int, default=0,
                     help="candidates per search; 0 leaves it to config.json")
     ap.add_argument("--batch-get", action="store_true",
@@ -487,6 +517,14 @@ def main(argv):
     if not os.environ.get("OPENAI_API_KEY"):
         print("OPENAI_API_KEY is not set: this script cannot run without one.", file=sys.stderr)
         return 2
+    global BASE_URL, PRICE_OVERRIDE, JUDGE_BASE_URL, JUDGE_KEY
+    BASE_URL = a.base_url.rstrip("/")
+    if a.prices:
+        pin, pout = (float(x) for x in a.prices.split(","))
+        PRICE_OVERRIDE = (pin, pout)
+    if a.judge_base_url:
+        JUDGE_BASE_URL = a.judge_base_url.rstrip("/")
+        JUDGE_KEY = pathlib.Path(a.judge_key_file).read_text().strip() if a.judge_key_file else os.environ["OPENAI_API_KEY"]
     BUDGET = a.budget_usd
     ANSWER_CAP = a.budget_usd * 0.75
 
