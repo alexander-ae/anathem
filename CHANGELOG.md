@@ -10,6 +10,74 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Added
+
+- **Pinned memories travel with the session.** `mem pin` used to do one
+  thing: keep a memory from being trimmed out of a search's candidate list,
+  which only helps when a query happens to match it. The greeting now carries
+  whatever is pinned, first and however old it is, because a rule saved in
+  March is exactly the one that has to be present in November. They share the
+  same slot count as the recent ones (`handoff_items`), so pinning everything
+  does not make the greeting grow.
+
+- **LoCoMo, as a second public benchmark, with the tool that runs it.**
+  `tools/locomo_to_memories.py` converts the dataset into memories and an
+  eval set at two granularities — one memory per session, which is what a
+  memory is here, and one per dialog turn, which is the setting the paper's
+  own retrieval evaluation uses. Both sets of numbers are in
+  `docs/benchmarks.md`, including the two that do not flatter this project:
+  the same binary scores 88.8% or 52.2% depending only on that unit, and the
+  vocabulary pack costs points on this corpus instead of gaining them. The
+  session's date travels inside the body rather than only in `created`,
+  because a third of the questions ask *when* and `get_memory` does not
+  return the frontmatter.
+
+- **`tools/answer_eval.py`, the harness for the other half of a benchmark.**
+  `mem eval` measures whether the evidence reached the model; this measures
+  whether a model then answers correctly, which is the only axis on which the
+  memory products' published numbers can be compared at all. Four arms — full
+  history, the twenty candidates `search_memory` actually returns, the same
+  plus `get_memory`, and no memory — with one model answering all four, a
+  judge, and token F1 as a second opinion. It spends an API budget, so it is a
+  tool and not part of the binary: anathem still asks nobody for a key.
+
+- **`docs/comparison-with-livingbrain.md`.** A hosted memory layer that makes
+  the same argument about decoupling memory from the model and then resolves
+  it the other way, by compiling pages with a model. Where it wins, where the
+  numbers cannot be put side by side, and what was taken from it.
+
+- **Every candidate carries the date its memory was created**, and so does
+  the header `get_memory` returns. It had been in the frontmatter, which
+  `get_memory` does not return, so the model never saw it: over LoCoMo,
+  putting it where it can be seen took temporal questions from 29 % to 68 %
+  in the arm that read everything, with nothing else changed.
+
+- **`get_memory` reads several memories in one call.** It takes `ids` as well
+  as `id`, up to ten, because three round trips is the cost that makes an
+  agent skip the step the excerpt protocol depends on. Nothing new is spent
+  in tokens; what changes is the number of calls. The tool's `inputSchema`
+  no longer requires `id`, since either field names the memory now — additive
+  for every caller, and written down here because it is still a change to the
+  surface.
+
+### Changed
+
+- **The excerpt `search_memory` returns is 300 characters, not 120.** The
+  old value was chosen by measuring whether the right memory was *among the
+  candidates*; measuring whether the model then **answers** disagrees. Over
+  LoCoMo, at the same token budget, 20 candidates of 120 characters put the
+  needed memory among them 98.6% of the time and answered 44.7% of the
+  questions; 300 characters reach 95.9% and answer 62.6%. Nothing else moved:
+  the candidate count is still 20, the budget is still 1,200, and on a corpus
+  of short notes nothing changes at all, because a note that fits is shown
+  whole either way. The whole measurement, including the two arms it comes
+  from and what it does not prove, is in `docs/benchmarks.md`.
+
+- **The greeting says "Pinned notes first, then the newest within the
+  window".** The old sentence said "Newest first, window", which stopped being
+  the whole truth once pinned memories started riding ahead of the window.
+  The framing, the delimiters and the permission sentence are untouched.
+
 ## [1.1.0] - 2026-11-14
 
 A minor, and the four promises hold: the database, the export and the five

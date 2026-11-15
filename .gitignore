@@ -10,3 +10,4 @@
 *.db-wal
 *.db-shm
 docs/historia/2026-09-21-anathem-fase1.md
+__pycache__/

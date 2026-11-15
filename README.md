@@ -4,7 +4,7 @@ Local memory for coding agents (Claude Code, opencode): one binary, one
 SQLite file, no daemon and no HTTP server. An agent saves what it learned
 and finds it again in the next session — on your machine, with no model call
 and no embedding on write, and asking nobody for an API key. Reading it back
-is what costs context: about 1,300 tokens per search, measured, and the
+is what costs context: about 1,350 tokens per search, measured, and the
 excerpt protocol is what keeps that from being the whole memory.
 
 Search is BM25 by default. An optional 22.5 MB vocabulary pack adds a vector
@@ -42,13 +42,16 @@ competing with the new one in searches. It is also far smaller and faster,
 and *What it costs*, below, says by how much without rounding in its own
 favour.
 
-Whether those are the right bets for you is a different question, and three
+Whether those are the right bets for you is a different question, and four
 documents answer it with numbers instead of adjectives:
 [supermemory](docs/comparison-with-supermemory.md),
 [Engram](docs/comparison-with-engram.md) — the nearest neighbour, which took
 the same decisions separately — and
 [OpenViking](docs/comparison-with-openviking.md), which takes the opposite
-ones at a far larger scale.
+ones at a far larger scale, and
+[Living Brain](docs/comparison-with-livingbrain.md), which makes the same
+argument about decoupling memory from the model and then compiles it with a
+model.
 
 ## When a text file is enough
 
@@ -56,7 +59,7 @@ If your notes fit in a `CLAUDE.md` or an `AGENTS.md` of a couple hundred
 lines, use that: no install, no database, and the model reads all of it every
 time. anathem begins to earn its place when the notes stop fitting — 449 of
 them in the measurement below — and something has to choose which twenty go
-in front of the model, at about 1,300 tokens, instead of all of them or none.
+in front of the model, at about 1,350 tokens, instead of all of them or none.
 
 Over those 449 memories and 50 questions, recall@5 is 52% overall — and the
 average hides the finding: 88% when the question names the thing it is
@@ -251,9 +254,11 @@ the pack format and how to generate one.
 ## How it works
 
 - **Search** is BM25 over chunks, merged with a vector ranking when a pack
-  is installed. `search_memory` returns twenty candidates with a ~120
+  is installed. `search_memory` returns up to twenty candidates with a ~300
   character excerpt each, so the model picks among more options at the same
-  token cost. Twenty and not a handful because a memory that hands back only
+  token cost — and with enough of each one to tell what it is about, which
+  turned out to be the difference between 45% and 63% answered over a public
+  corpus ([`docs/search.md`](docs/search.md)). Twenty and not a handful because a memory that hands back only
   what it is confident about declines to answer more often than it looks:
   measured over a public corpus, the system this replaced returned at most
   four documents per query and **nothing at all for 19 of 46 questions**
@@ -296,7 +301,7 @@ A `config.json` next to the database, every key optional:
 |---|---|---|
 | `bm25_weight` | `1.0` | how much the lexical ranking weighs against the vector one. The right value depends on your corpus — `mem tune` measures it and `mem tune --apply` writes it. Every figure published here was measured at `1.0`, and [#25](https://gitlab.com/__alexander__/anathem/-/issues/25) found the best value does not carry across corpora, so a tuned installation is tuned for itself |
 | `candidates` | `20` | how many candidates `search_memory` returns |
-| `excerpt` | `120` | characters of each candidate's snippet |
+| `excerpt` | `300` | characters of each candidate's snippet |
 | `budget` | `1200` | tokens `search_memory` spends on its answer. It trims the list before `candidates` applies, so raising one without the other changes nothing |
 | `outline` | `false` | replaces the excerpt of a long memory that has headings with an outline of it |
 | `handoff_items` | `5` | memories named in the MCP greeting; `0` turns it off |
@@ -342,6 +347,15 @@ definitions of recall and what none of it proves are in
 question searches some 476 sessions instead of some 50, the same two runs are
 **78.0% and 81.6%**. That is the same code against a deeper haystack, and it
 is the number to carry if your memory is going to get large.
+
+**A second corpus, and a less comfortable one.** On [LoCoMo](docs/benchmarks.md),
+whose questions are written against 600-turn conversations and mark their
+evidence per turn, the same binary scores **88.8%** with the evidence in the
+top five when a memory is a session and **52.2%** when it is a turn. The unit
+decides the number more than the ranker does, and the vocabulary pack *costs*
+2.2 and 3.5 points there instead of gaining them — the third corpus to show
+that shape. LoCoMo's licence is CC BY-NC, so the numbers travel and the corpus
+does not.
 
 **And a real corpus is harder than either.** Measured over the author's own
 notes, asked in prose rather than in keywords, recall@5 is **52%** — 449
@@ -455,7 +469,7 @@ two years of notes was false in the direction nobody warns you about.
 - The research this was built on, including the papers that argue against it: [`docs/research.md`](docs/research.md)
 - The export format, which is complete enough to rebuild the database elsewhere: [`docs/export-format.md`](docs/export-format.md)
 - Windows: what the operating system forced to change, and why: [`docs/windows.md`](docs/windows.md)
-- Compared with [supermemory](docs/comparison-with-supermemory.md), [Engram](docs/comparison-with-engram.md) and [OpenViking](docs/comparison-with-openviking.md)
+- Compared with [supermemory](docs/comparison-with-supermemory.md), [Engram](docs/comparison-with-engram.md), [OpenViking](docs/comparison-with-openviking.md) and [Living Brain](docs/comparison-with-livingbrain.md)
 - What changed in each version: [`CHANGELOG.md`](CHANGELOG.md)
 - Where the tests run: on the GitHub mirror, through
   [`.github/workflows/test.yml`](.github/workflows/test.yml). GitLab has no

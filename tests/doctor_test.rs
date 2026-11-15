@@ -173,7 +173,7 @@ fn a_valid_config_shows_the_effective_values() {
     assert!(o.stdout.contains("candidates=7"), "{}", o.stdout);
     // The ones left alone appear with their default value: that is what
     // "effective" means here.
-    assert!(o.stdout.contains("excerpt=120"), "{}", o.stdout);
+    assert!(o.stdout.contains("excerpt=300"), "{}", o.stdout);
 }
 
 #[test]

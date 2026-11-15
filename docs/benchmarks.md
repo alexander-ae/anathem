@@ -7,7 +7,9 @@ they cannot see.
 
 This is the reproducible one. It uses **LongMemEval**, which asks the same
 question anathem exists to answer — can the assistant find what it was told
-earlier — and ships the ground truth for it.
+earlier — and ships the ground truth for it. A second corpus, **LoCoMo**,
+follows below: a different shape of history, a different licence, and a
+result that does not flatter the same choices.
 
 ## The dataset
 
@@ -31,6 +33,7 @@ small IR alternative, but its licence is unresolved — the BEIR authors list it
 as "not reported", the source page permits academic use only, and the
 underlying NutritionFacts.org material carries separate terms. A benchmark
 whose terms you cannot state is not one you can ask other people to run.
+LoCoMo is the one that survived, and its terms are stated in its own section.
 
 ## Running it
 
@@ -428,6 +431,253 @@ above remains the only estimate for those. It is also one dataset of prose
 sessions; a corpus of technical notes divides into projects differently, and
 somebody whose whole memory is one repository gets the pooled row rather
 than the scoped one.
+
+## A second corpus: LoCoMo
+
+Everything above is one dataset, and someone could reasonably ask how much of
+it is a fact about anathem and how much is a fact about LongMemEval's shape:
+fifty sessions per question, each a block of prose. So the same questions were
+asked of **LoCoMo**, the benchmark from *Evaluating Very Long-Term
+Conversational Memory of LLM Agents* (Maharana et al., ACL 2024).
+
+It is a different animal. Ten conversations between two people, each running
+across 19 to 32 sessions and 369 to 689 turns, with 1,540 questions written
+against them, and the evidence marked **per turn** (`D12:3`) rather than per
+session. Its questions are split into multi-hop (282), temporal (321),
+open-domain (92) and single-hop (841) — the same 1,540-question, four-category
+subset the vendors quote, since its fifth category is adversarial and has no
+correct answer.
+
+**Its licence is stricter than LongMemEval's: CC BY-NC 4.0.** The figures here
+can be published with attribution; the corpus cannot travel with them. Nothing
+of it is in this repository, and `tools/locomo_to_memories.py` reads a file you
+download yourself. Measured on `data/locomo10.json`, sha256
+`79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4`,
+on 2026-11-15.
+
+Four of the 1,540 questions carry no evidence and are not cases. Six more
+need care with their evidence field: four pack several ids into one string
+(`["D8:6; D9:17"]`, `["D9:1 D4:4 D4:6"]`) and two carry a token that is not an
+id (`D`, `D:11:26`). The converter splits on `;` and spaces and reports the two
+malformed tokens, because reading the field as it comes would have dropped the
+second half of those questions' evidence and blamed the ranking for it.
+
+### Two units, and they are not interchangeable
+
+`--unit session` puts one memory per session: 272 memories, about 27
+candidates per question, which is what a memory is in anathem and what the
+LongMemEval conversion does. `--unit turn` puts one per dialog turn: 5,882
+memories and around 600 candidates per question, which is the setting the
+paper's own retrieval evaluation uses, since its context ids are dia_ids.
+
+Both are honest. Quoting one against a number measured the other way is how a
+benchmark gets misread, so both are here, in order. And the same warning as on
+LongMemEval-S applies to `recall@50` at session level: twenty-seven sessions
+per question and fifty candidates asked for, so 100% is arithmetic and not
+retrieval.
+
+| | session bm25 | session hybrid | turn bm25 | turn hybrid |
+|---|--:|--:|--:|--:|
+| recall@5, any evidence | 88.8% | 86.7% | 52.2% | 49.2% |
+| recall@5, fraction of evidence | 82.6% | 80.4% | 47.2% | 43.7% |
+| recall@5, every evidence | 77.2% | 74.6% | 43.3% | 39.6% |
+| recall@50, any evidence | 100% | 100% | 76.8% | 79.2% |
+| MRR | 0.761 | 0.713 | 0.409 | 0.389 |
+| p50 per query | 10 ms | 11 ms | 15 ms | 18 ms |
+
+recall@5 by question type, as the mean fraction of the evidence, bm25:
+
+| question type | n | session | turn |
+|---|--:|--:|--:|
+| single-hop | 841 | 95.2% | 57.0% |
+| temporal | 321 | 86.0% | 56.4% |
+| multi-hop | 282 | **49.6%** | **16.3%** |
+| open-domain | 92 | 56.7% | 20.6% |
+
+### What those four columns say
+
+**The granularity decides the number, not the ranker.** Same corpus, same
+1,536 questions, same binary: 88.8% or 52.2% depending on whether a memory is
+a session or a turn. A note someone wrote is already an aggregation, and that
+aggregation is half of what answering a multi-hop question needs. Turn-level
+retrieval is the harder and more honest measure of a *retriever*; session-level
+is the one that describes a *memory*, which is what anathem is.
+
+**Multi-hop is the floor at both granularities, and the second piece of
+evidence is what goes missing.** At session level, 89% of questions have
+*some* evidence in the top 5 and only 25% of the multi-hop ones have *all* of
+it; at turn level, 4.6% do. This is the same shape as LongMemEval's
+`multi-session` row, reproduced on a dataset built by somebody else, and it
+says the binding constraint is assembling several places into one answer
+rather than finding any one of them.
+
+**The pack costs here, and that is worth publishing.** On LongMemEval the
+vector layer bought +2.4 points of fraction recall on -S and +3.6 on -M. On
+LoCoMo it costs 2.2 points at session level and 3.5 at turn level, and takes
+MRR down with it. The regression is the one already reported for
+`single-session-assistant`: a conversation is full of turns that are *about*
+the same thing without saying it, the vector half pulls those in, and RRF
+dilutes a BM25 rank-1 that was already right. Three datasets now show the same
+shape, which makes it a property of the fusion and not of one corpus. It does
+not make the pack a bad default — it makes it a per-corpus decision, and
+`mem tune` is the instrument for that decision.
+
+**And the 20-candidate protocol covers this corpus almost completely.**
+`mem eval` measures the ranking; what a model actually receives is
+`search_memory`, and `mem eval --as-mcp` measures that: same twenty
+candidates, 120-character excerpts, 1,200-token budget.
+
+| | session | turn |
+|---|--:|--:|
+| the expected memory is among the candidates | 95.9% | 67.0% |
+| it came first | 65.6% | 30.6% |
+| tokens spent, median | 1,152 | 1,161 |
+
+The first row is nearly tautological at session level and should be read that
+way: twelve candidates out of the twenty-seven a conversation has, at the
+shipped 300-character excerpt. What it says is that the payload is not where
+this dataset is lost. Counted strictly
+— every expected session among the candidates, which is what a multi-hop
+answer needs — it is **94.5%** for the same 1,536 questions; the binary
+reports the loose count, and the strict one was computed from the same cases.
+
+That remains a ceiling and not an accuracy: what the model sees is 300
+characters per candidate, and reading the fact itself costs a `get_memory`
+call.
+
+### Do the answers get better: five arms, one model
+
+Everything above measures whether the evidence reached the model. It cannot
+measure whether the model then answered, and that is the axis on which every
+memory product publishes a number. `tools/answer_eval.py` measures it here:
+200 questions sampled evenly inside each type, **one model answering every
+arm** so the difference is the memory and not the model, judged by a second
+model, with token F1 against the reference answer as a second opinion.
+
+| arm | answered | F1 | multi-hop | temporal | single-hop | open-domain |
+|---|--:|--:|--:|--:|--:|--:|
+| the whole conversation in the prompt (17,837 tokens) | **78.8%** | 63.7 | 61.1% | 68.3% | 93.6% | 33.3% |
+| `search_memory`, and the agent decides whether to open bodies | **68.0%** | 53.1 | 36.1% | 70.7% | 80.6% | 41.7% |
+| `search_memory`, then three bodies opened for it | 62.6% | 50.4 | 37.8% | 58.5% | 70.1% | 41.7% |
+| `search_memory`, and nothing else | 45.5% | 38.5 | 27.8% | 54.8% | 48.6% | 36.4% |
+| no memory at all | 0.0% | 0.6 | — | — | — | — |
+
+`gpt-6-luna` answering, `gpt-6.1-sol` judging, n=200, ±6-7 points, on the
+shipped payload of 20 candidates at 300 characters. The last three are the
+protocol's own stages and the distance between them is the finding: **an
+agent that reads the excerpts and answers from them gets 46% of the answers
+right, opening three bodies gets 63%, and letting the model decide when to
+open — up to six — gets 68%.**
+
+That order is worth pausing on. The arm where the *model* decides between the
+two stages beats the arm where the harness decides for it, by 5.4 points. The
+two-stage protocol is not something to impose on an agent; it is something to
+offer it, with the decision left where the information is.
+
+The memory that was needed was among the candidates 95.9% of the time in all
+of these. What fails is the step between, and the next table is why.
+
+**The payload change had a price, and it is in the same table.** With 300
+characters per candidate the budget fits twelve of them instead of twenty, so
+the payload that answers more questions reaches fewer memories: counting
+strictly, every piece of evidence a multi-hop question needs is among the
+candidates for **47.9%** of multi-hop questions where 120 characters reached
+82.3%. Across all 1,536 questions the strict figure is 85.8% against 94.5%. So the
+change cost 8.7 points of strict coverage — 34 of them in multi-hop — and
+bought 18 points of answers. That trade is worth taking and worth naming: it
+is also why multi-hop stays the floor at 27.8% in the one-shot arm.
+
+| shape of the payload | tokens | the needed memory is among them | answered |
+|---|--:|--:|--:|
+| 20 × 120 (the old default, forced three reads) | 1,195 | 98.6% | 44.7% |
+| 15 × 200 | 1,197 | 97.5% | 58.0% |
+| 10 × 300 | 1,048 | 95.4% | 61.9% |
+| 20 × 300, budget 1,200 (**the default now**, forced three reads) | 1,152 | 95.9% | **62.6%** |
+| 20 × 300, budget 1,600 | 1,571 | 97.5% | 64.5% |
+
+At a fixed budget, the length of the excerpt does the work and the number of
+candidates barely matters: three points of "the needed memory is among them"
+bought eighteen points of answers. That is why `excerpt` moved to 300 and the
+budget did not move at all — the last two rows are the same shape at two
+budgets, and 400 more tokens bought 1.9 points, inside the noise. That change
+is the one this measurement produced.
+
+**Two things were built, measured and left out.** The first was a graduated
+payload: 300 characters for the top five candidates and 120 for the other
+fifteen, so that twenty of them fit in the same budget. It did what it was
+supposed to do and it did not help — strict coverage rose from 85.8% to 91.1%
+(all of it, 47.9% to 69.1% on multi-hop) and the answers *fell*, from 68.0% to
+65.3%. An agent decides what to open from what it reads, and fifteen
+candidates that read like the old payload pull it in the wrong direction: the
+quality of each candidate matters more than how many there are. The code is
+not in the binary; the measurement is here.
+
+**Multi-hop was attacked four times and did not move.** The arm where the
+model decides was also given the ability to search again with different words,
+up to twice, and then told to use it when a question needs facts from several
+conversations. Neither helped:
+
+| arm | answered | multi-hop |
+|---|--:|--:|
+| agent, decides whether to open bodies | 68.0% | 36.1% |
+| the same, and it may search again | 67.8% | 41.7% |
+| the same, and it is told to for multi-fact questions | 65.5% | 32.4% |
+
+Multi-hop is 37 questions in this sample, so a ±26-point interval covers all
+three rows: what the table says is that nothing here is signal, not that the
+hint does damage. Together with the query expansion and the greedy coverage
+selection that were measured and rejected in the same week, it settles the
+question for this design: multi-hop does not improve by asking the same
+retriever twice, by reformatting what it returns, or by instructing the model
+harder. The published methods that do improve it put a *model* at query time —
+a decision model in SAG2, extracted evidence requirements in EviCover — and
+that component is the one this project exists without.
+
+**And so was the other thing:** a sentence at the end of the
+result asking the agent to open the body when the answer depends on it. It
+changed nothing — 68.0% with it, 69.0% without it — and it cost thirty tokens
+on every search, so it is not in the payload. The tool description already
+says it, and evidently one telling is enough.
+
+**And full context still wins, at every model tried.** At `gpt-6-luna` the
+whole conversation is 78.8% against 68.0%; at `gpt-6.1-terra` — a model at
+GPT-5's price point, 50 questions, forced three reads — it is 88.0% against
+69.4%. The gap is
+about the same at both, so it is not a fact about the model: it is what one
+kilobyte of excerpts costs against eighteen kilobytes of everything. A memory
+layer that compiles what it read into a page, and hands over the page, is
+spending tokens in the other place — and this measurement is what that design
+is buying.
+
+**One of those points came from a defect worth naming.** The first run of
+this experiment scored 29.3% on temporal questions in its best arm. The cause
+was not retrieval: the conversion had put each session's date in the
+frontmatter, where `created` lives, and `get_memory` returns the body. The
+model never saw a single date, on any arm, for questions that ask *when*.
+Putting the date in the body took the full-context arm from 29.3% to 68.3%
+without changing anything else. anathem has the same shape of hole today: its
+candidates and its bodies reach the model without their date.
+
+### What this section does not show
+
+It measures retrieval, and (above) answer accuracy for one cheap model and one
+judge. Neither is a verdict on whether a memory is *useful*: the answers are
+judged against a reference string, which rewards the fact and not the
+judgement around it.
+
+Session-level hits are also coarser than the dataset's own definition: the
+evidence is marked per turn, and a hit at session level says the right 600-turn
+block was found, not the right sentence. And 27 candidates per question is a
+small pool, which is why the session row should not be read as "anathem is at
+88.8% on LoCoMo" without the unit attached.
+
+The answer arms have their own limits, and they are listed here rather than
+under the tables: the answering model is a cheap one, so the absolute numbers
+are low and a GPT-5-class model would lift all four arms; `cards+` reads at
+most three bodies, which is a choice of the harness and not of the binary; and
+the judge is a model, with a model's opinion of what "the same thing" means.
+Token F1 is printed next to it for that reason, and the two agree in ordering
+in every table above.
 
 ## Against published numbers
 

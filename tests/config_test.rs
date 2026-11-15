@@ -32,13 +32,13 @@ fn a_negative_weight_is_rejected() {
 }
 
 #[test]
-fn with_no_file_it_uses_twenty_candidates_and_a_excerpt_of_one_twenty() {
+fn with_no_file_it_uses_twenty_candidates_and_a_three_hundred_char_excerpt() {
     // These are the values that make `search_memory` return many short
     // candidates rather than a few whole chunks.
     let d = tempfile::tempdir().unwrap();
     let cfg = config::load(d.path()).unwrap();
     assert_eq!(cfg.candidates, 20);
-    assert_eq!(cfg.excerpt, 120);
+    assert_eq!(cfg.excerpt, 300);
 }
 
 #[test]

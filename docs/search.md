@@ -9,24 +9,50 @@ before any of it runs.
 Nothing here needs configuring. The defaults were measured, and this
 document says what they were measured against.
 
-## Two stages: many candidates, short excerpts
+## Two stages: many candidates, excerpts long enough to recognise
 
-The MCP tool `search_memory` returns **20 candidates with an excerpt of ~120
-characters** each, not a handful with the whole chunk. The agent consuming it
-recognizes which one is useful and asks for its full body with `get_memory`.
+The MCP tool `search_memory` returns **up to 20 candidates with an excerpt of
+~300 characters** each, not a handful with the whole chunk. The agent
+consuming it recognizes which one is useful and asks for its full body with
+`get_memory`.
 
 The reordering is done by the model that is already in the conversation, so it
 costs neither disk nor RAM — only the difference in tokens. Measured over a real
-corpus of 174 memories and 50 queries:
+corpus of 174 memories and 50 queries, going from a handful of full chunks to
+twenty short ones:
 
 | | tokens | candidates | the right memory is among those shown | same, paraphrastic queries |
 |---|---|---|---|---|
 | before | 1,173 | 7.6 | 72 % | 25 % |
-| now | 1,301 | 20 | **82 %** | **50 %** |
+| twenty, 120 characters | 1,301 | 20 | **82 %** | **50 %** |
 
 Eleven percent more tokens for double the chances on the hard queries: the
 ones that describe the situation instead of naming it, which are exactly
 where lexical search falls short.
+
+**And then that measurement turned out to be the wrong one.** It counts
+whether the right memory is *among those shown*, which is the step before the
+one that matters: the agent still has to recognise it and decide to open it.
+Measured on LoCoMo — 1,536 questions over ten long conversations, a cheap
+model answering, a judge scoring — 20 candidates of 120 characters put the
+memory a question needed among the candidates 98.6% of the time and answered
+**44.7%** of the questions. At the same token budget, 300 characters reach
+95.9% and answer **62.6%**. Fewer useful candidates, far more correct answers:
+what the agent was missing was enough text to tell what the memory is about,
+because 120 characters of a long note are usually its salutation.
+
+| shape | tokens, median | the needed memory is among them | answered |
+|---|--:|--:|--:|
+| 20 × 120 | 1,195 | 98.6 % | 44.7 % |
+| 15 × 200 | 1,197 | 97.5 % | 58.0 % |
+| 10 × 300 | 1,048 | 95.4 % | 61.9 % |
+| 20 × 300, budget 1,200 | 1,152 | 95.9 % | **62.6 %** |
+| 20 × 300, budget 1,600 | 1,571 | 97.5 % | 64.5 % |
+
+The last two rows are the same shape at two budgets, and they are why the
+default moved and the budget did not: 400 more tokens bought 1.9 points,
+which is inside the noise of 200 questions. `docs/benchmarks.md` has the whole
+measurement, including the four answer arms it comes from.
 
 The trimming happens **before** counting the token budget, not at print
 time. The other way round, the budget would cut the list down to eight
@@ -35,20 +61,23 @@ candidates and the change would be worth nothing.
 Both values are tuned in `config.json`, next to the database:
 
 ```json
-{ "candidates": 20, "excerpt": 120 }
+{ "candidates": 20, "excerpt": 300 }
 ```
 
-On a corpus of short documents it pays to lower `candidates`: measured over
-mMARCO, with passages of ~250 characters, the ceiling saturates at 10 and
-asking for more is waste. With long memories, which is what anathem exists
-for, the jump from 10 to 20 is the one that doubles the ceiling.
+`candidates` is a ceiling and not a promise: the token budget trims the list
+before it applies, so on long memories the twenty never all fit — twelve do,
+at 300 characters. On a corpus of short documents it pays to lower
+`candidates`: measured over mMARCO, with passages of ~250 characters, the
+ceiling saturates at 10 and asking for more is waste. On a corpus of notes
+shorter than the excerpt cap nothing changes at all, because a note that fits
+is shown whole either way.
 
 **The CLI did not change**: `mem search` still shows the full chunks.
 
 A third key, `outline`, is **off** by default:
 
 ```json
-{ "candidates": 20, "excerpt": 120, "outline": true }
+{ "candidates": 20, "excerpt": 300, "outline": true }
 ```
 
 With it on, a candidate whose memory is long **and has markdown headings**
@@ -63,6 +92,31 @@ carry an outline and 1.5% of those have a single heading. They are
 transcripts of conversations, so there is no structure to report, and a
 candidate with no headings keeps the chunk that matched — which is more
 useful than its opening lines at the same price.
+
+## What the payload says besides the candidates
+
+Three things ride along with the candidate list, and each of them exists
+because of something measured.
+
+**The date each memory carries**, as `[id:12] [api-monolito] 2026-05-08 …` and
+again in the header `get_memory` returns. It is the one thing the model cannot
+infer from the text: a note about a meeting rarely says when the meeting was,
+and "when did we decide this" is a question memory is asked constantly. Over
+LoCoMo, putting the date where the model could see it — it had been living in
+the frontmatter, which `get_memory` does not return — took temporal questions
+from 29 % to 68 % in the arm that reads everything, with nothing else changed.
+
+**What is *not* there: a sentence asking for the body.** It was added and
+then measured away. The tool description already says the result is excerpts
+and that `get_memory` returns the body, and repeating it in every result
+changed nothing: an agent given the choice answered **68.0 %** of LoCoMo's
+questions with the sentence in the payload and **69.0 %** without it, which
+is the same number twice. It cost about thirty tokens per search, so it went.
+The description stays, and the list keeps its own two stages.
+
+**A batch read.** `get_memory` takes `ids` as well as `id`, up to ten in one
+call, because three round trips is exactly the cost that makes an agent skip
+the step worth 28 points. It changes no tokens — only the number of calls.
 
 ## The vector layer, and what it actually bought
 

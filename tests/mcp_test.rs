@@ -129,11 +129,14 @@ fn fixture_with_several() -> (tempfile::TempDir, rusqlite::Connection) {
 }
 
 #[test]
-fn search_memory_returns_twenty_candidates_by_default() {
-    // With no explicit `limit`, the tool has to use
-    // `Config::default().candidates` (20) and not the earlier 10: it is half
-    // of the design change (more numerous candidates, shorter excerpt, same
-    // budget).
+fn search_memory_returns_the_candidates_the_budget_pays_for() {
+    // With no explicit `limit`, the tool uses `Config::default().candidates`
+    // (20) as a ceiling and the token budget as the real bound: with long
+    // memories and a 300-character excerpt, twenty do not fit and the budget
+    // decides. The test pins the shape of that: the count is bounded by the
+    // ceiling, it is not zero, and a configuration with room for twenty
+    // returns twenty — which is the part that has to keep working for short
+    // notes.
     let dir = tempfile::tempdir().unwrap();
     let conn = db::open(&dir.path().join("t.db")).unwrap();
     for i in 0..25 {
@@ -147,10 +150,17 @@ fn search_memory_returns_twenty_candidates_by_default() {
     }
     let req = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
         "params":{"name":"search_memory","arguments":{"query":"memoria relleno"}}});
-    let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
-    let n = res["result"]["content"][0]["text"].as_str().unwrap()
-        .lines().filter(|l| l.starts_with("[id:")).count();
-    assert_eq!(n, 20, "with 25 matching memories, no limit has to return the default 20 candidates");
+    let count = |cfg: &Config| {
+        let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), cfg, &req).unwrap().unwrap();
+        res["result"]["content"][0]["text"].as_str().unwrap()
+            .lines().filter(|l| l.starts_with("[id:")).count()
+    };
+    let by_default = count(&Config::default());
+    assert!(by_default > 0 && by_default <= 20,
+        "the default has to return between one and twenty candidates, not {by_default}");
+    let roomy = Config { excerpt: 20, ..Config::default() };
+    assert_eq!(count(&roomy), 20,
+        "with short excerpts the twenty have to fit in the budget, and with 25 matches that is the ceiling");
 }
 
 // --- B-4: what a caller may ask for has a ceiling ------------------------
