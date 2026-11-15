@@ -544,6 +544,54 @@ fn db_ruta(d: &tempfile::TempDir) -> std::path::PathBuf {
     d.path().join("mem.db")
 }
 
+// ------------------------------------------------ pinned memories in the greeting
+
+/// A pinned memory is one its owner decided should not have to be found. The
+/// greeting is the only place that can honour that without a search, so it
+/// carries them — and it carries them outside the window, because pinning is
+/// a decision and not a date.
+#[test]
+fn pinned_memories_travel_with_the_session() {
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&db_ruta(&d)).unwrap();
+    let p = project_of_cwd();
+    let (pinned, _) = ingest::save_explicit(&conn, "una regla que no hay que buscar", &p, vec![]).unwrap();
+    let (recent, _) = ingest::save_explicit(&conn, "lo de hace un rato", &p, vec![]).unwrap();
+    anathem::maint::pin(&conn, pinned, true).unwrap();
+    // Ninety days back: no window reaches it, and it still has to be there.
+    set_date(&conn, pinned, &hace(90 * 24 * 3600));
+    set_date(&conn, recent, &hace(60));
+
+    let txt = recent::handoff_instructions(&conn, &p, 5, "24h", None).unwrap();
+    assert!(
+        txt.contains(&format!("id:{pinned}")),
+        "la memoria fijada tiene que viajar aunque esté fuera de la ventana:\n{txt}"
+    );
+    assert!(txt.contains("[pinned] "), "sin la marca no se sabe por qué está:\n{txt}");
+    let first = txt.lines().find(|l| l.starts_with("- ")).unwrap();
+    assert!(
+        first.contains(&format!("id:{pinned}")),
+        "las fijadas van antes que las recientes:\n{txt}"
+    );
+}
+
+/// The cap is the same one, so pinning everything does not make the greeting
+/// grow: what pinning buys is priority, and the price of pinning too many is
+/// that some fall off the end.
+#[test]
+fn pinned_memories_share_the_slot_count() {
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&db_ruta(&d)).unwrap();
+    let p = project_of_cwd();
+    for i in 0..7 {
+        let (id, _) = ingest::save_explicit(&conn, &format!("fijada {i}"), &p, vec![]).unwrap();
+        anathem::maint::pin(&conn, id, true).unwrap();
+    }
+    let txt = recent::handoff_instructions(&conn, &p, 5, "24h", None).unwrap();
+    assert_eq!(txt.lines().filter(|l| l.starts_with("- ")).count(), 5, "{txt}");
+    assert_eq!(txt.matches("[pinned] ").count(), 5, "{txt}");
+}
+
 /// Task 4: the handoff text is the ONLY thing that reaches the model's system
 /// prompt, and it carries the framing against prompt injection. Rewriting it
 /// in English must not cost any of its three defences: the delimiters, the
