@@ -171,6 +171,11 @@ enum Cmd {
         /// Writes the results JSON to this file
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Measures what `search_memory` would have returned at the
+        /// `candidates`, `excerpt` and `budget` in `config.json`, instead of
+        /// the ranking with an unlimited budget
+        #[arg(long)]
+        as_mcp: bool,
     },
     /// Starts the MCP server over stdio
     Serve,
@@ -1039,7 +1044,7 @@ every other key the file has, or put it in {} yourself:",
                 println!("\n    {{ \"bm25_weight\": {best} }}");
             }
         }
-        Cmd::Eval { evalset, label, out } => {
+        Cmd::Eval { evalset, label, out, as_mcp } => {
             let evalset = evalset.unwrap_or_else(|| {
                 path.parent().unwrap_or(std::path::Path::new(".")).join("evalset.json")
             });
@@ -1048,6 +1053,14 @@ every other key the file has, or put it in {} yourself:",
             let cfg = anathem::config::load(dir)?;
             let p = anathem::packstore::resolve_and_warn(&conn, dir);
             let ctx = anathem::search::SearchContext::for_reading(p.as_ref(), cfg.bm25_weight);
+            if as_mcp {
+                let p = anathem::evalrun::run_as_mcp(&conn, &evalset, &label, &ctx, &cfg)?;
+                println!(
+                    "{}  found={:.1}%  first={:.1}%  tokens(p50)={}  n={}",
+                    p.system, p.found * 100.0, p.first * 100.0, p.median_tokens, p.n_cases
+                );
+                return Ok(());
+            }
             let r = anathem::evalrun::run(&conn, &evalset, &label, &ctx)?;
             println!(
                 "{}  recall@5={:.0}%  recall@50={:.0}%  MRR={:.3}  p50={:.1}ms  n={}",

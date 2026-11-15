@@ -217,3 +217,55 @@ fn returned_names_every_hit_including_the_ones_without_an_ext_id() {
     assert_eq!(r.per_case[0].returned, vec![format!("id:{sin_ext}"), "x".to_string()],
         "returned has to line up with the ranks: {:?}", r.per_case[0].returned);
 }
+
+/// The other question `mem eval` can answer with `--as-mcp`: not where the
+/// answer ranks with an unlimited budget, but whether it is among the
+/// candidates `search_memory` would actually have shown.
+#[test]
+fn the_mcp_measurement_sees_only_what_the_answer_would_show() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    for (ext, body) in [
+        ("fuerte", "cache cache cache cache"),
+        ("debil", "cache"),
+    ] {
+        ingest::insert(&conn, &NewMemory {
+            project: "p".into(), title: body.into(), body: body.into(),
+            created: "2026-09-01".into(), event_start: None, event_end: None,
+            source: "migrated".into(), ext_id: Some(ext.into()),
+            tags: vec![], refs: vec![],
+        }).unwrap();
+    }
+
+    let case = evalrun::Case {
+        id: "q1".into(),
+        query: "cache".into(),
+        expect_docs: vec!["debil".into()],
+        project: None,
+        kind: None,
+        parafrastica: None,
+        words: None,
+    };
+
+    let mut cfg = anathem::config::Config::default();
+    cfg.candidates = 1;
+    cfg.excerpt = 40;
+
+    // With room for one candidate, the second memory is cut and the answer
+    // does not contain the one this case needs.
+    let cut = evalrun::run_cases_as_mcp(
+        &conn, std::slice::from_ref(&case), "cut", &search::SearchContext::bm25_only(), &cfg,
+    ).unwrap();
+    assert_eq!(cut.n_cases, 1);
+    assert_eq!(cut.found, 0.0, "with one slot the second memory cannot appear");
+    assert!(cut.median_tokens > 0, "the answer has to cost something");
+
+    // With room for two, it does — and it is not first, which is a different
+    // number and the reason both are reported.
+    cfg.candidates = 2;
+    let kept = evalrun::run_cases_as_mcp(
+        &conn, &[case], "kept", &search::SearchContext::bm25_only(), &cfg,
+    ).unwrap();
+    assert_eq!(kept.found, 1.0);
+    assert_eq!(kept.first, 0.0);
+}
