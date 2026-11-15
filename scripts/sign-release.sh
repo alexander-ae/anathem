@@ -87,7 +87,7 @@ bajar() {
   url="$2"
   intento=1
   while [ "$intento" -le 5 ]; do
-    codigo="$(curl -sSL -o "$destino" -w '%{http_code}' "$url" 2>/dev/null || echo 000)"
+    codigo="$(curl -sSL -o "$destino" -D "$destino.cabeceras" -w '%{http_code}' "$url" 2>/dev/null || echo 000)"
     case "$codigo" in
       200) return 0 ;;
       404) return 2 ;;
@@ -102,14 +102,54 @@ bajar() {
     intento=$((intento + 1))
   done
   malo "$url still answering $codigo after 5 attempts; it is not a missing file"
-  echo "    GitLab rate-limits release downloads. Wait a few minutes and run this again." >&2
+  # GitLab says how long, so say it. "A few minutes" was wrong by an order
+  # of magnitude the day this was written: `retry-after` read 1127 seconds,
+  # and somebody retrying every couple of minutes would have burned through
+  # nine more refusals before it cleared.
+  espera="$(awk 'tolower($1) == "retry-after:" { gsub(/\r/, "", $2); print $2 }' \
+            "$destino.cabeceras" 2>/dev/null | tail -1)"
+  limite="$(awk 'tolower($1) == "ratelimit-name:" { gsub(/\r/, "", $2); print $2 }' \
+            "$destino.cabeceras" 2>/dev/null | tail -1)"
+  if [ -n "$espera" ] && [ "$espera" -gt 0 ] 2>/dev/null; then
+    minutos=$(( (espera + 59) / 60 ))
+    echo "    GitLab says to wait ${espera}s — about ${minutos} min${limite:+ (limit: $limite)}." >&2
+  else
+    echo "    GitLab rate-limits release downloads. Wait a few minutes and run this again." >&2
+  fi
+  echo "    This script fetches through \`glab\` first, which uses the API and is not" >&2
+  echo "    subject to that limit; the fallback you just hit is the public endpoint." >&2
   return 1
 }
 
 paso "1. Download what the release publishes"
 
+# The authenticated API first, and `curl` on the public endpoint only if it
+# is not available.
+#
+# `/-/releases/<tag>/downloads/<file>` is rate-limited hard, and this script
+# has died on it twice mid-release with 429 — once on the fifth file, once on
+# the first. The backoff below tops out at forty seconds across five
+# attempts and the limit takes minutes to clear, so retrying harder was never
+# the answer. `glab` goes through the API, which has its own and far looser
+# limit, and the script already requires it to upload the signatures: using
+# it to fetch as well removes a dependency on the one path that keeps
+# failing.
+#
+# One call brings the whole release, assets and sidecars together, so what
+# step 2 needs is already on disk by the time it runs.
+if glab release download "$ETIQUETA" --repo "$REPO" --dir "$TEMPORAL" >/dev/null 2>&1; then
+  ok "fetched through the API"
+else
+  aviso "the API download did not work; falling back to the public endpoint"
+fi
+
 PRESENTES=""
 for f in $ARCHIVOS; do
+  if [ -s "$TEMPORAL/$f" ]; then
+    ok "$f"
+    PRESENTES="$PRESENTES $f"
+    continue
+  fi
   URL="https://gitlab.com/$REPO/-/releases/$ETIQUETA/downloads/$f"
   if bajar "$TEMPORAL/$f" "$URL"; then codigo=0; else codigo=$?; fi
   case $codigo in
@@ -125,13 +165,15 @@ paso "2. Check each one against its own sha256 before signing it"
 # Signing a corrupt download would publish a valid signature over the wrong
 # bytes, which is worse than not signing: it would carry this key's word.
 for f in $PRESENTES; do
-  URL="https://gitlab.com/$REPO/-/releases/$ETIQUETA/downloads/$f.sha256"
-  if bajar "$TEMPORAL/$f.sha256" "$URL"; then codigo=0; else codigo=$?; fi
-  case $codigo in
-    0) : ;;
-    2) malo "$f has no .sha256 in the release, so this download cannot be checked"; exit 1 ;;
-    *) exit 1 ;;
-  esac
+  if [ ! -s "$TEMPORAL/$f.sha256" ]; then
+    URL="https://gitlab.com/$REPO/-/releases/$ETIQUETA/downloads/$f.sha256"
+    if bajar "$TEMPORAL/$f.sha256" "$URL"; then codigo=0; else codigo=$?; fi
+    case $codigo in
+      0) : ;;
+      2) malo "$f has no .sha256 in the release, so this download cannot be checked"; exit 1 ;;
+      *) exit 1 ;;
+    esac
+  fi
   esperado="$(cut -d' ' -f1 < "$TEMPORAL/$f.sha256")"
   if command -v sha256sum >/dev/null 2>&1; then
     obtenido="$(sha256sum "$TEMPORAL/$f" | cut -d' ' -f1)"
