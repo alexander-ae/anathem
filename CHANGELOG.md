@@ -8,7 +8,14 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 what you would be getting. Memories are never touched by an upgrade: they
 live in the database, not in the binary.
 
-## [Unreleased]
+## [1.2.0] - 2026-11-15
+
+A minor, and one of its changes is visible: `search_memory` now hands back
+300 characters of each candidate instead of 120, which is what a measurement
+of *answered questions* asked for. Nothing stored changes, and the database,
+the export and the five tools are the same five — `get_memory` gained `ids`
+and lost a `required`.
+
 
 ### Added
 
