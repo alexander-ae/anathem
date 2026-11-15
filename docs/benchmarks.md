@@ -471,7 +471,10 @@ memories and around 600 candidates per question, which is the setting the
 paper's own retrieval evaluation uses, since its context ids are dia_ids.
 
 Both are honest. Quoting one against a number measured the other way is how a
-benchmark gets misread, so both are here, in order.
+benchmark gets misread, so both are here, in order. And the same warning as on
+LongMemEval-S applies to `recall@50` at session level: twenty-seven sessions
+per question and fifty candidates asked for, so 100% is arithmetic and not
+retrieval.
 
 | | session bm25 | session hybrid | turn bm25 | turn hybrid |
 |---|--:|--:|--:|--:|
