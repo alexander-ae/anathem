@@ -243,7 +243,10 @@ JUDGE_SYSTEM = (
 
 
 def tokens(s):
-    return re.findall(r"[a-z0-9]+", s.lower())
+    # LoCoMo writes some reference answers as numbers ("answer": 3), so this
+    # takes anything and stringifies it: an `int` here used to raise inside
+    # the F1, which silently dropped the case from the arm's denominator.
+    return re.findall(r"[a-z0-9]+", str(s).lower())
 
 
 def f1(pred, ref):
@@ -445,8 +448,8 @@ def references(locomo):
     out = {}
     for sample in json.load(open(locomo, encoding="utf-8")):
         for i, qa in enumerate(sample["qa"]):
-            if qa.get("answer"):
-                out[f"{sample['sample_id']}-{i}"] = qa["answer"]
+            if qa.get("answer") not in (None, ""):
+                out[f"{sample['sample_id']}-{i}"] = str(qa["answer"])
     return out
 
 
