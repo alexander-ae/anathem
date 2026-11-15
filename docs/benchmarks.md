@@ -548,3 +548,39 @@ reproduce. They are kept in
 attached. This document does not replace them: it measures something
 reproducible, and the gap between the two is reported in the README because
 it is information rather than an embarrassment.
+
+## What the candidates × excerpt trade-off measured
+
+LongMemEval-S, 470 questions, 23,854 memories, BM25 without a vocabulary pack,
+`budget: 1200`. Four combinations, and the rule was fixed before the run:
+keep the default unless something beats it by more than two points without
+spending more tokens.
+
+| candidates | excerpt | found | first | tokens (p50) |
+|---:|---:|---:|---:|---:|
+| 20 | 120 | 98.9% | 87.2% | 1197 |
+| 30 | 80 | **99.6%** | 87.2% | 1196 |
+| 40 | 60 | **99.6%** | 87.2% | 1166 |
+| 30 | 120 | 98.9% | 87.2% | 1197 |
+
+`found` is whether the memory the question needed is among the candidates
+`search_memory` would have shown — *any* of its evidence sessions, which is
+the loose reading. `first` is whether it came first.
+
+Three things come out of it:
+
+- **`candidates` on its own does nothing above what the budget allows.** The
+  30 × 120 row is identical to 20 × 120 to the token, because the 1,200-token
+  budget trims the list *before* the candidate count applies. `config.rs` says
+  so; this is the measurement that shows it.
+- **What buys more candidates is a shorter excerpt**, and the gain is real but
+  small: +0.7 points, with `first` unmoved. The rule said two points, so **the
+  default stays 20 × 120**.
+- **The ceiling was already saturated.** With twenty candidates the needed
+  memory is there 98.9% of the time, so at most 1.1 points were available. The
+  payload trim is not what loses memories: what loses them is upstream, in the
+  ranking and in covering *every* evidence session — the 82.3% strict figure,
+  which is a different question and not what this table measures.
+
+After the run the corpus was deleted; what stays is the harness that produced
+it (`mem eval --as-mcp`) and this table.
