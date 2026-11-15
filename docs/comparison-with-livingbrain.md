@@ -132,6 +132,12 @@ has since argued the same way: a designed memory is a patch for a weaker
 writer, and its ceiling is set by the model that writes it
 ([`research.md`](research.md)).
 
+There is now a paper for that position, and it is not ours: arXiv 2610.41172
+finds that under a competent harness, LLM-compiled structural artifacts gave
+**no detectable accuracy gain** on multi-hop FRAMES, while what a compiled
+navigation tree does buy is tokens — 91% fewer when the evidence suffices. A
+compiled page is a supply layer, not a better retriever.
+
 What their design gets right, and this project does not, is that **it keeps
 what it should not have to be asked for**. Their answer to that is a model
 deciding worthiness. anathem's answer is smaller and older: `mem pin`, and the

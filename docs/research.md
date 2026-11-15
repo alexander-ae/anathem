@@ -1,6 +1,6 @@
 # What the literature says, and what it changed here
 
-Last reviewed: **2026-11-10**. "Reviewed" means the abstracts were read and
+Last reviewed: **2026-11-15**. "Reviewed" means the abstracts were read and
 every figure below was checked against the paper's own page — not that the
 papers were read in full, and not that anything here was reproduced.
 
@@ -131,6 +131,50 @@ text was measured against the case it has no stop condition for. Measured
 here: in 36 of 36 runs the agent said the fact was not there and none
 answered anyway. *State: checked, text left alone, #56.*
 
+**arXiv 2611.10170 — *Where Did the Evidence Go? Diagnosing Proof-Set Loss in
+Long-Term Conversational Memory*.** Tracks the support turns a question needs
+through the funnel — retrieval, reranking, final context — and finds the loss
+in two places, not one. Its EviCover selects turns jointly by checking that
+the question's evidence requirements are covered: among 60 candidate turns,
+support recall rises from **0.526 to 0.575**, and in the final ten-turn context
+from **0.349 to 0.379**. And then the sentence that matters here: greater
+evidence recall **did not** establish a correctness gain. *State: adopted as a
+constraint, and reproduced.* Our own graduated payload raised strict coverage
+from 85.8% to 91.1% and lowered answers from 68.0% to 65.3%; the dissociation
+is real and it is why `docs/benchmarks.md` now reports coverage and answers as
+two separate measurements of the same corpus.
+
+**arXiv 2611.11840 — *Correct Answers from Insufficient Histories*.** An answer
+can match the reference while the visible history does not determine it: on
+203 deliberately insufficient instances, Qwen3-32B matched the hidden
+reference **87** times and abstained on seven. *State: adopted as a caveat.*
+Every accuracy figure in `docs/benchmarks.md` includes some answers that were
+right by guess, and the section says so; only coverage bounds it.
+
+**arXiv 2610.41172 — *Context as Infrastructure: Knowledge Compilation for
+Retrieval in Agentic Systems with Harnesses*.** A harness with BM25/grep alone
+answers 85% of BrowseComp-Plus and 91% of multi-hop FRAMES — and, under a
+competent harness, LLM-compiled structural artifacts gave **no detectable
+accuracy gain** on FRAMES, while a page-outline structure degraded at scale.
+What compilation does buy is tokens: a navigation tree of claim-evidence leaves
+cut query tokens by **91%** when the evidence suffices, and added 1.9% when it
+did not. *State: adopted as the argument for not compiling.* It is the paper
+behind the position in
+[`comparison-with-livingbrain.md`](comparison-with-livingbrain.md): a compiled
+page is a supply layer, not a better retriever.
+
+**arXiv 2610.22588 — *SAG2: Embedding-Free Multi-Hop Retrieval with BM25 and
+Decision Models*.** The closest published shape to anathem's storage: a SQLite
+lexical index, nothing generative at index time, no embeddings. What it adds is
+a **decision model at query time** that scores whether a candidate supplies a
+fact in the answer chain, and uses its terms to reach passages the first query
+did not. Recall@10 of 86.62% on MuSiQue against BM25 alone, at about a fifth of
+the cost of the LLM-based system it replaces. *State: open, and it is the
+honest boundary of this project.* The structure is ours; the component that
+makes multi-hop work is a model, and anathem's answer to that is the model
+already in the conversation — which is what the `search_memory` text asks it to
+use, and what `docs/benchmarks.md` measures as the arm that decides for itself.
+
 ## The ones still open
 
 **arXiv 2611.02912 — *A State Change Is Local, Its Consequences Are Not*.**
@@ -221,3 +265,7 @@ does not claim it was. *State: open; relevant to
 | 2610.33274 | one immutable store, rendered per call | +11.5 % | the store already matches | open |
 | 2610.27377 | the lifecycle is the bottleneck | 68.7 % vs 55.6 % | — | open |
 | 2610.38521 | memory files move security either way | −8 to +6 pp | — | open |
+| 2611.10170 | the evidence funnel loses in two places | support recall 0.526→0.575; no correctness gain | coverage and answers measured apart | adopted |
+| 2611.11840 | right by guess over insufficient history | 87 of 203 matched | the accuracy caveat | adopted |
+| 2610.41172 | compilation is a supply layer, not a retriever | no accuracy gain on FRAMES; −91% tokens | the argument against compiling | adopted |
+| 2610.22588 | lexical index, no LLM at index time, model at query time | recall@10 86.62% MuSiQue | the boundary: multi-hop wants a model | open |
