@@ -18,7 +18,12 @@ and not the model:
          a 120-character excerpt — and nothing else
   cards+ the same, then one turn where the model names up to three memories
          to read in full through `get_memory`, then the answer. This is the
-         two-stage protocol anathem is designed around
+         two-stage protocol anathem is designed around, with the decision
+         taken for the model
+  agent  the same material, but the model decides in one call whether the
+         excerpts are enough or whether it wants bodies first. This is the
+         only arm that can see the protocol sentence in the payload, which
+         `cards` never reads and `cards+` overrides
   none   the question alone, which is what a cold session knows
 
 Scoring is done twice: by a judge model against the reference answer, and by
@@ -242,10 +247,19 @@ ANSWER_SYSTEM = (
     "name, a phrase. Do not explain."
 )
 
+AGENT_SYSTEM = (
+    "You answer questions about past conversations between two people. You "
+    "are given a list of memory candidates with excerpts. If the excerpts are "
+    "enough, answer in as few words as possible: a date, a name, a phrase. If "
+    "they are not, reply with ONLY a JSON array of the ids whose full text you "
+    "need (at most {n}). Do not explain. If nothing in the material answers "
+    "the question, reply exactly: not in memory."
+)
+
 PICK_SYSTEM = (
     "You are reading a list of numbered memory candidates. Reply with a JSON "
-    "array of at most 3 ids whose full text you need in order to answer the "
-    "question. Reply [] if the candidates already answer it."
+    "array of the ids whose full text you need in order to answer the "
+    "question, and no others. Reply [] if the candidates already answer it."
 )
 
 JUDGE_SYSTEM = (
@@ -255,6 +269,29 @@ JUDGE_SYSTEM = (
     "that does not contradict it. 'no' otherwise, including when the answer "
     "is evasive, says it does not know, or names a different entity or date."
 )
+
+
+def parse_ids(text, cap):
+    """The ids a model asked to read, out of whatever shape it wrote them in.
+
+    It writes `["10"]` and `["18","2","7"]` as often as it writes `[10]` — the
+    ids are strings to it — and the first version of this only accepted bare
+    numbers. A reply it could not parse was scored as an answer, which made
+    the arm that *asks for more bodies* look far worse than the one that
+    asks for fewer. Answers almost never begin with a bracket, so that is the
+    test for "this is a request and not an answer".
+    """
+    body = text.strip()
+    if not body.startswith("["):
+        return []
+    inner = body[1:body.find("]")] if "]" in body else body[1:]
+    out = []
+    for piece in re.findall(r"[^,\s]+", inner):
+        try:
+            out.append(int(piece.strip('"\'')))
+        except ValueError:
+            return []
+    return out[:cap]
 
 
 def tokens(s):
@@ -283,7 +320,7 @@ def f1(pred, ref):
     return 2 * precision * recall / (precision + recall)
 
 
-def answer(model, arm, question, material, mem, project, batch_get=False):
+def answer(model, arm, question, material, mem, project, batch_get=False, max_reads=3):
     """One case in one arm. Returns (answer, ids_read)."""
     read = []
     if arm == "none":
@@ -299,11 +336,41 @@ def answer(model, arm, question, material, mem, project, batch_get=False):
         user = f"Material:\n{cards}\n\nQuestion: {question}"
         return complete(model, [{"role": "system", "content": ANSWER_SYSTEM},
                                 {"role": "user", "content": user}], 400), read
+    if arm == "agent":
+        # One call decides: answer, or ask for bodies. That decision is what
+        # the protocol sentence exists to move, and it is invisible to the
+        # arms that have the decision hard-coded.
+        said = complete(model, [{"role": "system", "content": AGENT_SYSTEM.format(n=max_reads)},
+                                {"role": "user", "content": f"Material:\n{cards}\n\nQuestion: {question}"}],
+                        400)
+        ids = parse_ids(said, max_reads)
+        if not ids:
+            return said, read
+        bodies = []
+        if ids and batch_get:
+            try:
+                bodies.append(mem.bodies(ids))
+                read.extend(ids)
+            except Exception:
+                pass
+        for mid in ([] if read else ids):
+            try:
+                bodies.append(mem.body(mid))
+                read.append(mid)
+            except Exception:
+                pass
+        if not bodies:
+            return said, read
+        full = cards + "\n\nFull text of the memories you asked for:\n" + "\n\n".join(bodies)
+        return complete(model, [{"role": "system", "content": AGENT_SYSTEM.format(n=max_reads)},
+                                {"role": "user", "content": f"Material:\n{full}\n\nQuestion: {question}"}],
+                        400), read
+
     # cards+
     pick = complete(model, [{"role": "system", "content": PICK_SYSTEM},
                             {"role": "user", "content": f"{cards}\n\nQuestion: {question}"}],
                     300)
-    ids = [int(x) for x in re.findall(r"\d+", pick)][:3]
+    ids = parse_ids(pick, max_reads)
     bodies = []
     if ids and batch_get:
         # One call for the lot: the tool now takes `ids`, and three round
@@ -352,6 +419,10 @@ def main(argv):
                     help="candidates per search; 0 leaves it to config.json")
     ap.add_argument("--batch-get", action="store_true",
                     help="read the picked bodies with one `ids` call instead of one per id")
+    ap.add_argument("--no-nudge", action="store_true",
+                    help="strip the protocol sentence from the material, to see what it is worth")
+    ap.add_argument("--max-reads", type=int, default=3,
+                    help="how many bodies the second stage may open; 3 by default")
     a = ap.parse_args(argv[1:])
     # Answering and judging share one budget, and the first version let
     # answering spend all of it: the answers were paid for and then every
@@ -394,10 +465,12 @@ def main(argv):
                     material = ""
                     if arm == "full":
                         material = convs[c["project"]]
-                    elif arm in ("cards", "cards+"):
+                    elif arm in ("cards", "cards+", "agent"):
                         material = mem.search(c["query"], c["project"], a.limit)
+                        if a.no_nudge:
+                            material = re.sub(r"\n\nThese are excerpts.*$", "", material, flags=re.S)
                     said, read = answer(a.model, arm, c["query"], material, mem,
-                                        c["project"], a.batch_get)
+                                        c["project"], a.batch_get, a.max_reads)
                     row[arm] = {"answer": said.strip(), "read": read, "f1": f1(said, ref)}
                 except OutOfBudget:
                     # Keep the answers already paid for and stop spending:
