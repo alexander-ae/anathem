@@ -88,6 +88,12 @@ pub fn run(
     system: &str,
     ctx: &search::SearchContext,
 ) -> Result<EvalResult> {
+    let set = read_evalset(evalset)?;
+    run_cases(conn, &set.cases, system, ctx)
+}
+
+/// Reads the eval set, and says how to write one when it cannot.
+fn read_evalset(evalset: &Path) -> Result<EvalSet> {
     let raw = std::fs::read_to_string(evalset)
         .with_context(|| format!(
             "could not parse the eval set at {}.\n\n\
@@ -101,8 +107,19 @@ pub fn run(
              for a `memories.id` — which is how you name a memory anathem\n\
              saved itself, since those have no ext_id. See the README.",
             evalset.display()))?;
-    let set: EvalSet = serde_json::from_str(&raw).context("eval set with invalid JSON")?;
-    run_cases(conn, &set.cases, system, ctx)
+    serde_json::from_str(&raw).context("eval set with invalid JSON")
+}
+
+/// `run_cases_as_mcp` over a file, the same way `run` is `run_cases`.
+pub fn run_as_mcp(
+    conn: &Connection,
+    evalset: &Path,
+    system: &str,
+    ctx: &search::SearchContext,
+    cfg: &crate::config::Config,
+) -> Result<PayloadResult> {
+    let set = read_evalset(evalset)?;
+    run_cases_as_mcp(conn, &set.cases, system, ctx, cfg)
 }
 
 /// The measurement itself, over cases already in hand.
@@ -110,6 +127,77 @@ pub fn run(
 /// `run` reads a file and calls this; `tune` builds its cases out of the
 /// topic keys and calls it too, so both report the same numbers computed the
 /// same way rather than two implementations that drift.
+/// What the MCP answer actually puts in front of the model.
+///
+/// `run_cases` measures retrieval: unlimited budget, no excerpt, fifty
+/// candidates, because that is the ranking and trimming it would falsify the
+/// figures. This measures the other question — whether the memory the answer
+/// needed is among the ones `search_memory` would have shown, at the settings
+/// a real installation uses.
+pub struct PayloadResult {
+    pub system: String,
+    pub n_cases: usize,
+    /// Cases whose expected memory made it into the returned candidates.
+    pub found: f64,
+    /// Cases where it came first.
+    pub first: f64,
+    /// Median tokens the answer spent, as `search_log` counts them.
+    pub median_tokens: usize,
+}
+
+pub fn run_cases_as_mcp(
+    conn: &Connection,
+    cases: &[Case],
+    system: &str,
+    ctx: &search::SearchContext,
+    cfg: &crate::config::Config,
+) -> Result<PayloadResult> {
+    let mut found = 0usize;
+    let mut first = 0usize;
+    let mut spent: Vec<usize> = Vec::new();
+
+    for c in cases {
+        let q = search::Query {
+            text: c.query.clone(),
+            project: c.project.clone(),
+            limit: cfg.candidates,
+            budget_tokens: cfg.budget,
+            excerpt: Some(cfg.excerpt),
+            outline: cfg.outline,
+            ..Default::default()
+        };
+        let hits = search::run_explained(conn, &q, ctx)?;
+        // The same arithmetic `mcp.rs` uses for the entry it writes to the
+        // log, so the number here is the number a real search costs.
+        let used: usize = hits
+            .iter()
+            .map(|e| (e.hit.title.chars().count() + e.hit.snippet.chars().count()) / 4)
+            .sum();
+        spent.push(used);
+
+        if let Some(pos) = hits
+            .iter()
+            .position(|e| c.expect_docs.iter().any(|d| matches(d, &e.hit)))
+        {
+            found += 1;
+            if pos == 0 {
+                first += 1;
+            }
+        }
+    }
+
+    spent.sort_unstable();
+    let median_tokens = spent.get(spent.len() / 2).copied().unwrap_or(0);
+    let n = cases.len().max(1);
+    Ok(PayloadResult {
+        system: system.to_string(),
+        n_cases: cases.len(),
+        found: found as f64 / n as f64,
+        first: first as f64 / n as f64,
+        median_tokens,
+    })
+}
+
 pub fn run_cases(
     conn: &Connection,
     cases: &[Case],

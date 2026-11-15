@@ -34,6 +34,25 @@ whose terms you cannot state is not one you can ask other people to run.
 
 ## Running it
 
+Two measurements come out of the same eval set, and they answer different
+questions. The default one ranks: fifty candidates, an unlimited token budget
+and no excerpt, because trimming the payload would falsify the figures.
+
+`--as-mcp` asks the other question — whether the memory the answer needed is
+among the candidates `search_memory` would actually have shown, at the
+`candidates`, `excerpt` and `budget` in `config.json`:
+
+```bash
+mem --db bench.db eval --evalset bench/evalset.json --label "30x80" --as-mcp
+```
+
+It prints `found` (the expected memory is among the returned candidates),
+`first` (it came first) and `tokens(p50)`, counted the same way `search_log`
+counts it. It is the harness for deciding whether to trade fewer long
+excerpts for more short ones; the ranking numbers and these do not have to
+agree, and when they disagree the payload is the one a person sees.
+
+
 ```bash
 python3 tools/longmemeval_to_memories.py longmemeval_s_cleaned.json bench/
 mem --db bench.db init
