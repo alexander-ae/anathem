@@ -37,7 +37,7 @@ Six hundred candidates per question, and a much harder number. Both are
 honest; what they are not is interchangeable, and quoting one against the
 other is how a benchmark gets misread.
 
-## Three decisions the conversion makes
+## Four decisions the conversion makes
 
 **Category 5 is not part of the set.** Those 446 questions are adversarial —
 they have a `adversarial_answer` and no correct answer — and the 1,540-question
@@ -54,6 +54,15 @@ would delete evidence and then blame the ranking for missing it.
 conversation, so its search is confined to that one, in both units. Pooling
 the ten conversations and searching all of them measures something the
 benchmark never defines.
+
+**The date goes into the body, not only into `created`.** A third of LoCoMo's
+questions ask *when* something happened, and the reference answers are written
+the way the dataset writes its timestamps ("7 May 2023"). `get_memory` returns
+the body and not the frontmatter, so a date that only lived in `created` would
+never reach the model, and every temporal question would be unanswerable for a
+reason that has nothing to do with retrieval. The paper's own evaluation
+prefixes each turn with its session's date; this does the same, once per
+session and once per turn.
 """
 import json
 import pathlib
@@ -82,6 +91,21 @@ def iso_date(raw):
         return ""
     mon = MONTHS.get(m.group(2)[:3])
     return f"{m.group(3)}-{mon}-{int(m.group(1)):02d}" if mon else ""
+
+
+def human_date(raw):
+    """`1:56 pm on 8 May, 2023` -> `8 May 2023`.
+
+    The date goes into the body, not only into `created`, because a third of
+    LoCoMo's questions ask *when* something happened and the reference answers
+    are written the same way ("7 May 2023"). A memory whose body carries no
+    date cannot answer one of them, and `get_memory` returns the body and not
+    the frontmatter, so the metadata alone would never reach the model.
+    """
+    m = re.search(r"(\d{1,2})\s+(\w+),?\s+(\d{4})", raw or "")
+    if not m:
+        return ""
+    return f"{int(m.group(1))} {m.group(2)[:3]}. {m.group(3)}".replace(".", "")
 
 
 def yaml_dq(s):
@@ -145,19 +169,21 @@ def convert(samples, out, unit):
         for n in session_numbers(conv):
             turns = conv.get(f"session_{n}") or []
             created = iso_date(conv.get(f"session_{n}_date_time"))
+            when = human_date(conv.get(f"session_{n}_date_time"))
             if unit == "turn":
                 for turn in turns:
                     if not turn.get("text", "").strip():
                         continue
-                    body = turn_text(turn)
+                    body = f"[{when}] {turn_text(turn)}" if when else turn_text(turn)
                     ext_id = f"{sid}/{turn['dia_id']}"
                     write(memories, ext_id, sid, created, body)
                     written += 1
                 continue
-            body = "\n".join(turn_text(t) for t in turns if t.get("text", "").strip())
-            if not body:
+            spoken = "\n".join(turn_text(t) for t in turns if t.get("text", "").strip())
+            if not spoken:
                 continue
-            write(memories, f"{sid}/session_{n}", sid, created, body)
+            body = f"[{when}]\n{spoken}" if when else spoken
+            write(memories, f"{sid}/session_{n}", sid, created, body, spoken)
             written += 1
 
         for i, qa in enumerate(sample["qa"]):
@@ -195,11 +221,13 @@ def convert(samples, out, unit):
     return written, len(cases), counts, dropped
 
 
-def write(memories, ext_id, project, created, body):
+def write(memories, ext_id, project, created, body, summary=None):
+    """`summary` is what the description is cut from, when the body opens with
+    something that is not a summary of it — the date, in this conversion."""
     name = re.sub(r"[^A-Za-z0-9_.-]", "_", ext_id) + ".md"
     text = render([
         ("project", yaml_dq(project)),
-        ("description", yaml_dq(" ".join(body.split())[:120])),
+        ("description", yaml_dq(" ".join((summary or body).split())[:120])),
         ("created", yaml_dq(created)),
         ("status", "active"),
         ("source", "migrated"),

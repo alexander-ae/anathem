@@ -475,42 +475,42 @@ benchmark gets misread, so both are here, in order.
 
 | | session bm25 | session hybrid | turn bm25 | turn hybrid |
 |---|--:|--:|--:|--:|
-| recall@5, any evidence | 87.6% | 86.2% | 50.7% | 44.9% |
-| recall@5, fraction of evidence | 81.5% | 79.4% | 45.6% | 40.3% |
-| recall@5, every evidence | 76.0% | 73.2% | 41.7% | 36.7% |
-| recall@50, any evidence | 100% | 100% | 75.5% | 75.5% |
-| MRR | 0.749 | 0.704 | 0.395 | 0.352 |
-| p50 per query | 10 ms | 11 ms | 14 ms | 17 ms |
+| recall@5, any evidence | 88.8% | 86.7% | 52.2% | 49.2% |
+| recall@5, fraction of evidence | 82.6% | 80.4% | 47.2% | 43.7% |
+| recall@5, every evidence | 77.2% | 74.6% | 43.3% | 39.6% |
+| recall@50, any evidence | 100% | 100% | 76.8% | 79.2% |
+| MRR | 0.761 | 0.713 | 0.409 | 0.389 |
+| p50 per query | 10 ms | 11 ms | 15 ms | 18 ms |
 
 recall@5 by question type, as the mean fraction of the evidence, bm25:
 
 | question type | n | session | turn |
 |---|--:|--:|--:|
-| single-hop | 841 | 94.2% | 55.0% |
-| temporal | 321 | 83.7% | 55.0% |
-| multi-hop | 282 | **49.1%** | **15.3%** |
-| open-domain | 92 | 56.2% | 20.6% |
+| single-hop | 841 | 95.2% | 57.0% |
+| temporal | 321 | 86.0% | 56.4% |
+| multi-hop | 282 | **49.6%** | **16.3%** |
+| open-domain | 92 | 56.7% | 20.6% |
 
 ### What those four columns say
 
 **The granularity decides the number, not the ranker.** Same corpus, same
-1,536 questions, same binary: 87.6% or 50.7% depending on whether a memory is
+1,536 questions, same binary: 88.8% or 52.2% depending on whether a memory is
 a session or a turn. A note someone wrote is already an aggregation, and that
 aggregation is half of what answering a multi-hop question needs. Turn-level
 retrieval is the harder and more honest measure of a *retriever*; session-level
 is the one that describes a *memory*, which is what anathem is.
 
 **Multi-hop is the floor at both granularities, and the second piece of
-evidence is what goes missing.** At session level, 88% of questions have *some*
-evidence in the top 5 and only 24% of the multi-hop ones have *all* of it;
-at turn level, 3.5% do. This is the same shape as LongMemEval's
+evidence is what goes missing.** At session level, 89% of questions have
+*some* evidence in the top 5 and only 25% of the multi-hop ones have *all* of
+it; at turn level, 4.6% do. This is the same shape as LongMemEval's
 `multi-session` row, reproduced on a dataset built by somebody else, and it
 says the binding constraint is assembling several places into one answer
 rather than finding any one of them.
 
 **The pack costs here, and that is worth publishing.** On LongMemEval the
 vector layer bought +2.4 points of fraction recall on -S and +3.6 on -M. On
-LoCoMo it costs 2.1 points at session level and 5.3 at turn level, and takes
+LoCoMo it costs 2.2 points at session level and 3.5 at turn level, and takes
 MRR down with it. The regression is the one already reported for
 `single-session-assistant`: a conversation is full of turns that are *about*
 the same thing without saying it, the vector half pulls those in, and RRF
@@ -526,15 +526,15 @@ candidates, 120-character excerpts, 1,200-token budget.
 
 | | session | turn |
 |---|--:|--:|
-| the expected memory is among the candidates | 99.7% | 71.2% |
-| it came first | 64.2% | 29.2% |
-| tokens spent, median | 1,163 | 1,182 |
+| the expected memory is among the candidates | 98.6% | 69.4% |
+| it came first | 65.6% | 30.6% |
+| tokens spent, median | 1,195 | 1,179 |
 
 The first row is nearly tautological at session level and should be read that
 way: twenty candidates out of the twenty-seven a conversation has. What it
 says is that the payload is not where this dataset is lost. Counted strictly
 — every expected session among the candidates, which is what a multi-hop
-answer needs — it is **94.3%** for the same 1,536 questions; the binary
+answer needs — it is **94.5%** for the same 1,536 questions; the binary
 reports the loose count, and the strict one was computed from the same cases.
 
 That remains a ceiling and not an accuracy: what the model sees is 120

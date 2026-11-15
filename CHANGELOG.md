@@ -26,8 +26,11 @@ live in the database, not in the binary.
   memory is here, and one per dialog turn, which is the setting the paper's
   own retrieval evaluation uses. Both sets of numbers are in
   `docs/benchmarks.md`, including the two that do not flatter this project:
-  the same binary scores 87.6% or 50.7% depending only on that unit, and the
-  vocabulary pack costs points on this corpus instead of gaining them.
+  the same binary scores 88.8% or 52.2% depending only on that unit, and the
+  vocabulary pack costs points on this corpus instead of gaining them. The
+  session's date travels inside the body rather than only in `created`,
+  because a third of the questions ask *when* and `get_memory` does not
+  return the frontmatter.
 
 - **`tools/answer_eval.py`, the harness for the other half of a benchmark.**
   `mem eval` measures whether the evidence reached the model; this measures

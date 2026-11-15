@@ -348,10 +348,10 @@ is the number to carry if your memory is going to get large.
 
 **A second corpus, and a less comfortable one.** On [LoCoMo](docs/benchmarks.md),
 whose questions are written against 600-turn conversations and mark their
-evidence per turn, the same binary scores **87.6%** with the evidence in the
-top five when a memory is a session and **50.7%** when it is a turn. The unit
+evidence per turn, the same binary scores **88.8%** with the evidence in the
+top five when a memory is a session and **52.2%** when it is a turn. The unit
 decides the number more than the ranker does, and the vocabulary pack *costs*
-2.1 and 5.3 points there instead of gaining them — the third corpus to show
+2.2 and 3.5 points there instead of gaining them — the third corpus to show
 that shape. LoCoMo's licence is CC BY-NC, so the numbers travel and the corpus
 does not.
 
