@@ -537,11 +537,11 @@ says is that the payload is not where this dataset is lost. Counted strictly
 answer needs — it is **94.5%** for the same 1,536 questions; the binary
 reports the loose count, and the strict one was computed from the same cases.
 
-That remains a ceiling and not an accuracy: what the model sees is 120
+That remains a ceiling and not an accuracy: what the model sees is 300
 characters per candidate, and reading the fact itself costs a `get_memory`
 call.
 
-### Do the answers get better: four arms and one model
+### Do the answers get better: five arms, one model
 
 Everything above measures whether the evidence reached the model. It cannot
 measure whether the model then answered, and that is the axis on which every
@@ -553,36 +553,61 @@ model, with token F1 against the reference answer as a second opinion.
 | arm | answered | F1 | multi-hop | temporal | single-hop | open-domain |
 |---|--:|--:|--:|--:|--:|--:|
 | the whole conversation in the prompt (17,837 tokens) | **78.8%** | 63.7 | 61.1% | 68.3% | 93.6% | 33.3% |
-| what `search_memory` returns, then up to 3 bodies | 44.7% | 39.2 | 30.6% | 38.1% | 54.6% | 18.2% |
-| what `search_memory` returns, and nothing else | 17.2% | 16.4 | 11.1% | 21.4% | 17.6% | 16.7% |
+| `search_memory`, and the agent decides whether to open bodies | **68.0%** | 53.1 | 36.1% | 70.7% | 80.6% | 41.7% |
+| `search_memory`, then three bodies opened for it | 62.6% | 50.4 | 37.8% | 58.5% | 70.1% | 41.7% |
+| `search_memory`, and nothing else | 45.5% | 38.5 | 27.8% | 54.8% | 48.6% | 36.4% |
 | no memory at all | 0.0% | 0.6 | — | — | — | — |
 
-`gpt-6-luna` answering, `gpt-6.1-sol` judging, n=200, ±6 points. The two
-smaller arms are the protocol's own two stages, and the distance between them
-is the finding: **an agent that reads the excerpts and answers from them gets
-17% of the answers right; one that opens three bodies gets 45%.** The memory
-that was needed was among the candidates 98.6% of the time. What fails is
-the step between, and it fails because 120 characters of a long memory are
-usually its salutation — which is what the next table is about.
+`gpt-6-luna` answering, `gpt-6.1-sol` judging, n=200, ±6-7 points, on the
+shipped payload of 20 candidates at 300 characters. The last three are the
+protocol's own stages and the distance between them is the finding: **an
+agent that reads the excerpts and answers from them gets 46% of the answers
+right, opening three bodies gets 63%, and letting the model decide when to
+open — up to six — gets 68%.**
+
+That order is worth pausing on. The arm where the *model* decides between the
+two stages beats the arm where the harness decides for it, by 5.4 points. The
+two-stage protocol is not something to impose on an agent; it is something to
+offer it, with the decision left where the information is.
+
+The memory that was needed was among the candidates 95.9% of the time in all
+of these. What fails is the step between, and the next table is why.
+
+**The payload change had a price, and it is in the same table.** With 300
+characters per candidate the budget fits twelve of them instead of twenty, so
+the payload that answers more questions reaches fewer memories: counting
+strictly, every piece of evidence a multi-hop question needs is among the
+candidates for **47.9%** of multi-hop questions where 120 characters reached
+82.3%. Across all 1,536 questions the strict figure is 85.8% against 94.5%. So the
+change cost 8.7 points of strict coverage — 34 of them in multi-hop — and
+bought 18 points of answers. That trade is worth taking and worth naming: it
+is also why multi-hop stays the floor at 27.8% in the one-shot arm.
 
 | shape of the payload | tokens | the needed memory is among them | answered |
 |---|--:|--:|--:|
-| 20 × 120 (the old default) | 1,195 | 98.6% | 44.7% |
+| 20 × 120 (the old default, forced three reads) | 1,195 | 98.6% | 44.7% |
 | 15 × 200 | 1,197 | 97.5% | 58.0% |
 | 10 × 300 | 1,048 | 95.4% | 61.9% |
-| 20 × 300, budget 1,200 (**the default now**) | 1,152 | 95.9% | **62.6%** |
+| 20 × 300, budget 1,200 (**the default now**, forced three reads) | 1,152 | 95.9% | **62.6%** |
 | 20 × 300, budget 1,600 | 1,571 | 97.5% | 64.5% |
 
 At a fixed budget, the length of the excerpt does the work and the number of
-candidates barely matters: three and a half points of coverage bought
-seventeen points of answers. That is why `excerpt` moved to 300 and the budget
-did not move at all — the last two rows are the same shape at two budgets, and
-400 more tokens bought 1.9 points, inside the noise. That change is the one
-this measurement produced.
+candidates barely matters: three points of "the needed memory is among them"
+bought eighteen points of answers. That is why `excerpt` moved to 300 and the
+budget did not move at all — the last two rows are the same shape at two
+budgets, and 400 more tokens bought 1.9 points, inside the noise. That change
+is the one this measurement produced.
+
+**One thing was measured and thrown away:** a sentence at the end of the
+result asking the agent to open the body when the answer depends on it. It
+changed nothing — 68.0% with it, 69.0% without it — and it cost thirty tokens
+on every search, so it is not in the payload. The tool description already
+says it, and evidently one telling is enough.
 
 **And full context still wins, at every model tried.** At `gpt-6-luna` the
-whole conversation is 78.8% against 62.6%; at `gpt-6.1-terra` — a model at
-GPT-5's price point, 50 questions — it is 88.0% against 69.4%. The gap is
+whole conversation is 78.8% against 68.0%; at `gpt-6.1-terra` — a model at
+GPT-5's price point, 50 questions, forced three reads — it is 88.0% against
+69.4%. The gap is
 about the same at both, so it is not a fact about the model: it is what one
 kilobyte of excerpts costs against eighteen kilobytes of everything. A memory
 layer that compiles what it read into a page, and hands over the page, is

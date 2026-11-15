@@ -82,9 +82,9 @@ was measured here on 2026-11-15:
 
 | LoCoMo, 1,536 answerable questions | Living Brain | anathem |
 |---|--:|--:|
-| memory context handed to the model per question | ~9.4K tokens | **1,195 tokens** (median) |
-| the memory the question needed is in it | not published | **98.6%** |
-| all of the evidence a multi-hop question needs | not published | **94.5%** |
+| memory context handed to the model per question | ~9.4K tokens | **1,277 tokens** (median) |
+| the memory the question needed is in it | not published | **95.9%** |
+| all of the evidence a multi-hop question needs | not published | **47.9%** |
 | retrieval latency, median | 592 ms (their doc; 464 ms on the landing page) | **10 ms** |
 | accuracy, judged | 92.2% | not measured |
 | full-context baseline accuracy | not reported | not measured |
@@ -93,9 +93,9 @@ Two things follow, and neither is a victory.
 
 **Their architecture is defensible on that table.** Compiling pages is how you
 answer a question whose evidence is spread over several sessions without
-handing the model the sessions. anathem's 94.5% is a ceiling — the evidence is
+handing the model the sessions. anathem's 95.9% is a ceiling — the evidence is
 *somewhere in the twenty candidates*, at 120 characters each — and a model
-reading only those excerpts answers less often than 94.5% of the time. What
+reading only those excerpts answers far less often than that. What
 the two-stage protocol buys is that the model can ask for the three bodies it
 needs; what it costs is a round trip the compiled page does not need.
 
