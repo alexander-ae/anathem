@@ -317,6 +317,20 @@ pub fn stats(s: &Stats) -> Value {
 }
 
 /// `mem stale --json`.
+pub fn tidy(rows: &[crate::tidy::Candidate]) -> Value {
+    let items: Vec<Value> = rows
+        .iter()
+        .map(|c| json!({
+            "id": c.id,
+            "title": c.title,
+            "preview": c.preview,
+            "suggested_project": c.suggestion,
+            "evidence": c.evidence,
+        }))
+        .collect();
+    json!({ "schema": SCHEMA, "items": items })
+}
+
 pub fn stale(rows: &[Stale]) -> Value {
     let items: Vec<Value> = rows
         .iter()

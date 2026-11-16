@@ -216,6 +216,20 @@ enum Cmd {
         #[arg(long)]
         force: bool,
     },
+    /// Memories filed under no project, with the existing project their text
+    /// names. It reports and moves nothing.
+    Tidy {
+        /// Prints one JSON document instead of prose
+        #[arg(long)]
+        json: bool,
+    },
+    /// Moves one memory to a project. The body and the index are untouched.
+    Project {
+        /// The memory's id
+        id: i64,
+        /// The project it belongs to
+        project: String,
+    },
     /// Memories nobody has opened, to start a review pass from
     Stale {
         /// Only this project; by default, every one
@@ -492,6 +506,7 @@ fn json_supported(cmd: &Cmd) -> bool {
             | Cmd::Why { .. }
             | Cmd::History { .. }
             | Cmd::Stats { .. }
+            | Cmd::Tidy { .. }
             | Cmd::Stale { .. }
             | Cmd::Save { .. }
             | Cmd::Accept { .. }
@@ -1134,6 +1149,45 @@ every other key the file has, or put it in {} yourself:",
             let conn = anathem::db::open(&path)?;
             anathem::maint::pin(&conn, id, false)?;
             println!("memory {id} is no longer pinned");
+        }
+        Cmd::Tidy { json } => {
+            let conn = anathem::db::open(&path)?;
+            let rows = anathem::tidy::candidates(&conn)?;
+            if json {
+                anathem::jsonout::print(&anathem::jsonout::tidy(&rows))?;
+                return Ok(());
+            }
+            if rows.is_empty() {
+                println!("No active memory is filed under {}. Nothing to tidy.",
+                    anathem::project::NO_PROJECT);
+                return Ok(());
+            }
+            println!("{} active {} memor{}, newest first.\n\
+                     The suggestion is a project whose name appears in the memory; it is a \
+                     word,\nnot a decision, and nothing is moved until someone runs \
+                     `mem project <id> <name>`.\n",
+                rows.len(),
+                anathem::project::NO_PROJECT,
+                if rows.len() == 1 { "y" } else { "ies" });
+            for c in &rows {
+                let evidence = match &c.evidence {
+                    Some(e) => format!("  ({e})"),
+                    None => String::new(),
+                };
+                let suggestion = c.suggestion.clone().unwrap_or_else(|| "—".to_string());
+                println!("  id:{:<5} → {:<16}{}", c.id, suggestion, evidence);
+                println!("          {}", c.title.chars().take(100).collect::<String>());
+            }
+            let guessed = rows.iter().filter(|c| c.suggestion.is_some()).count();
+            println!("\n  {guessed} of {} name a project in their own text. The rest need a \
+                     reader:",
+                rows.len());
+            println!("  `mem show <id>` for the body, then `mem project <id> <name>`.");
+        }
+        Cmd::Project { id, project } => {
+            let conn = anathem::db::open(&path)?;
+            anathem::tidy::move_to(&conn, id, &project)?;
+            println!("memory {id} is now filed under {project}");
         }
         Cmd::Stale { project, limit } => {
             let conn = anathem::db::open(&path)?;

@@ -602,6 +602,23 @@ fn counts(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
         "memories: {} active, {} superseded, {} draft, {} forgotten",
         by_status[0], by_status[1], by_status[2], by_status[3]
     ));
+    // A memory with no project is not an error — the project is derived from
+    // the directory, and a session opened outside a repository has none — but
+    // it is the one kind of misfiling this installation can see and name, so
+    // it is said once, with the command that lists them.
+    let unfiled = entero(
+        conn,
+        &format!(
+            "select count(*) from memories where status = 'active' and project = '{}'",
+            crate::project::NO_PROJECT
+        ),
+    )?;
+    if unfiled > 0 {
+        s.info(format!(
+            "{unfiled} active {} memories: `mem tidy` suggests where they belong",
+            crate::project::NO_PROJECT
+        ));
+    }
     s.bien(format!(
         "chunks: {}, tags: {}, references: {}",
         entero(conn, "select count(*) from chunks")?,

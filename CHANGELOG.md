@@ -12,6 +12,28 @@ live in the database, not in the binary.
 
 ### Added
 
+- **`mem tidy`, the memories filed under no project, and where they probably
+  belong.** A project is derived from the directory the agent was in, so a
+  session opened in the folder that holds every repository files everything
+  under `no-project`. `mem tidy` lists those and names the existing project
+  their own text mentions — the title before the body, and **no suggestion
+  when two projects appear**, because a wrong suggestion is one command away
+  from being applied.
+
+  It reports and moves nothing, the way the near-duplicate report does: a
+  word in a note is evidence and not a decision. What it cannot infer is a
+  note that never names its project, and that is deliberate — the model
+  already in the session can read three of those for a few hundred tokens,
+  and a second model inside this binary would be one more thing to pay for.
+
+- **`mem project <id> <name>`, the command that acts.** Until now a memory's
+  project was decided at save time and could not be changed. It refuses a
+  move that would leave two active memories under one topic key, and touches
+  nothing but the label.
+
+- **`mem doctor` says how many are unfiled**, with the command that lists
+  them.
+
 - **`mem stats --by project` and `--by agent`.** The search log has carried
   the project since it existed and the report only ever gave totals, so
   "is anathem used in this repository" could not be answered. It can now:
