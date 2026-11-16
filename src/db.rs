@@ -85,6 +85,10 @@ create table if not exists search_log (
   project      text,
   returned_ids text not null,
   budget_used  integer not null,
+  -- Which agent ran the search, as the client named itself in `initialize`.
+  -- Null for anything logged before the column existed and for searches
+  -- whose client never said.
+  agent        text,
   followed_up  integer not null default 0,
   -- Which memory was opened, when it is known. Null in rows written before
   -- the column existed, where `followed_up` says that one was and not which.
@@ -129,6 +133,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     add_topic_column(&conn)?;
     add_handoff_columns(&conn)?;
     add_follow_up_column(&conn)?;
+    add_search_agent_column(&conn)?;
     add_provenance_columns(&conn)?;
     add_verified_column(&conn)?;
     migrate_indexed_body(&conn)?;
@@ -270,6 +275,16 @@ fn rename_columns_to_english(conn: &Connection) -> Result<()> {
 /// agent opened" — when a search returned twenty candidates. Rows written
 /// before this column keep their flag and leave the id null, which reads as
 /// "yes, and which one was not recorded": the truth about them.
+/// Which agent ran a search, next to which project it was against.
+///
+/// `memories.agent` answers it for what was written and this answers it for
+/// what was looked for, which is the other half of "is this earning its
+/// place": a project nobody searches for from an agent is a project whose
+/// memory is being written and not read.
+fn add_search_agent_column(conn: &Connection) -> Result<()> {
+    add_column(conn, "search_log", "agent", "text")
+}
+
 fn add_follow_up_column(conn: &Connection) -> Result<()> {
     add_column(conn, "search_log", "followed_up_id", "integer")
 }

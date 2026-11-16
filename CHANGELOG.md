@@ -8,6 +8,22 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 what you would be getting. Memories are never touched by an upgrade: they
 live in the database, not in the binary.
 
+## [Unreleased]
+
+### Added
+
+- **`mem stats --by project` and `--by agent`.** The search log has carried
+  the project since it existed and the report only ever gave totals, so
+  "is anathem used in this repository" could not be answered. It can now:
+  the rows add up to the same totals, cut differently, and a row with no
+  project is called `(no project)` instead of being left blank.
+
+- **The log records which agent searched.** `memories.agent` has said who
+  wrote a memory for a while; nothing said who looked for one, which is the
+  other half of the same question. Filled from the name the client sends in
+  `initialize`, null for the client that never says and for the rows that
+  predate the column.
+
 ## [1.2.0] - 2026-11-15
 
 A minor, and one of its changes is visible: `search_memory` now hands back

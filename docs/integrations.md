@@ -123,7 +123,7 @@ lists the ones that project does have. Neither is an error: exit 0.
 | `mem stale --json` | `items`: `id`, `project`, `title`, `last_accessed`, `created` |
 | `mem history <id> --json` | `chain`: `id`, `title`, `status`, newest first |
 | `mem why <id> --json` | `appearances`: `ts`, `query`, `project`, `position`, `of`, `opened` |
-| `mem log --json` | `entries`: `ts`, `project`, `query`, `returned`, `tokens`, `opened`, `opened_unrecorded` |
+| `mem log --json` | `entries`: `ts`, `project`, `agent`, `query`, `returned`, `tokens`, `opened`, `opened_unrecorded` |
 
 `mem log` records searches made by the MCP server, not by this CLI, so an
 integration that searches from a script will find nothing of its own there.
@@ -148,9 +148,16 @@ definition something not read within one.
 
 `searches`, `empty`, `followed_up`, `answer_rate` (a fraction, not a
 percentage), `tokens_total`, `tokens_p50`, `median_rank`, `ranks_recorded`,
-`first`, `last`, `by_week` (`week`, `searches`, `answered`) and
+`first`, `last`, `by_week` (`week`, `searches`, `answered`),
+`by_group` (`name`, `searches`, `followed_up`, `empty`, `tokens_p50`) and
 `empty_queries`. The whole list of empty queries comes back, not the
 `--empty` display limit.
+
+`by_group` is empty unless `--by project` or `--by agent` was asked for, and
+its rows add up to the totals: it is the same measurement, cut differently.
+A row with no project or no agent is called `(no project)` / `(no agent)`
+rather than left blank — rows logged before the `agent` column existed are
+in that second group, and they are said out loud instead of being dropped.
 
 ### `mem doctor --json`
 

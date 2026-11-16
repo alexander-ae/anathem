@@ -149,6 +149,10 @@ enum Cmd {
         /// How many of the queries that found nothing to list
         #[arg(long, default_value_t = 10)]
         empty: usize,
+        /// Break the same counts down by `project` or `agent`, who ran the
+        /// search. Without it the report is the totals and nothing else.
+        #[arg(long, value_name = "project|agent")]
+        by: Option<String>,
     },
     /// Looks for a better `bm25_weight` for this corpus, using the topic
     /// keys as its eval set. It recommends and changes nothing.
@@ -893,10 +897,20 @@ fn run(cli: Cli) -> Result<()> {
             println!("reindexed {n} memories");
             sync_after_write(&conn, &dir, json);
         }
-        Cmd::Stats { since, empty } => {
+        Cmd::Stats { since, empty, by } => {
             let conn = anathem::db::open(&path)?;
             let cutoff = anathem::stats::cutoff_for(since.as_deref())?;
-            let s = anathem::stats::collect(&conn, cutoff.as_deref())?;
+            let by = match by.as_deref() {
+                None => None,
+                Some(v) => match anathem::stats::By::parse(v) {
+                    Some(b) => Some(b),
+                    None => anyhow::bail!(
+                        "unknown --by «{v}»: the log can be grouped by `project` or by \
+                         `agent`, and by nothing else."
+                    ),
+                },
+            };
+            let s = anathem::stats::collect(&conn, cutoff.as_deref(), by)?;
             if json {
                 anathem::jsonout::print(&anathem::jsonout::stats(&s))?;
                 return Ok(());
@@ -931,6 +945,24 @@ fn run(cli: Cli) -> Result<()> {
                 _ => println!(
                     "  opened at rank        -  {} searches recorded which one, too few to rank",
                     s.ranks.len()),
+            }
+            if let Some(by) = by {
+                if !s.by_group.is_empty() {
+                    let width = s.by_group.iter().map(|g| g.name.chars().count()).max().unwrap_or(8).max(10) + 2;
+                    println!("\n  {:<width$} searches   answered   nothing   tokens p50",
+                        match by {
+                            anathem::stats::By::Project => "project",
+                            anathem::stats::By::Agent => "agent",
+                        });
+                    for g in &s.by_group {
+                        println!("  {:<width$}{:>9}{:>10.0}%{:>10}{:>13}",
+                            g.name,
+                            g.searches,
+                            g.followed_up as f64 / g.searches as f64 * 100.0,
+                            g.empty,
+                            g.tokens_p50);
+                    }
+                }
             }
             if s.by_week.len() > 1 {
                 println!("\n  week starting   searches   answered");

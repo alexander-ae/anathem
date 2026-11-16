@@ -316,7 +316,7 @@ fn call_tool(
             let used: usize = hits.iter()
                 .map(|e| (e.hit.title.chars().count() + e.hit.snippet.chars().count()) / 4)
                 .sum();
-            logsearch::record(conn, &text, project.as_deref(), &ids, used)?;
+            logsearch::record(conn, &text, project.as_deref(), &ids, used, agent)?;
 
             if hits.is_empty() {
                 // An empty scope and an empty answer are different things,

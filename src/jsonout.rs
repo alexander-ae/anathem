@@ -305,6 +305,13 @@ pub fn stats(s: &Stats) -> Value {
         "first": s.first,
         "last": s.last,
         "by_week": weeks,
+        "by_group": s.by_group.iter().map(|g| json!({
+            "name": g.name,
+            "searches": g.searches,
+            "followed_up": g.followed_up,
+            "empty": g.empty,
+            "tokens_p50": g.tokens_p50,
+        })).collect::<Vec<_>>(),
         "empty_queries": s.empty_queries,
     })
 }
