@@ -8,7 +8,13 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 what you would be getting. Memories are never touched by an upgrade: they
 live in the database, not in the binary.
 
-## [Unreleased]
+## [1.3.0] - 2026-11-16
+
+A minor about seeing where a search came from and fixing what got filed in
+the wrong place. Nothing stored changes shape and the five MCP tools are the
+same five: what this adds is the commands that read the search log, and the
+two that move a memory.
+
 
 ### Added
 
