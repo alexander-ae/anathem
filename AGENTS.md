@@ -183,6 +183,23 @@ What is worth knowing:
   prints what that topic says now and the versions it had before. It is the
   shortest way to pick a thread back up when you already know its key;
   `mem topics` lists the keys.
+- **Housekeeping**, when the corpus has grown and something is hard to find.
+  These are **CLI commands, not MCP tools** — they are run from a terminal, by
+  you or by an agent that has a shell. All of them report first and change
+  nothing until asked:
+  - `mem tidy` lists active memories filed under `no-project` and names the
+    project their own text mentions. Apply one with
+    `mem project <id> <name>`.
+  - `mem topics --loose` lists the topic keys used as a work log instead of a
+    slot: every save under a key archives the one before, so a fact can end up
+    in the database and out of search. Bring one back with
+    `mem revive <id> --topic <its own key>`, or give it a key of its own with
+    `mem key <id> <key>`.
+  - `mem doctor` says how many memories are unfiled and points at `mem tidy`.
+
+  The rule worth following: **propose, do not apply.** A wrong move is one
+  command away from changing where a memory is found, and the reports are
+  cheap to read.
 - **Resuming** with `recent_memories`, which lists the latest from the project
   by date and says which agent saved it. A result marked `[from: sender]` was
   received from another machine rather than saved here: it is something this
