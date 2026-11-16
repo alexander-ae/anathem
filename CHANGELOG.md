@@ -34,6 +34,24 @@ live in the database, not in the binary.
 - **`mem doctor` says how many are unfiled**, with the command that lists
   them.
 
+- **`mem topics --loose`: topic keys used as a work log instead of a slot.**
+  A key holds one active memory, so saving under it archives the one before —
+  and the one before may have been about something else. On the corpus this
+  was written for, 10 of 55 keys do that, and one of them archives 17
+  versions: about 9,700 tokens of facts that are in the database and out of
+  search. The report compares each version with the one that replaced it and
+  lists the worst pairs, saying plainly that shared vocabulary is a
+  diagnostic and not a verdict.
+
+- **`mem key <id> <key>` and `mem revive <id> [--topic]`, the commands that
+  act on it.** Until now a key could not be changed and a supersession could
+  not be undone: the only way back was editing the database. `revive`
+  withdraws the claim at both ends — the memory becomes active and the newer
+  one stops pointing at it — because leaving the pointer would say both
+  things at once. The unique index on (project, topic) for active memories
+  stays as the backstop, and `db.rs` no longer claims nothing returns to
+  active.
+
 - **`mem stats --by project` and `--by agent`.** The search log has carried
   the project since it existed and the report only ever gave totals, so
   "is anathem used in this repository" could not be answered. It can now:

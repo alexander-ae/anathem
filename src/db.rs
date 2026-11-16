@@ -442,9 +442,12 @@ fn add_topic_column(conn: &Connection) -> Result<()> {
     // With the index, a path that left two active fails in the database
     // instead of leaving `search` returning both.
     //
-    // The only paths touching `status` are `forget` (to `forgotten`) and
-    // `supersede::link` (to `superseded`); neither returns to `active`, so
-    // there is no way to revive a memory and collide with the current one.
+    // The paths that write `status` are `forget` (to `forgotten`),
+    // `supersede::link` (to `superseded`) and `supersede::revive` (back to
+    // `active`). The first two cannot collide with the slot; `revive` can,
+    // and that is why it checks the slot before writing and refuses with a
+    // message that names the memory in the way. This index is the backstop
+    // for the case the check cannot see: two processes reviving at once.
     // Rows with a null `topic` do not count: in a unique index nulls are all
     // distinct.
     conn.execute(
