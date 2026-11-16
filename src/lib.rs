@@ -28,5 +28,6 @@ pub mod search;
 pub mod stats;
 pub mod supersede;
 pub mod tags;
+pub mod tidy;
 pub mod tune;
 pub mod vecstore;

@@ -17,6 +17,34 @@ fn log(conn: &Connection, ts: &str, query: &str, returned: &str, budget: i64, op
     ).unwrap();
 }
 
+/// Same as `log`, but naming the project and the agent, which is what the
+/// breakdown groups by.
+fn log_as(
+    conn: &Connection,
+    ts: &str,
+    query: &str,
+    project: Option<&str>,
+    agent: Option<&str>,
+    returned: &str,
+    budget: i64,
+) {
+    conn.execute(
+        "insert into search_log (ts, query, project, returned_ids, budget_used, agent)
+         values (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![ts, query, project, returned, budget, agent],
+    ).unwrap();
+}
+
+/// Also names the directory the server was in, which is the third way to cut
+/// the same rows.
+fn log_in_dir(conn: &Connection, ts: &str, cwd: &str, returned: &str) {
+    conn.execute(
+        "insert into search_log (ts, query, project, returned_ids, budget_used, cwd)
+         values (?1, 'q', null, ?2, 100, ?3)",
+        params![ts, returned, cwd],
+    ).unwrap();
+}
+
 fn db_with_log() -> (tempfile::TempDir, Connection) {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
@@ -30,7 +58,7 @@ fn db_with_log() -> (tempfile::TempDir, Connection) {
 #[test]
 fn it_counts_the_searches_and_the_ones_that_came_back_empty() {
     let (_d, conn) = db_with_log();
-    let s = stats::collect(&conn, None).unwrap();
+    let s = stats::collect(&conn, None, None).unwrap();
     assert_eq!(s.searches, 4);
     assert_eq!(s.empty, 1);
 }
@@ -38,7 +66,7 @@ fn it_counts_the_searches_and_the_ones_that_came_back_empty() {
 #[test]
 fn it_counts_how_often_a_search_led_to_opening_a_memory() {
     let (_d, conn) = db_with_log();
-    let s = stats::collect(&conn, None).unwrap();
+    let s = stats::collect(&conn, None, None).unwrap();
     assert_eq!(s.followed_up, 2);
 }
 
@@ -47,7 +75,7 @@ fn it_reads_the_rank_of_what_was_opened_from_the_result_list() {
     // The one signal close to ground truth: the memory was opened, so it was
     // relevant, and its position says where the ranking put it.
     let (_d, conn) = db_with_log();
-    let s = stats::collect(&conn, None).unwrap();
+    let s = stats::collect(&conn, None, None).unwrap();
     // id 3 sat second in "7,3,9"; id 8 sat fourth in "5,6,7,8".
     assert_eq!(s.ranks, vec![2, 4]);
 }
@@ -61,7 +89,7 @@ fn a_follow_up_whose_id_was_never_recorded_is_not_counted_as_a_rank() {
     conn.execute(
         "insert into search_log (ts, query, project, returned_ids, budget_used, followed_up)
          values ('2026-11-01T10:00:00+00:00', 'q', 'p', '4,5', 100, 1)", []).unwrap();
-    let s = stats::collect(&conn, None).unwrap();
+    let s = stats::collect(&conn, None, None).unwrap();
     assert_eq!(s.followed_up, 1);
     assert!(s.ranks.is_empty(), "no id recorded means no rank: {:?}", s.ranks);
 }
@@ -69,21 +97,95 @@ fn a_follow_up_whose_id_was_never_recorded_is_not_counted_as_a_rank() {
 #[test]
 fn it_adds_up_what_the_searches_cost() {
     let (_d, conn) = db_with_log();
-    let s = stats::collect(&conn, None).unwrap();
+    let s = stats::collect(&conn, None, None).unwrap();
     assert_eq!(s.tokens_total, 1210);
 }
 
 #[test]
 fn it_lists_the_queries_that_found_nothing() {
     let (_d, conn) = db_with_log();
-    let s = stats::collect(&conn, None).unwrap();
+    let s = stats::collect(&conn, None, None).unwrap();
     assert_eq!(s.empty_queries, vec!["nothing like this".to_string()]);
 }
 
 #[test]
 fn a_cutoff_leaves_out_what_is_older() {
     let (_d, conn) = db_with_log();
-    let s = stats::collect(&conn, Some("2026-11-02T00:00:00+00:00")).unwrap();
+    let s = stats::collect(&conn, Some("2026-11-02T00:00:00+00:00"), None).unwrap();
     assert_eq!(s.searches, 2, "only the 2nd and the 3rd");
     assert_eq!(s.empty, 1);
+}
+
+// ------------------------------------------------------- the breakdown
+
+/// `mem stats --by project` and `--by agent` were added because "is this
+/// earning its place" is a question about one project, not about the
+/// database. The answer has to add up to the totals, or the table is a
+/// second opinion and not the same measurement.
+#[test]
+fn the_breakdown_counts_what_it_says_it_counts() {
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&d.path().join("t.db")).unwrap();
+    log_as(&conn, "2026-11-01T10:00:00+00:00", "a", Some("anathem"), Some("opencode"), "1,2", 400);
+    log_as(&conn, "2026-11-01T11:00:00+00:00", "b", Some("anathem"), Some("opencode"), "3", 300);
+    log_as(&conn, "2026-11-01T12:00:00+00:00", "c", Some("kipin.pe"), Some("claude-code"), "", 50);
+    log_as(&conn, "2026-11-01T13:00:00+00:00", "d", None, None, "9", 60);
+
+    let s = stats::collect(&conn, None, Some(stats::By::Project)).unwrap();
+    assert_eq!(s.searches, 4);
+    let names: Vec<&str> = s.by_group.iter().map(|g| g.name.as_str()).collect();
+    assert_eq!(names, vec!["(no project)", "anathem", "kipin.pe"],
+        "a row with no project is said, not left blank: {names:?}");
+    let anathem = s.by_group.iter().find(|g| g.name == "anathem").unwrap();
+    assert_eq!((anathem.searches, anathem.followed_up, anathem.empty), (2, 0, 0));
+    let kipin = s.by_group.iter().find(|g| g.name == "kipin.pe").unwrap();
+    assert_eq!((kipin.searches, kipin.empty), (1, 1));
+    assert_eq!(s.by_group.iter().map(|g| g.searches).sum::<usize>(), 4,
+        "the rows have to add up to the total, or the table measures something else");
+
+    let a = stats::collect(&conn, None, Some(stats::By::Agent)).unwrap();
+    let claude = a.by_group.iter().find(|g| g.name == "claude-code").unwrap();
+    assert_eq!(claude.searches, 1);
+    assert!(a.by_group.iter().any(|g| g.name == "(no agent)"));
+}
+
+/// Asking for nothing gives the report it always gave: no table, and the
+/// same totals.
+#[test]
+fn without_by_there_is_no_breakdown() {
+    let (_d, conn) = db_with_log();
+    let s = stats::collect(&conn, None, None).unwrap();
+    assert!(s.by_group.is_empty());
+    assert_eq!(s.searches, 4);
+}
+
+/// A value of `--by` that is not one of the two is refused, named, and
+/// never quietly ignored: a grouping that silently does nothing reads as
+/// "there is nothing to group by".
+#[test]
+fn only_two_things_can_be_grouped_by() {
+    assert!(stats::By::parse("project").is_some());
+    assert!(stats::By::parse("agent").is_some());
+    assert!(stats::By::parse("model").is_none());
+    assert!(stats::By::parse("").is_none());
+}
+
+/// `--by dir` exists because a search with no project is not a search about
+/// nothing: it is one whose server was started outside a repository. On the
+/// machine this was written for, all sixty of them were sessions opened in
+/// the folder that holds every project.
+#[test]
+fn the_directory_says_where_a_project_less_search_came_from() {
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&d.path().join("t.db")).unwrap();
+    log_in_dir(&conn, "2026-11-13T01:38:00+00:00", "/home/alexander/proyectos", "1,2");
+    log_in_dir(&conn, "2026-11-13T01:39:00+00:00", "/home/alexander/proyectos", "3");
+    log_in_dir(&conn, "2026-11-13T01:40:00+00:00", "/home/alexander/proyectos/kipin.pe", "4");
+
+    let s = stats::collect(&conn, None, Some(stats::By::Dir)).unwrap();
+    let names: Vec<&str> = s.by_group.iter().map(|g| g.name.as_str()).collect();
+    assert_eq!(names, vec!["kipin.pe", "proyectos"],
+        "the last component is what names the project: {names:?}");
+    let proyectos = s.by_group.iter().find(|g| g.name == "proyectos").unwrap();
+    assert_eq!(proyectos.searches, 2);
 }

@@ -8,6 +8,70 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 what you would be getting. Memories are never touched by an upgrade: they
 live in the database, not in the binary.
 
+## [Unreleased]
+
+### Added
+
+- **`mem tidy`, the memories filed under no project, and where they probably
+  belong.** A project is derived from the directory the agent was in, so a
+  session opened in the folder that holds every repository files everything
+  under `no-project`. `mem tidy` lists those and names the existing project
+  their own text mentions — the title before the body, and **no suggestion
+  when two projects appear**, because a wrong suggestion is one command away
+  from being applied.
+
+  It reports and moves nothing, the way the near-duplicate report does: a
+  word in a note is evidence and not a decision. What it cannot infer is a
+  note that never names its project, and that is deliberate — the model
+  already in the session can read three of those for a few hundred tokens,
+  and a second model inside this binary would be one more thing to pay for.
+
+- **`mem project <id> <name>`, the command that acts.** Until now a memory's
+  project was decided at save time and could not be changed. It refuses a
+  move that would leave two active memories under one topic key, and touches
+  nothing but the label.
+
+- **`mem doctor` says how many are unfiled**, with the command that lists
+  them.
+
+- **`mem topics --loose`: topic keys used as a work log instead of a slot.**
+  A key holds one active memory, so saving under it archives the one before —
+  and the one before may have been about something else. On the corpus this
+  was written for, 10 of 55 keys do that, and one of them archives 17
+  versions: about 9,700 tokens of facts that are in the database and out of
+  search. The report compares each version with the one that replaced it and
+  lists the worst pairs, saying plainly that shared vocabulary is a
+  diagnostic and not a verdict.
+
+- **`mem key <id> <key>` and `mem revive <id> [--topic]`, the commands that
+  act on it.** Until now a key could not be changed and a supersession could
+  not be undone: the only way back was editing the database. `revive`
+  withdraws the claim at both ends — the memory becomes active and the newer
+  one stops pointing at it — because leaving the pointer would say both
+  things at once. The unique index on (project, topic) for active memories
+  stays as the backstop, and `db.rs` no longer claims nothing returns to
+  active.
+
+- **`mem stats --by project` and `--by agent`.** The search log has carried
+  the project since it existed and the report only ever gave totals, so
+  "is anathem used in this repository" could not be answered. It can now:
+  the rows add up to the same totals, cut differently, and a row with no
+  project is called `(no project)` instead of being left blank.
+
+- **The log records which agent searched, and from which directory.**
+  `memories.agent` has said who wrote a memory for a while; nothing said who
+  looked for one, which is the other half of the same question. Filled from
+  the name the client sends in `initialize`, null for the client that never
+  says and for the rows that predate the column.
+
+  And `cwd`, the directory the server was running in — because the project is
+  derived from it, so a search with no project is not a search about nothing:
+  it is one whose server was started outside a repository, which is what
+  happens when a session is opened in the folder that holds them all. On the
+  machine this was written for, all sixty of them were exactly that. `mem
+  stats --by dir` names them, and `--by project` now says so under the
+  table.
+
 ## [1.2.0] - 2026-11-15
 
 A minor, and one of its changes is visible: `search_memory` now hands back

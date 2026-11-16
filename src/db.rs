@@ -85,6 +85,15 @@ create table if not exists search_log (
   project      text,
   returned_ids text not null,
   budget_used  integer not null,
+  -- Which agent ran the search, as the client named itself in `initialize`.
+  -- Null for anything logged before the column existed and for searches
+  -- whose client never said.
+  agent        text,
+  -- The directory the server was running in, which is how it decides the
+  -- project. Kept because `project` is null whenever that directory is not
+  -- inside a repository, and "the session was opened in ~/proyectos" is a
+  -- different fact from "this belongs to nothing".
+  cwd          text,
   followed_up  integer not null default 0,
   -- Which memory was opened, when it is known. Null in rows written before
   -- the column existed, where `followed_up` says that one was and not which.
@@ -129,6 +138,8 @@ pub fn open(path: &Path) -> Result<Connection> {
     add_topic_column(&conn)?;
     add_handoff_columns(&conn)?;
     add_follow_up_column(&conn)?;
+    add_search_agent_column(&conn)?;
+    add_search_cwd_column(&conn)?;
     add_provenance_columns(&conn)?;
     add_verified_column(&conn)?;
     migrate_indexed_body(&conn)?;
@@ -270,6 +281,26 @@ fn rename_columns_to_english(conn: &Connection) -> Result<()> {
 /// agent opened" — when a search returned twenty candidates. Rows written
 /// before this column keep their flag and leave the id null, which reads as
 /// "yes, and which one was not recorded": the truth about them.
+/// Which agent ran a search, next to which project it was against.
+///
+/// `memories.agent` answers it for what was written and this answers it for
+/// what was looked for, which is the other half of "is this earning its
+/// place": a project nobody searches for from an agent is a project whose
+/// memory is being written and not read.
+fn add_search_agent_column(conn: &Connection) -> Result<()> {
+    add_column(conn, "search_log", "agent", "text")
+}
+
+/// Where the server was standing when it searched.
+///
+/// A search with no project is not a search about nothing: it is one whose
+/// server was started outside a repository, which is what happens when a
+/// session is opened in the folder that holds them all. Without this column
+/// those two cases are the same row.
+fn add_search_cwd_column(conn: &Connection) -> Result<()> {
+    add_column(conn, "search_log", "cwd", "text")
+}
+
 fn add_follow_up_column(conn: &Connection) -> Result<()> {
     add_column(conn, "search_log", "followed_up_id", "integer")
 }
@@ -411,9 +442,12 @@ fn add_topic_column(conn: &Connection) -> Result<()> {
     // With the index, a path that left two active fails in the database
     // instead of leaving `search` returning both.
     //
-    // The only paths touching `status` are `forget` (to `forgotten`) and
-    // `supersede::link` (to `superseded`); neither returns to `active`, so
-    // there is no way to revive a memory and collide with the current one.
+    // The paths that write `status` are `forget` (to `forgotten`),
+    // `supersede::link` (to `superseded`) and `supersede::revive` (back to
+    // `active`). The first two cannot collide with the slot; `revive` can,
+    // and that is why it checks the slot before writing and refuses with a
+    // message that names the memory in the way. This index is the backstop
+    // for the case the check cannot see: two processes reviving at once.
     // Rows with a null `topic` do not count: in a unique index nulls are all
     // distinct.
     conn.execute(

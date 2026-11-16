@@ -7,16 +7,20 @@ pub fn record(
     project: Option<&str>,
     ids: &[String],
     budget_used: usize,
+    agent: Option<&str>,
+    cwd: Option<&str>,
 ) -> Result<i64> {
     conn.execute(
-        "insert into search_log (ts, query, project, returned_ids, budget_used)
-         values (?1, ?2, ?3, ?4, ?5)",
+        "insert into search_log (ts, query, project, returned_ids, budget_used, agent, cwd)
+         values (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             chrono::Local::now().to_rfc3339(),
             query,
             project,
             ids.join(","),
-            budget_used as i64
+            budget_used as i64,
+            agent,
+            cwd
         ],
     )?;
     Ok(conn.last_insert_rowid())
@@ -47,6 +51,11 @@ pub struct LogEntry {
     pub ts: String,
     pub query: String,
     pub project: Option<String>,
+    /// Who searched, as the client named itself. Null for rows written before
+    /// the column existed, and for a client that never said.
+    pub agent: Option<String>,
+    /// The directory the server was in, which is how it chose the project.
+    pub cwd: Option<String>,
     /// The ids that came back, in the order they came back in.
     pub returned: Vec<String>,
     pub budget_used: i64,
@@ -91,7 +100,7 @@ pub fn list(
     limit: usize,
 ) -> Result<Vec<LogEntry>> {
     let mut sql = String::from(
-        "select ts, query, project, returned_ids, budget_used, followed_up, followed_up_id
+        "select ts, query, project, returned_ids, budget_used, followed_up, followed_up_id, agent, cwd
            from search_log where 1 = 1",
     );
     let mut args: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -117,6 +126,8 @@ pub fn list(
             returned: split_ids(&raw),
             budget_used: r.get(4)?,
             followed: followed_from(r.get(5)?, r.get(6)?),
+            agent: r.get(7)?,
+            cwd: r.get(8)?,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)

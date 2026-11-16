@@ -124,3 +124,106 @@ pub fn link(conn: &Connection, newer: i64, older: i64) -> Result<()> {
     }
     Ok(())
 }
+
+/// Gives a memory a topic key, refusing anything that would leave two active
+/// memories under the same (project, key).
+///
+/// A key is a slot, and the schema promises one active memory per slot. The
+/// refusal names the memory that already holds it, because the fix is
+/// almost always `supersede` rather than another key.
+pub fn set_topic(conn: &Connection, id: i64, key: &str, active_only: bool) -> Result<()> {
+    let key = key.trim();
+    if key.is_empty() {
+        anyhow::bail!("the topic key cannot be empty: use `mem key <id> <key>` with a name");
+    }
+    let (project, status): (String, String) = conn
+        .query_row("select project, status from memories where id = ?1", [id], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .map_err(|_| anyhow::anyhow!("there is no memory with id:{id}"))?;
+    if active_only && status != "active" {
+        anyhow::bail!(
+            "id:{id} is {status}, and a key on a memory that search does not return changes \
+             nothing. `mem revive {id} --topic {key}` brings it back under that key."
+        );
+    }
+    if status == "active" {
+        let taken: Option<i64> = conn
+            .query_row(
+                "select id from memories
+                  where project = ?1 and topic = ?2 and status = 'active' and id <> ?3",
+                params![project, key, id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if let Some(other) = taken {
+            anyhow::bail!(
+                "{project} already has an active memory under «{key}» (id:{other}). A key is a \
+                 slot and holds one active memory: supersede one of the two, or pick another key."
+            );
+        }
+    }
+    conn.execute("update memories set topic = ?2 where id = ?1", params![id, key])?;
+    Ok(())
+}
+
+/// Brings a superseded memory back, withdrawing the claim that replaced it.
+///
+/// It is the undo of a supersession, and it has to touch both ends to be
+/// honest: the memory becomes active again, and the newer memory stops
+/// pointing at it, because "this one replaces that one" is precisely the
+/// claim being withdrawn. Leaving the pointer would say both things at once,
+/// and `mem doctor` would still call it intact.
+///
+/// A key is required when the memory's current one is taken: two active
+/// memories cannot share a slot, and reviving is not a reason to break that.
+pub fn revive(conn: &Connection, id: i64, new_topic: Option<&str>) -> Result<()> {
+    let (project, status, topic): (String, String, Option<String>) = conn
+        .query_row("select project, status, topic from memories where id = ?1", [id], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        })
+        .map_err(|_| anyhow::anyhow!("there is no memory with id:{id}"))?;
+    if status != "superseded" {
+        anyhow::bail!("id:{id} is {status}: only a superseded memory can be brought back");
+    }
+
+    let key = match (new_topic.map(str::trim), topic.as_deref()) {
+        (Some(k), _) if !k.is_empty() => Some(k.to_string()),
+        (_, current) => current.map(str::to_string),
+    };
+    if let Some(k) = &key {
+        let taken: Option<i64> = conn
+            .query_row(
+                "select id from memories
+                  where project = ?1 and topic = ?2 and status = 'active' and id <> ?3",
+                params![project, k, id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if let Some(other) = taken {
+            anyhow::bail!(
+                "{project} already has an active memory under «{k}» (id:{other}). Give this one \
+                 its own key: `mem revive {id} --topic <new-key>`."
+            );
+        }
+    }
+
+    // One statement: setting the status first would leave the memory active
+    // under the old key for an instant, and the unique index on
+    // (project, topic) for active memories would reject it — which is the
+    // index doing its job, on a state that never has to exist.
+    conn.execute(
+        "update memories set status = 'active', supersedes_id = null,
+                topic = coalesce(?2, topic)
+          where id = ?1",
+        params![id, key],
+    )?;
+    // The pointer that said "something replaces this one" goes with the
+    // claim. Without this the chain would name a replacement while the
+    // memory it replaced is back in play.
+    conn.execute(
+        "update memories set supersedes_id = null where supersedes_id = ?1",
+        [id],
+    )?;
+    Ok(())
+}

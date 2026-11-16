@@ -149,6 +149,10 @@ enum Cmd {
         /// How many of the queries that found nothing to list
         #[arg(long, default_value_t = 10)]
         empty: usize,
+        /// Break the same counts down by `project` or `agent`, who ran the
+        /// search. Without it the report is the totals and nothing else.
+        #[arg(long, value_name = "project|agent")]
+        by: Option<String>,
     },
     /// Looks for a better `bm25_weight` for this corpus, using the topic
     /// keys as its eval set. It recommends and changes nothing.
@@ -212,6 +216,37 @@ enum Cmd {
         #[arg(long)]
         force: bool,
     },
+    /// Memories filed under no project, with the existing project their text
+    /// names. It reports and moves nothing.
+    Tidy {
+        /// Prints one JSON document instead of prose
+        #[arg(long)]
+        json: bool,
+    },
+    /// Moves one memory to a project. The body and the index are untouched.
+    Project {
+        /// The memory's id
+        id: i64,
+        /// The project it belongs to
+        project: String,
+    },
+    /// Gives a memory a topic key. A key is a slot and holds one active
+    /// memory, so this refuses a key that project already has in play.
+    Key {
+        /// The memory's id
+        id: i64,
+        /// The topic key, a short stable phrase naming the subject
+        key: String,
+    },
+    /// Brings a superseded memory back, withdrawing the claim that replaced
+    /// it. `--topic` gives it its own key when the old one is taken.
+    Revive {
+        /// The memory's id
+        id: i64,
+        /// Its topic key after coming back, when the current one is in use
+        #[arg(long)]
+        topic: Option<String>,
+    },
     /// Memories nobody has opened, to start a review pass from
     Stale {
         /// Only this project; by default, every one
@@ -235,7 +270,12 @@ enum Cmd {
         undo: bool,
     },
     /// Lists the topic keys: project, how many memories each had, and which is current
-    Topics,
+    Topics {
+        /// Lists the keys whose archived versions do not read as versions of
+        /// each other: a key used as a work log rather than as a slot
+        #[arg(long)]
+        loose: bool,
+    },
     /// What a topic says today, and what it said before
     ///
     /// `topics` is the index; this is the content. It prints the body of the
@@ -483,11 +523,13 @@ fn json_supported(cmd: &Cmd) -> bool {
         Cmd::Search { .. }
             | Cmd::Show { .. }
             | Cmd::Recent { .. }
-            | Cmd::Topics
+            | Cmd::Topics { .. }
             | Cmd::Log { .. }
             | Cmd::Why { .. }
             | Cmd::History { .. }
             | Cmd::Stats { .. }
+            | Cmd::Tidy { .. }
+            | Cmd::Key { .. }
             | Cmd::Stale { .. }
             | Cmd::Save { .. }
             | Cmd::Accept { .. }
@@ -893,10 +935,20 @@ fn run(cli: Cli) -> Result<()> {
             println!("reindexed {n} memories");
             sync_after_write(&conn, &dir, json);
         }
-        Cmd::Stats { since, empty } => {
+        Cmd::Stats { since, empty, by } => {
             let conn = anathem::db::open(&path)?;
             let cutoff = anathem::stats::cutoff_for(since.as_deref())?;
-            let s = anathem::stats::collect(&conn, cutoff.as_deref())?;
+            let by = match by.as_deref() {
+                None => None,
+                Some(v) => match anathem::stats::By::parse(v) {
+                    Some(b) => Some(b),
+                    None => anyhow::bail!(
+                        "unknown --by «{v}»: the log can be grouped by `project`, `agent` \
+                         or `dir`, and by nothing else."
+                    ),
+                },
+            };
+            let s = anathem::stats::collect(&conn, cutoff.as_deref(), by)?;
             if json {
                 anathem::jsonout::print(&anathem::jsonout::stats(&s))?;
                 return Ok(());
@@ -931,6 +983,33 @@ fn run(cli: Cli) -> Result<()> {
                 _ => println!(
                     "  opened at rank        -  {} searches recorded which one, too few to rank",
                     s.ranks.len()),
+            }
+            if let Some(by) = by {
+                if !s.by_group.is_empty() {
+                    let width = s.by_group.iter().map(|g| g.name.chars().count()).max().unwrap_or(8).max(10) + 2;
+                    println!("\n  {:<width$} searches   answered   nothing   tokens p50",
+                        match by {
+                            anathem::stats::By::Project => "project",
+                            anathem::stats::By::Agent => "agent",
+                            anathem::stats::By::Dir => "directory",
+                        });
+                    for g in &s.by_group {
+                        println!("  {:<width$}{:>9}{:>10.0}%{:>10}{:>13}",
+                            g.name,
+                            g.searches,
+                            g.followed_up as f64 / g.searches as f64 * 100.0,
+                            g.empty,
+                            g.tokens_p50);
+                    }
+                    if by == anathem::stats::By::Project
+                        && s.by_group.iter().any(|g| g.name == "(no project)")
+                    {
+                        println!(
+                            "\n  (no project) is not \"about nothing\": the project is derived from \
+                             the\n  server's directory, and there is none when that directory is not \
+                             inside a\n  repository. `--by dir` says which directories those were.");
+                    }
+                }
             }
             if s.by_week.len() > 1 {
                 println!("\n  week starting   searches   answered");
@@ -1094,6 +1173,55 @@ every other key the file has, or put it in {} yourself:",
             anathem::maint::pin(&conn, id, false)?;
             println!("memory {id} is no longer pinned");
         }
+        Cmd::Tidy { json } => {
+            let conn = anathem::db::open(&path)?;
+            let rows = anathem::tidy::candidates(&conn)?;
+            if json {
+                anathem::jsonout::print(&anathem::jsonout::tidy(&rows))?;
+                return Ok(());
+            }
+            if rows.is_empty() {
+                println!("No active memory is filed under {}. Nothing to tidy.",
+                    anathem::project::NO_PROJECT);
+                return Ok(());
+            }
+            println!("{} active {} memor{}, newest first.\n\
+                     The suggestion is a project whose name appears in the memory; it is a \
+                     word,\nnot a decision, and nothing is moved until someone runs \
+                     `mem project <id> <name>`.\n",
+                rows.len(),
+                anathem::project::NO_PROJECT,
+                if rows.len() == 1 { "y" } else { "ies" });
+            for c in &rows {
+                let evidence = match &c.evidence {
+                    Some(e) => format!("  ({e})"),
+                    None => String::new(),
+                };
+                let suggestion = c.suggestion.clone().unwrap_or_else(|| "—".to_string());
+                println!("  id:{:<5} → {:<16}{}", c.id, suggestion, evidence);
+                println!("          {}", c.title.chars().take(100).collect::<String>());
+            }
+            let guessed = rows.iter().filter(|c| c.suggestion.is_some()).count();
+            println!("\n  {guessed} of {} name a project in their own text. The rest need a \
+                     reader:",
+                rows.len());
+            println!("  `mem show <id>` for the body, then `mem project <id> <name>`.");
+        }
+        Cmd::Key { id, key } => {
+            let conn = anathem::db::open(&path)?;
+            anathem::supersede::set_topic(&conn, id, &key, false)?;
+            println!("memory {id} is filed under topic «{key}»");
+        }
+        Cmd::Revive { id, topic } => {
+            let conn = anathem::db::open(&path)?;
+            anathem::supersede::revive(&conn, id, topic.as_deref())?;
+            println!("memory {id} is active again");
+        }
+        Cmd::Project { id, project } => {
+            let conn = anathem::db::open(&path)?;
+            anathem::tidy::move_to(&conn, id, &project)?;
+            println!("memory {id} is now filed under {project}");
+        }
         Cmd::Stale { project, limit } => {
             let conn = anathem::db::open(&path)?;
             let filas = anathem::stale::never_read(&conn, project.as_deref(), limit)?;
@@ -1216,8 +1344,35 @@ every other key the file has, or put it in {} yourself:",
             );
             println!("  the freed pages are overwritten with zeros, not returned to the disk");
         }
-        Cmd::Topics => {
+        Cmd::Topics { loose } => {
             let conn = anathem::db::open(&path)?;
+            if loose {
+                let rows = anathem::maint::loose_topics(&conn)?;
+                if rows.is_empty() {
+                    println!("No topic key archives versions that read as different subjects.\n\
+                             Every key here behaves as a slot: its versions are versions of it.");
+                    return Ok(());
+                }
+                println!(
+                    "{} topic key{} archive versions that do not read as versions of each \
+                     other.\n\nA key is a slot — the current state of one subject. Used as a \
+                     work log, every\nsave archives the one before, and the one before may have \
+                     been about something else:\nthat fact is then in the database and out of \
+                     search.\n\nOverlap is shared vocabulary and it is a diagnostic, not a \
+                     verdict: a note rewritten\nfrom scratch can share almost nothing and still \
+                     be the same subject.\n",
+                    rows.len(),
+                    if rows.len() == 1 { "" } else { "s" }
+                );
+                for t in &rows {
+                    println!("  {} [{}]  {} versions, {} loose", t.topic, t.project, t.versions, t.loose);
+                    for (old, new, j) in &t.pairs {
+                        println!("     id:{old} → id:{new}   overlap {j:.2}");
+                    }
+                }
+                println!("\n  Fix one with `mem key <id> <its own key>` on the archived note, or\n                             bring it back with `mem revive <id> --topic <its own key>`.");
+                return Ok(());
+            }
             let topics = anathem::maint::topics(&conn)?;
             if json {
                 anathem::jsonout::print(&anathem::jsonout::topics(&topics))?;

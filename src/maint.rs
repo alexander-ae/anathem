@@ -471,3 +471,95 @@ pub fn topic_state(conn: &Connection, project: &str, topic: &str) -> Result<Topi
         chain: versions.into_iter().map(|(v, _, _)| v).collect(),
     })))
 }
+
+/// A topic key whose archived versions do not read as versions of each other.
+///
+/// A key is a slot: the current state of one subject. Used as a work log —
+/// "the latest on security" — every new save archives the one before, and
+/// the one before may have been about something else entirely. That is how
+/// a fact becomes unreachable by search while still being in the database.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LooseTopic {
+    pub project: String,
+    pub topic: String,
+    /// Archived versions, and how many of them look like a different subject
+    /// than the one that replaced them.
+    pub versions: usize,
+    pub loose: usize,
+    /// `(older, newer, overlap)` for the loosest pairs, worst first.
+    pub pairs: Vec<(i64, i64, f64)>,
+}
+
+/// Below this share of shared vocabulary, a version and its replacement read
+/// as two subjects rather than one updated. It is a **diagnostic and not a
+/// verdict**: a legitimately rewritten note can share almost nothing, and
+/// that is why the pairs are listed instead of counted.
+const LOOSE_BELOW: f64 = 0.15;
+
+/// At most this many pairs are shown per topic. A running log with twenty
+/// versions does not need twenty lines to make the point.
+const LOOSE_PAIRS: usize = 3;
+
+/// The topic keys whose versions disagree with each other, worst first.
+///
+/// It walks the same chain `mem history` shows: each superseded memory and
+/// the one that points at it, compared by the vocabulary of their bodies.
+pub fn loose_topics(conn: &Connection) -> Result<Vec<LooseTopic>> {
+    let mut st = conn.prepare(
+        "select m.project, m.topic, m.id, m.title, m.body, n.id, n.title, n.body
+           from memories m
+           join memories n on n.supersedes_id = m.id
+          where m.status = 'superseded' and m.topic is not null",
+    )?;
+    let rows = st.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, i64>(2)?,
+            format!("{} {}", r.get::<_, String>(3)?, r.get::<_, String>(4)?),
+            r.get::<_, i64>(5)?,
+            format!("{} {}", r.get::<_, String>(6)?, r.get::<_, String>(7)?),
+        ))
+    })?;
+
+    // (project, topic) -> every pair, untruncated, worst first.
+    let mut by_topic: std::collections::BTreeMap<(String, String), Vec<(i64, i64, f64)>> =
+        Default::default();
+    for row in rows {
+        let (project, topic, old_id, old_text, new_id, new_text) = row?;
+        by_topic
+            .entry((project, topic))
+            .or_default()
+            .push((old_id, new_id, jaccard(&old_text, &new_text)));
+    }
+
+    let mut out: Vec<LooseTopic> = Vec::new();
+    for ((project, topic), mut pairs) in by_topic {
+        let loose = pairs.iter().filter(|(_, _, j)| *j < LOOSE_BELOW).count();
+        if loose == 0 {
+            continue;
+        }
+        let versions = pairs.len();
+        pairs.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
+        pairs.truncate(LOOSE_PAIRS);
+        out.push(LooseTopic { project, topic, versions, loose, pairs });
+    }
+    out.sort_by(|a, b| b.loose.cmp(&a.loose).then(a.topic.cmp(&b.topic)));
+    Ok(out)
+}
+
+/// Shared vocabulary over the union, ignoring short words: a crude measure,
+/// used only to sort pairs for a person to read.
+fn jaccard(a: &str, b: &str) -> f64 {
+    fn toks(s: &str) -> std::collections::HashSet<String> {
+        s.split(|c: char| !c.is_alphanumeric())
+            .filter(|w| w.chars().count() >= 4)
+            .map(|w| w.to_lowercase())
+            .collect()
+    }
+    let (x, y) = (toks(a), toks(b));
+    if x.is_empty() || y.is_empty() {
+        return 0.0;
+    }
+    x.intersection(&y).count() as f64 / x.union(&y).count() as f64
+}

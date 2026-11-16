@@ -305,11 +305,32 @@ pub fn stats(s: &Stats) -> Value {
         "first": s.first,
         "last": s.last,
         "by_week": weeks,
+        "by_group": s.by_group.iter().map(|g| json!({
+            "name": g.name,
+            "searches": g.searches,
+            "followed_up": g.followed_up,
+            "empty": g.empty,
+            "tokens_p50": g.tokens_p50,
+        })).collect::<Vec<_>>(),
         "empty_queries": s.empty_queries,
     })
 }
 
 /// `mem stale --json`.
+pub fn tidy(rows: &[crate::tidy::Candidate]) -> Value {
+    let items: Vec<Value> = rows
+        .iter()
+        .map(|c| json!({
+            "id": c.id,
+            "title": c.title,
+            "preview": c.preview,
+            "suggested_project": c.suggestion,
+            "evidence": c.evidence,
+        }))
+        .collect();
+    json!({ "schema": SCHEMA, "items": items })
+}
+
 pub fn stale(rows: &[Stale]) -> Value {
     let items: Vec<Value> = rows
         .iter()
