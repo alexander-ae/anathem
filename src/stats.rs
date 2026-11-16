@@ -60,6 +60,11 @@ pub struct GroupRow {
 pub enum By {
     Project,
     Agent,
+    /// The directory the server was running in, which is what decides the
+    /// project. It answers the question `--by project` cannot: whether a
+    /// search with no project was one about nothing, or one made from a
+    /// session opened in the folder that holds every repository.
+    Dir,
 }
 
 impl By {
@@ -67,6 +72,7 @@ impl By {
         match text {
             "project" => Some(By::Project),
             "agent" => Some(By::Agent),
+            "dir" => Some(By::Dir),
             _ => None,
         }
     }
@@ -75,6 +81,7 @@ impl By {
         match self {
             By::Project => "project",
             By::Agent => "agent",
+            By::Dir => "cwd",
         }
     }
 
@@ -85,7 +92,24 @@ impl By {
         match self {
             By::Project => "(no project)",
             By::Agent => "(no agent)",
+            By::Dir => "(no directory)",
         }
+    }
+
+    /// Directory paths are long and the part that says which project this is
+    /// lives at the end, so the table shows the last component. Two sessions
+    /// in `/a/x` and `/b/x` collapse into one row, which is the trade — and
+    /// they are the same project name by any other measure.
+    fn label(self, raw: Option<String>) -> Option<String> {
+        let raw = raw.filter(|g| !g.trim().is_empty())?;
+        if self != By::Dir {
+            return Some(raw);
+        }
+        std::path::Path::new(&raw)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(str::to_string)
+            .or(Some(raw))
     }
 }
 
@@ -177,9 +201,7 @@ pub fn collect(conn: &Connection, cutoff: Option<&str>, by: Option<By>) -> Resul
         s.tokens_total += budget.max(0) as u64;
 
         if let Some(by) = by {
-            let name = group
-                .filter(|g| !g.trim().is_empty())
-                .unwrap_or_else(|| by.unnamed().to_string());
+            let name = by.label(group).unwrap_or_else(|| by.unnamed().to_string());
             let slot = groups.entry(name).or_insert((0, 0, 0, Vec::new()));
             slot.0 += 1;
             slot.1 += (followed != 0) as usize;

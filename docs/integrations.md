@@ -153,11 +153,15 @@ percentage), `tokens_total`, `tokens_p50`, `median_rank`, `ranks_recorded`,
 `empty_queries`. The whole list of empty queries comes back, not the
 `--empty` display limit.
 
-`by_group` is empty unless `--by project` or `--by agent` was asked for, and
+`by_group` is empty unless `--by project`, `--by agent` or `--by dir` was
+asked for, and
 its rows add up to the totals: it is the same measurement, cut differently.
-A row with no project or no agent is called `(no project)` / `(no agent)`
-rather than left blank — rows logged before the `agent` column existed are
-in that second group, and they are said out loud instead of being dropped.
+A row with no project, no agent or no directory is called `(no project)`,
+`(no agent)` or `(no directory)` rather than left blank — rows logged before
+those columns existed are in the second and third, and they are said out loud
+instead of being dropped. `--by dir` groups by the last component of the
+server's working directory, which is what decides the project: a search with
+no project is one whose server was started outside a repository.
 
 ### `mem doctor --json`
 

@@ -89,6 +89,11 @@ create table if not exists search_log (
   -- Null for anything logged before the column existed and for searches
   -- whose client never said.
   agent        text,
+  -- The directory the server was running in, which is how it decides the
+  -- project. Kept because `project` is null whenever that directory is not
+  -- inside a repository, and "the session was opened in ~/proyectos" is a
+  -- different fact from "this belongs to nothing".
+  cwd          text,
   followed_up  integer not null default 0,
   -- Which memory was opened, when it is known. Null in rows written before
   -- the column existed, where `followed_up` says that one was and not which.
@@ -134,6 +139,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     add_handoff_columns(&conn)?;
     add_follow_up_column(&conn)?;
     add_search_agent_column(&conn)?;
+    add_search_cwd_column(&conn)?;
     add_provenance_columns(&conn)?;
     add_verified_column(&conn)?;
     migrate_indexed_body(&conn)?;
@@ -283,6 +289,16 @@ fn rename_columns_to_english(conn: &Connection) -> Result<()> {
 /// memory is being written and not read.
 fn add_search_agent_column(conn: &Connection) -> Result<()> {
     add_column(conn, "search_log", "agent", "text")
+}
+
+/// Where the server was standing when it searched.
+///
+/// A search with no project is not a search about nothing: it is one whose
+/// server was started outside a repository, which is what happens when a
+/// session is opened in the folder that holds them all. Without this column
+/// those two cases are the same row.
+fn add_search_cwd_column(conn: &Connection) -> Result<()> {
+    add_column(conn, "search_log", "cwd", "text")
 }
 
 fn add_follow_up_column(conn: &Connection) -> Result<()> {

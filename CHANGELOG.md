@@ -18,11 +18,19 @@ live in the database, not in the binary.
   the rows add up to the same totals, cut differently, and a row with no
   project is called `(no project)` instead of being left blank.
 
-- **The log records which agent searched.** `memories.agent` has said who
-  wrote a memory for a while; nothing said who looked for one, which is the
-  other half of the same question. Filled from the name the client sends in
-  `initialize`, null for the client that never says and for the rows that
-  predate the column.
+- **The log records which agent searched, and from which directory.**
+  `memories.agent` has said who wrote a memory for a while; nothing said who
+  looked for one, which is the other half of the same question. Filled from
+  the name the client sends in `initialize`, null for the client that never
+  says and for the rows that predate the column.
+
+  And `cwd`, the directory the server was running in — because the project is
+  derived from it, so a search with no project is not a search about nothing:
+  it is one whose server was started outside a repository, which is what
+  happens when a session is opened in the folder that holds them all. On the
+  machine this was written for, all sixty of them were exactly that. `mem
+  stats --by dir` names them, and `--by project` now says so under the
+  table.
 
 ## [1.2.0] - 2026-11-15
 

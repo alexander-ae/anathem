@@ -35,6 +35,16 @@ fn log_as(
     ).unwrap();
 }
 
+/// Also names the directory the server was in, which is the third way to cut
+/// the same rows.
+fn log_in_dir(conn: &Connection, ts: &str, cwd: &str, returned: &str) {
+    conn.execute(
+        "insert into search_log (ts, query, project, returned_ids, budget_used, cwd)
+         values (?1, 'q', null, ?2, 100, ?3)",
+        params![ts, returned, cwd],
+    ).unwrap();
+}
+
 fn db_with_log() -> (tempfile::TempDir, Connection) {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("t.db")).unwrap();
@@ -158,4 +168,24 @@ fn only_two_things_can_be_grouped_by() {
     assert!(stats::By::parse("agent").is_some());
     assert!(stats::By::parse("model").is_none());
     assert!(stats::By::parse("").is_none());
+}
+
+/// `--by dir` exists because a search with no project is not a search about
+/// nothing: it is one whose server was started outside a repository. On the
+/// machine this was written for, all sixty of them were sessions opened in
+/// the folder that holds every project.
+#[test]
+fn the_directory_says_where_a_project_less_search_came_from() {
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&d.path().join("t.db")).unwrap();
+    log_in_dir(&conn, "2026-11-13T01:38:00+00:00", "/home/alexander/proyectos", "1,2");
+    log_in_dir(&conn, "2026-11-13T01:39:00+00:00", "/home/alexander/proyectos", "3");
+    log_in_dir(&conn, "2026-11-13T01:40:00+00:00", "/home/alexander/proyectos/kipin.pe", "4");
+
+    let s = stats::collect(&conn, None, Some(stats::By::Dir)).unwrap();
+    let names: Vec<&str> = s.by_group.iter().map(|g| g.name.as_str()).collect();
+    assert_eq!(names, vec!["kipin.pe", "proyectos"],
+        "the last component is what names the project: {names:?}");
+    let proyectos = s.by_group.iter().find(|g| g.name == "proyectos").unwrap();
+    assert_eq!(proyectos.searches, 2);
 }

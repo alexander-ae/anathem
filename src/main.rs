@@ -905,8 +905,8 @@ fn run(cli: Cli) -> Result<()> {
                 Some(v) => match anathem::stats::By::parse(v) {
                     Some(b) => Some(b),
                     None => anyhow::bail!(
-                        "unknown --by «{v}»: the log can be grouped by `project` or by \
-                         `agent`, and by nothing else."
+                        "unknown --by «{v}»: the log can be grouped by `project`, `agent` \
+                         or `dir`, and by nothing else."
                     ),
                 },
             };
@@ -953,6 +953,7 @@ fn run(cli: Cli) -> Result<()> {
                         match by {
                             anathem::stats::By::Project => "project",
                             anathem::stats::By::Agent => "agent",
+                            anathem::stats::By::Dir => "directory",
                         });
                     for g in &s.by_group {
                         println!("  {:<width$}{:>9}{:>10.0}%{:>10}{:>13}",
@@ -961,6 +962,14 @@ fn run(cli: Cli) -> Result<()> {
                             g.followed_up as f64 / g.searches as f64 * 100.0,
                             g.empty,
                             g.tokens_p50);
+                    }
+                    if by == anathem::stats::By::Project
+                        && s.by_group.iter().any(|g| g.name == "(no project)")
+                    {
+                        println!(
+                            "\n  (no project) is not \"about nothing\": the project is derived from \
+                             the\n  server's directory, and there is none when that directory is not \
+                             inside a\n  repository. `--by dir` says which directories those were.");
                     }
                 }
             }
