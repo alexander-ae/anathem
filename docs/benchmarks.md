@@ -735,7 +735,7 @@ above its BM25 row, and the most likely reason is the indexing unit rather
 than anything clever. That is a narrower claim than "anathem beats BM25 by 15
 points", and it is the one the measurement supports.
 
-## One head-to-head, and why its numbers are not here
+## The supermemory head-to-head, and why its numbers are not here
 
 Published scores from the memory products cannot be compared with these
 (above), so one was run here instead: **supermemory** v0.0.8, self-hosted, 46
@@ -770,6 +770,52 @@ was in no position to say.
 Anyone wanting the comparison this one failed to be should run supermemory
 with its memory agent working. `mem eval` is the harness and the conversion
 script is in `tools/`; neither is specific to anathem.
+
+## A second head-to-head: Engram
+
+This one produced numbers that can be quoted, and the difference from the
+supermemory attempt is method rather than luck. [Engram][engram] is the other
+local-first memory for agents (Go, SQLite, FTS5, MCP), so both systems could be
+fed the *same* public corpora and asked the *same* questions under the same
+metric: session-level recall@5 and MRR.
+
+Engram has no evaluation harness of its own. Its memories were imported from
+the markdown corpus with `engram import` — one JSON backup, not one `save` per
+memory — and its searches went through its HTTP API, one request per question,
+scoped to the same project anathem scopes to. The returned observation ids were
+mapped back to session ids by SHA-256 of the content, because Engram reassigns
+ids on import and collapses word-for-word duplicates (5,390 of LongMemEval's
+23,854 sessions). A hit on the surviving copy counts for every session whose
+text it carries.
+
+| corpus | memories | anathem r@5 | Engram r@5 | anathem MRR | Engram MRR |
+|---|---:|---:|---:|---:|---:|
+| LongMemEval-S | 23,854 | **96.2 %** | 80.2 % | **0.912** | 0.755 |
+| LoCoMo, session unit | 272 | **88.8 %** | 81.1 % | **0.761** | 0.684 |
+| LoCoMo, turn unit | 5,882 | **52.2 %** | 50.3 % | **0.409** | 0.392 |
+
+**One number in that table is not like the others, and it is Engram's caveat
+rather than a footnote: its 80.2 % is the best of four configurations, and it
+requires the queries to be stripped of stopwords first.** Its default
+`--match all` requires every word of the question, so a normally phrased
+question returns nothing — 96 to 100 % of the questions, in every corpus — and
+`--match any` alone recovers only 17.7 %. The same engine, asked in keywords,
+is a real competitor. Which of those two numbers is "Engram" is a question
+about how an agent phrases a search, and this repository's answer is that the
+default matters because it is what an agent does.
+
+**Latency is not compared, and the reason is on this side.** A repeat of the
+LongMemEval run measured a p50 of 2,537 ms for anathem against the 375 ms
+reported above, on the same corpus, with the search scoped the same way. That
+discrepancy is unresolved, so no latency claim is drawn from this run in either
+direction; Engram answered in 4 to 294 ms depending on configuration.
+
+The full sweep of the four configurations, the per-question-type split and the
+caveats — the stopword list is the author's, and Engram's normal ingestion is
+an agent-written summary rather than a raw session — are in
+[`comparison-with-engram.md`](comparison-with-engram.md).
+
+[engram]: https://github.com/Gentleman-Programming/engram
 
 ## What this does not measure
 
