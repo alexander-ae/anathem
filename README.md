@@ -324,9 +324,9 @@ figure on its own would suggest. The measurements, and the setting that tunes
 the release, are in
 [`docs/vocabulary-packs.md`](docs/vocabulary-packs.md).
 
-Search answers in **8 ms** over a 449-memory corpus and **375 ms** over the
-23,854 of the public benchmark below. Which of those you see is a fact about
-how much you have saved.
+Search answers in **8 ms** over a 449-memory corpus and **110 ms** over the
+23,854 of the public benchmark below, scoped to a project the way an agent
+searches. Which of those you see is a fact about how much you have saved.
 
 ## How it measures up
 

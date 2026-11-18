@@ -595,3 +595,36 @@ fn the_outline_is_off_unless_it_is_asked_for() {
         con[0].snippet
     );
 }
+
+#[test]
+fn a_word_in_more_than_half_the_chunks_is_not_evidence() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    for i in 0..40 {
+        // Thirty of the forty carry the common word, so the cap — half the
+        // chunks — is twenty and "comun" is past it.
+        let body = if i < 30 {
+            format!("comun nota {i}")
+        } else {
+            format!("rara nota {i}")
+        };
+        seed(&conn, &format!("m{i}"), "p", &body);
+    }
+
+    let q = search::Query {
+        text: "comun rara".into(),
+        project: Some("p".into()),
+        limit: 5,
+        ..Default::default()
+    };
+    let hits = search::run_explained(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
+
+    assert!(!hits.is_empty(), "sin resultados");
+    // Both words are searched — the cap decides what counts as evidence, not
+    // what is retrieved.
+    assert_eq!(hits[0].words_total, 1, "solo `rara` lleva evidencia");
+    assert!(
+        hits.iter().all(|h| h.words_matched <= 1),
+        "una memoria no puede coincidir con una palabra descartada"
+    );
+}

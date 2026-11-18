@@ -21,9 +21,23 @@ live in the database, not in the binary.
   stopwords stripped by hand; its default returns nothing for 96 to 100 % of
   the questions. The document also corrects itself: Engram ranks by FTS5
   `bm25()` with boosts, not by recency, and the earlier claim that it does not
-  rank was wrong. Latency is deliberately absent — this run measured a p50 of
-  2,537 ms for anathem on LongMemEval against the 375 ms in `benchmarks.md`,
-  and that discrepancy is unresolved, so no latency claim is made from it.
+  rank was wrong. Latency was deliberately absent from the tables: that run
+  measured a p50 of 2,537 ms for anathem on LongMemEval against the 375 ms in
+  `benchmarks.md`, and the discrepancy was still unexplained when it was
+  written. The entry below fixes it.
+
+### Fixed
+
+- **A scoped search no longer scores the whole corpus to keep one project's
+  chunks.** `chunks_fts.rowid` is `chunks.id`, so a project's span can be
+  handed to FTS5 as a `rowid BETWEEN` — a constraint on the index and not a
+  filter over every posting — and the document-frequency test now asks
+  `fts5vocab` instead of walking a term's postings to count them. On
+  LongMemEval-S (470 questions, 23,854 memories) `mem eval` went from a
+  **p50 of 2,537 ms to 110 ms**; on LoCoMo from 10.1 to 3.6 ms (sessions) and
+  15.0 to 5.6 ms (turns). Every `first_rank` and every returned id is
+  identical to before, in all 2,006 cases: this changes the work and not the
+  answer. Found while measuring Engram on public corpora (issue #67).
 
 ## [1.3.0] - 2026-11-16
 

@@ -142,6 +142,11 @@ uses the `en-es` pack, 256 dimensions, 623,648 chunks, full coverage.
 | MRR                               | 0.910 |  0.920 | +0.010 |
 | p50 per query                     | 375ms |  369ms |   -6ms |
 
+The p50 row predates the scoped-search fix: the same command on the same
+corpus now reports **110 ms** for bm25, with the recall columns unchanged to
+the case. Hybrid was not re-run after the fix, so its 369 ms is still the old
+figure.
+
 The middle row is the textbook Recall@k when a query has several relevant
 documents — the mean fraction of them inside the top k — and it is the one to
 quote next to anybody else's number. The other two bound it: the first is
@@ -804,11 +809,14 @@ is a real competitor. Which of those two numbers is "Engram" is a question
 about how an agent phrases a search, and this repository's answer is that the
 default matters because it is what an agent does.
 
-**Latency is not compared, and the reason is on this side.** A repeat of the
-LongMemEval run measured a p50 of 2,537 ms for anathem against the 375 ms
-reported above, on the same corpus, with the search scoped the same way. That
-discrepancy is unresolved, so no latency claim is drawn from this run in either
-direction; Engram answered in 4 to 294 ms depending on configuration.
+**Latency is not compared in that table, and the reason was on this side.** A
+repeat of the LongMemEval run measured a p50 of 2,537 ms for anathem against
+the 375 ms reported above, on the same corpus, with the search scoped the same
+way. 1.3.1 found the cause — a scoped search scored the whole corpus, and the
+document-frequency test walked a term's postings to count them — and the same
+command now reports 110 ms with every ranking unchanged. The old run's number
+is not a comparison anyone should draw; Engram answered in 4 to 294 ms
+depending on configuration.
 
 The full sweep of the four configurations, the per-question-type split and the
 caveats — the stopword list is the author's, and Engram's normal ingestion is
