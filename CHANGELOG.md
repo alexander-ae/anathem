@@ -21,11 +21,10 @@ live in the database, not in the binary.
   stopwords stripped by hand; its default returns nothing for 96 to 100 % of
   the questions. The document also corrects itself: Engram ranks by FTS5
   `bm25()` with boosts, not by recency, and the earlier claim that it does not
-  rank was wrong. Latency is deliberately absent — this run measured a p50 of
-  2,537 ms for anathem on LongMemEval against the 375 ms in `benchmarks.md`,
-  and that discrepancy is unresolved, so no latency claim is made from it.
-
-## [Unreleased]
+  rank was wrong. Latency was deliberately absent from the tables: that run
+  measured a p50 of 2,537 ms for anathem on LongMemEval against the 375 ms in
+  `benchmarks.md`, and the discrepancy was still unexplained when it was
+  written. The entry below fixes it.
 
 ### Fixed
 

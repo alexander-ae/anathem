@@ -174,10 +174,12 @@ equal terms.
   Whoever runs the next experiment should save with an agent through MCP and
   compare that.
 - **Latency is not in these tables.** Anathem's p50 was 2,537 ms in this run
-  against 375 ms in `benchmarks.md` on the same corpus, and that discrepancy
-  is unexplained, so quoting a latency row would be quoting a number nobody has
-  checked. Engram answered in 4 to 294 ms depending on configuration and
-  corpus.
+  against 375 ms in `benchmarks.md` on the same corpus. That turned out to be
+  the scoped search scoring the whole corpus and the document-frequency test
+  walking a term's postings: 1.3.1 fixes both and the same command now reports
+  110 ms, with every ranking unchanged. Quoting the run's figure would be
+  quoting a number the release after it disproved. Engram answered in 4 to 294
+  ms depending on configuration and corpus.
 - **n=470 and n=1,536, no confidence intervals.** Differences of a few points
   are noise; of fifteen are not.
 - **LongMemEval-S's 470 questions are synthetic** and its sessions are
