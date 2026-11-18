@@ -8,6 +8,23 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 what you would be getting. Memories are never touched by an upgrade: they
 live in the database, not in the binary.
 
+## [Unreleased]
+
+### Changed
+
+- **The comparison with Engram is measured on public corpora now.** The old
+  one used 449 memories and 50 queries from this machine, which nobody could
+  reproduce. Both systems were fed the same two public datasets and asked the
+  same questions: anathem 96.2 / 88.8 / 52.2 % recall@5 against Engram's
+  80.2 / 81.1 / 50.3 % on LongMemEval-S, LoCoMo sessions and LoCoMo turns.
+  Engram's rows are its best of four query configurations and need the
+  stopwords stripped by hand; its default returns nothing for 96 to 100 % of
+  the questions. The document also corrects itself: Engram ranks by FTS5
+  `bm25()` with boosts, not by recency, and the earlier claim that it does not
+  rank was wrong. Latency is deliberately absent — this run measured a p50 of
+  2,537 ms for anathem on LongMemEval against the 375 ms in `benchmarks.md`,
+  and that discrepancy is unresolved, so no latency claim is made from it.
+
 ## [1.3.0] - 2026-11-16
 
 A minor about seeing where a search came from and fixing what got filed in

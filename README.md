@@ -357,6 +357,16 @@ decides the number more than the ranker does, and the vocabulary pack *costs*
 that shape. LoCoMo's licence is CC BY-NC, so the numbers travel and the corpus
 does not.
 
+**Against the nearest neighbour, on those same corpora.** Engram — a Go binary
+with SQLite and FTS5, the closest design to this one — was fed the same two
+datasets and asked the same questions: **96.2% against 80.2%** on
+LongMemEval-S, **88.8% against 81.1%** on LoCoMo sessions and **52.2% against
+50.3%** on turns. Engram's figure is the best of four query configurations and
+it needs the questions stripped of their stopwords to reach it; in its default
+mode it returns nothing for 96 to 100% of them. The method, the sweep and the
+caveats that favour Engram are in
+[`comparison-with-engram.md`](docs/comparison-with-engram.md).
+
 **And a real corpus is harder than either.** Measured over the author's own
 notes, asked in prose rather than in keywords, recall@5 is **52%** — 449
 memories and 50 queries, in
