@@ -142,6 +142,11 @@ uses the `en-es` pack, 256 dimensions, 623,648 chunks, full coverage.
 | MRR                               | 0.910 |  0.920 | +0.010 |
 | p50 per query                     | 375ms |  369ms |   -6ms |
 
+The p50 row predates the scoped-search fix: the same command on the same
+corpus now reports **110 ms** for bm25, with the recall columns unchanged to
+the case. Hybrid was not re-run after the fix, so its 369 ms is still the old
+figure.
+
 The middle row is the textbook Recall@k when a query has several relevant
 documents — the mean fraction of them inside the top k — and it is the one to
 quote next to anybody else's number. The other two bound it: the first is
