@@ -166,6 +166,20 @@ fn received_label_of(conn: &Connection, id: i64) -> String {
 /// It changes no ranking, deliberately. Promoting what is verified would
 /// quietly bury a correct hunch, and nothing here moves a ranking on
 /// something that has not been measured.
+/// Said only when it is bad news: an anchor that still matches is not worth
+/// a line, and one that does not tells the model the code has moved since
+/// the note was written — which is the whole point of recording it.
+fn anchor_label_of(conn: &Connection, id: i64) -> String {
+    let state: Option<String> = conn
+        .query_row("select state from memory_anchors where memory_id = ?1", [id], |r| r.get(0))
+        .ok();
+    match state.as_deref() {
+        Some("moved") => " [anchor: the file changed]".into(),
+        Some("missing") => " [anchor: the file is gone]".into(),
+        _ => String::new(),
+    }
+}
+
 fn verified_label_of(conn: &Connection, id: i64) -> &'static str {
     let v: i64 = conn
         .query_row("select verified from memories where id = ?1", [id], |r| r.get(0))
@@ -333,13 +347,14 @@ fn call_tool(
             }
             let body = hits.iter()
                 .map(|e| format!(
-                    "[id:{}] [{}]{}{}{}{}{} {}\n{}",
+                    "[id:{}] [{}]{}{}{}{}{}{} {}\n{}",
                     e.hit.memory_id,
                     e.hit.project,
                     date_label_of(conn, e.hit.memory_id),
                     topic_label_of(conn, e.hit.memory_id),
                     received_label_of(conn, e.hit.memory_id),
                     verified_label_of(conn, e.hit.memory_id),
+                    anchor_label_of(conn, e.hit.memory_id),
                     word_label(e),
                     e.hit.title,
                     e.hit.snippet

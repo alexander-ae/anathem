@@ -36,6 +36,18 @@ create table if not exists memory_tags (
   primary key (memory_id, tag)
 );
 
+-- What a memory was checked against: a file, and the hash it had then.
+-- See `anchor.rs`. Kept apart from `memories` so an older database gains it
+-- by the `create table if not exists` above and nothing has to be rewritten.
+create table if not exists memory_anchors (
+  memory_id  integer primary key references memories(id) on delete cascade,
+  path       text not null,
+  symbol     text,
+  sha256     text not null,
+  checked_at text not null,
+  state      text not null default 'ok' check (state in ('ok','moved','missing'))
+);
+
 create table if not exists memory_refs (
   memory_id integer not null references memories(id) on delete cascade,
   kind      text not null check (kind in ('ticket','pr','sha')),

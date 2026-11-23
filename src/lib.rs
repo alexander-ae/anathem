@@ -1,4 +1,5 @@
 pub mod update;
+pub mod anchor;
 pub mod chunk;
 pub mod config;
 pub mod db;

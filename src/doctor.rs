@@ -507,6 +507,35 @@ fn check_database(conn: &Connection, s: &mut Section) {
     guard(s, "the supersession chains", |s| supersession(conn, s));
     guard(s, "the topic keys", |s| topic_keys(conn, s));
     guard(s, "the near-duplicates", |s| near_duplicates(conn, s));
+    guard(s, "the anchors", |s| anchors(conn, s));
+}
+
+/// What was checked against a file, and whether that file still matches.
+///
+/// Stale is information, not breakage: code moves, and a memory whose anchor
+/// moved is a memory to re-read, not a database to repair. The count is here
+/// because a database whose anchors are all missing is one where the check
+/// stopped meaning anything.
+fn anchors(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
+    // `doctor` opens read-only and therefore never runs the schema that
+    // creates this table, so a database from before the feature gets a
+    // notice and not a failure.
+    let existe: i64 = conn.query_row(
+        "select count(*) from sqlite_master where type = 'table' and name = 'memory_anchors'",
+        [], |r| r.get(0))?;
+    if existe == 0 {
+        s.info("this database predates anchors: `mem save --anchor` starts recording them");
+        return Ok(());
+    }
+    match crate::anchor::counts(conn) {
+        Ok((0, _)) => s.info("no anchored memories: `mem save --anchor` records one"),
+        Ok((n, 0)) => s.bien(format!("{n} anchored, all matching their file")),
+        Ok((n, stale)) => s.info(format!(
+            "{n} anchored, {stale} no longer matching: `mem recent` and `mem verify --check --all`"
+        )),
+        Err(e) => s.mal(format!("could not count the anchors: {e}")),
+    }
+    Ok(())
 }
 
 /// Pairs of memories that look like the same fact written twice.

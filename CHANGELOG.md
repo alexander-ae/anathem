@@ -8,6 +8,23 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 what you would be getting. Memories are never touched by an upgrade: they
 live in the database, not in the binary.
 
+## [Unreleased]
+
+### Added
+
+- **Anchors: memory the repository can falsify.** `mem save --anchor
+  <path>[:<symbol>]` records the file a memory was checked against and its
+  SHA-256; `mem verify --check` re-reads it and says `ok`, `moved` or
+  `missing`. `mem verify` so far recorded a claim and nothing ever revisited
+  it, so a note kept saying "verified" after the function it named had been
+  renamed away. Two November results put the value there rather than in
+  prose: CoReMem (arXiv 2611.17316) finds coding-agent memory worth what its
+  anchors are worth, and 2608.20685 measures RAG serving a superseded value
+  36–38 % of the time over real GitHub fixes. The anchor travels in `mem
+  export` and back through `mem import`, `mem doctor` counts anchored and
+  stale, and **it does not move the ranking**: demoting a stale anchor needs
+  its own measurement, so search is byte-identical until then.
+
 ## [1.3.1] - 2026-11-17
 
 ### Changed
