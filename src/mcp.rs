@@ -170,13 +170,24 @@ fn received_label_of(conn: &Connection, id: i64) -> String {
 /// a line, and one that does not tells the model the code has moved since
 /// the note was written — which is the whole point of recording it.
 fn anchor_label_of(conn: &Connection, id: i64) -> String {
-    let state: Option<String> = conn
-        .query_row("select state from memory_anchors where memory_id = ?1", [id], |r| r.get(0))
+    let row: Option<(String, Option<String>)> = conn
+        .query_row(
+            "select state, symbol from memory_anchors where memory_id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
         .ok();
-    match state.as_deref() {
-        Some("moved") => " [anchor: the file changed]".into(),
-        Some("missing") => " [anchor: the file is gone]".into(),
-        _ => String::new(),
+    match row {
+        Some((state, symbol)) => match (state.as_str(), symbol.is_some()) {
+            ("moved", true) => " [anchor: the function changed]".into(),
+            ("moved", false) => " [anchor: the file changed]".into(),
+            // A symbol anchor goes missing when the function is renamed or
+            // removed, which is not the same news as the file disappearing.
+            ("missing", true) => " [anchor: the function is gone]".into(),
+            ("missing", false) => " [anchor: the file is gone]".into(),
+            _ => String::new(),
+        },
+        None => String::new(),
     }
 }
 

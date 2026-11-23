@@ -36,6 +36,15 @@ live in the database, not in the binary.
   over any git histories, which is the corpus this question needs: dialogue
   benchmarks have no files to change.
 
+  **The label alone does nothing; explained, it costs something.** A two-arm
+  test over real function histories (`tools/anchor_eval.py`, 45 memories,
+  DeepSeek Flash) shows the model asserting the stale value 100 % of the time
+  when `[anchor: the function changed]` is appended without explanation. With
+  one sentence in the system prompt saying what the line means, assertions on
+  false claims fall from 33 % to 7 % — and assertions on **true** claims whose
+  body changed fall from 40 % to 0 %: the cry-wolf case, and the reason the
+  hash covers the symbol and not the file.
+
 ## [1.3.1] - 2026-11-17
 
 ### Changed
