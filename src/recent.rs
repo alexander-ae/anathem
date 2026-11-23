@@ -30,6 +30,8 @@ pub struct RecentItem {
     /// includes drafts, which is the inbox — so the caller needs to know
     /// which of the two it is looking at.
     pub status: String,
+    /// `ok`, `moved`, `missing`, or none when the memory has no anchor.
+    pub anchor: Option<String>,
     pub excerpt: String,
 }
 
@@ -131,26 +133,27 @@ pub fn list_recent_filtered(
     // both formats: a bare date ("2026-10-28") sorts before any time on that
     // same day, which is the order one expects when nothing more is known.
     let mut sql = String::from(
-        "select id, project, title, coalesce(created_ts, created) as occurred_at,
-                agent, topic, body, received_from, status
-           from memories
+        "select m.id, m.project, m.title, coalesce(m.created_ts, m.created) as occurred_at,
+                m.agent, m.topic, m.body, m.received_from, m.status, a.state
+           from memories m
+           left join memory_anchors a on a.memory_id = m.id
           where 1 = 1",
     );
     if external_only {
-        sql.push_str(" and received_from is not null");
+        sql.push_str(" and m.received_from is not null");
     } else {
-        sql.push_str(" and status = 'active'");
+        sql.push_str(" and m.status = 'active'");
     }
     let mut args: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
     if let Some(p) = project {
-        sql.push_str(" and project = ?");
+        sql.push_str(" and m.project = ?");
         args.push(Box::new(p.to_string()));
     }
     if let Some(s) = window_seconds {
         sql.push_str(" and occurred_at >= ?");
         args.push(Box::new(since(s)));
     }
-    sql.push_str(" order by occurred_at desc, id desc limit ?");
+    sql.push_str(" order by occurred_at desc, m.id desc limit ?");
     args.push(Box::new(limit as i64));
 
     let mut st = conn.prepare(&sql)?;
@@ -171,6 +174,7 @@ fn row_to_item(r: &rusqlite::Row, excerpt: usize) -> rusqlite::Result<RecentItem
         topic: r.get(5)?,
         received_from: r.get(7)?,
         status: r.get(8)?,
+        anchor: r.get(9)?,
         // Trimmed by characters and not bytes: the corpus has accents,
         // and cutting mid UTF-8 would break the text.
         excerpt: body.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(excerpt).collect(),
@@ -194,10 +198,11 @@ pub fn pinned_in_project(
     limit: usize,
 ) -> Result<Vec<RecentItem>> {
     let mut st = conn.prepare(
-        "select id, project, title, coalesce(created_ts, created) as occurred_at,
-                agent, topic, body, received_from, status
-           from memories
-          where status = 'active' and pinned = 1 and project = ?1
+        "select m.id, m.project, m.title, coalesce(m.created_ts, m.created) as occurred_at,
+                m.agent, m.topic, m.body, m.received_from, m.status, a.state
+           from memories m
+           left join memory_anchors a on a.memory_id = m.id
+          where m.status = 'active' and m.pinned = 1 and m.project = ?1
           order by occurred_at desc, id desc limit ?2",
     )?;
     let rows = st.query_map(rusqlite::params![project, limit as i64], |r| {
@@ -221,6 +226,11 @@ pub fn format_items(items: &[RecentItem], show_project: bool) -> String {
         }
         if let Some(t) = &it.topic {
             s.push_str(&format!("  [{}: {t}]", "topic"));
+        }
+        if let Some(state) = &it.anchor {
+            if state != crate::anchor::OK {
+                s.push_str(&format!("  [anchor: {state}]"));
+            }
         }
         if let Some(f) = &it.received_from {
             // Sender-controlled, and this is output an agent reads: a

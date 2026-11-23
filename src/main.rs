@@ -1491,6 +1491,13 @@ every other key the file has, or put it in {} yourself:",
             if let Some(t) = &m.topic {
                 println!("topic: {t}");
             }
+            if let Some((path, symbol, _, state, checked)) = anathem::anchor::get(&conn, id)? {
+                let what = match symbol {
+                    Some(s) => format!("{path}:{s}"),
+                    None => path,
+                };
+                println!("anchor: {what} — {state}, checked {}", short_when(&checked));
+            }
             if m.status == "draft" {
                 println!("Waiting: nothing searches it until `mem accept {id}`.");
             }
