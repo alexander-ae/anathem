@@ -530,9 +530,22 @@ fn anchors(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
     match crate::anchor::counts(conn) {
         Ok((0, _)) => s.info("no anchored memories: `mem save --anchor` records one"),
         Ok((n, 0)) => s.bien(format!("{n} anchored, all matching their file")),
-        Ok((n, stale)) => s.info(format!(
-            "{n} anchored, {stale} no longer matching: `mem recent` and `mem verify --check --all`"
-        )),
+        Ok((n, stale)) => {
+            s.info(format!(
+                "{n} anchored, {stale} no longer matching: `mem recent` and `mem verify --check --all`"
+            ));
+            // An anchor is a check with a horizon: over public histories only
+            // 27 % of function bodies survived a year. One nobody has
+            // revisited in six months is a promise the database cannot keep.
+            let old: i64 = conn.query_row(
+                "select count(*) from memory_anchors where checked_at < datetime('now', '-180 days')",
+                [], |r| r.get(0))?;
+            if old > 0 {
+                s.info(format!(
+                    "{old} anchors have not been checked in six months: `mem verify --check --all`"
+                ));
+            }
+        }
         Err(e) => s.mal(format!("could not count the anchors: {e}")),
     }
     Ok(())

@@ -221,9 +221,11 @@ def run(args):
     data = json.load(open(args.evalset))
     items = data["items"]
     price_in, price_out = PRICES.get(args.model, (1.0, 3.0))
-    est_in = len(items) * 2 * 400 / 1e6 * price_in
-    est_out = len(items) * 2 * 60 / 1e6 * price_out
-    print(f"{len(items)} memories x 2 arms = {len(items) * 2} calls, "
+    policies = args.policies.split(",")
+    calls = len(items) * len(policies)
+    est_in = calls * 900 / 1e6 * price_in
+    est_out = calls * 60 / 1e6 * price_out
+    print(f"{len(items)} memories x {len(policies)} policies = {calls} calls, "
           f"estimated ${est_in + est_out:.3f}")
     if est_in + est_out > args.budget_usd:
         print(f"over --budget-usd {args.budget_usd}: not starting", file=sys.stderr)
@@ -246,17 +248,40 @@ def run(args):
             "`[anchor: the file is gone]`. It means the note was checked against code that "
             "has changed since, so its value may no longer hold: do not state it as fact."
         )
+    # Decoys so that "demoted" means something: with one memory in the prompt
+    # a lower rank is indistinguishable from a hidden one.
+    def decoys(item, n=4):
+        pool = [x for x in items if x["function"] != item["function"]]
+        return [x["memory"] for x in pool[:n]]
+
+    def payload(item, policy):
+        own = item["memory"]
+        distractor = decoys(item)
+        label = item["label"]
+        if policy == "neutral":
+            label = f"[anchor: last checked against the code {item['age_days']} days ago]"
+        if policy == "off":
+            return "\n".join([own] + distractor)
+        if policy == "label":
+            return "\n".join([own + "\n" + label] + distractor)
+        if policy == "neutral":
+            return "\n".join([own + "\n" + label] + distractor)
+        if policy == "demoted":
+            return "\n".join(distractor + [own + "\n" + label])
+        if policy == "hidden":
+            return "\n".join(distractor)
+        raise SystemExit(f"unknown policy {policy}")
+
     jobs = []
     for item in items:
-        for arm in ("off", "on"):
-            jobs.append((item, arm))
+        for policy in args.policies.split(","):
+            jobs.append((item, policy))
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = {pool.submit(ask, args.base_url, key, args.model, system,
-                               (f"Memory:\n{item['memory']}"
-                                + (f"\n{item['label']}" if arm == "on" and item["label"] else "")
-                                + "\n\nQuestion: " + item["question"])): (item, arm)
-                   for item, arm in jobs}
+                               ("Memory:\n" + payload(item, policy)
+                                + "\n\nQuestion: " + item["question"])): (item, policy)
+                   for item, policy in jobs}
         for fut in concurrent.futures.as_completed(futures):
             item, arm = futures[fut]
             try:
@@ -271,7 +296,7 @@ def run(args):
         agg[(r["item"]["group"], r["arm"])][r["score"]] += 1
     print(f"\n{'group':<14}{'arm':<6}{'n':>4}{'asserted':>10}{'caveat':>9}{'other':>8}")
     for group in ("false_claim", "true_quiet", "true_noisy"):
-        for arm in ("off", "on"):
+        for arm in args.policies.split(","):
             c = agg[(group, arm)]
             n = c["asserted"] + c["caveat"] + c["other"]
             if n:
@@ -301,6 +326,8 @@ def main():
     r.add_argument("--workers", type=int, default=4)
     r.add_argument("--explain-label", action="store_true",
                    help="tell the model what the [anchor: ...] line means")
+    r.add_argument("--policies", default="off,label,demoted,hidden,neutral",
+                   help="comma-separated: off,label,demoted,hidden,neutral")
     r.add_argument("--out", default="")
     args = ap.parse_args()
     if args.cmd == "build":
