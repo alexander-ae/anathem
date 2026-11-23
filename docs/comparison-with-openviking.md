@@ -29,7 +29,7 @@ embedding model and a VLM**; its `init` wizard offers Volcengine, OpenAI,
 Codex OAuth, Kimi, GLM and local Ollama. The main project is AGPLv3, with the
 CLI crate and examples under Apache 2.0 and some adapters under MIT.
 
-anathem is one 3 MB Rust binary, one SQLite file, five MCP tools, no daemon,
+anathem is one 3 MB Rust binary, one SQLite file, six MCP tools, no daemon,
 no model and no API key, under MIT.
 
 ## Where OpenViking wins, without haggling

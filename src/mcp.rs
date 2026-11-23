@@ -107,7 +107,13 @@ pub fn tool_defs() -> Value {
                   "description": "Several ids; at most 10 per call."}}}},
       {"name": "list_tags",
        "description": "Lists the existing tags with how many memories each one has.",
-       "inputSchema": {"type": "object", "properties": {}}}
+       "inputSchema": {"type": "object", "properties": {}}},
+      {"name": "memory_admin",
+       "description": "The housekeeping search does not cover, in one tool. `verify` marks a memory as checked against the world; `check_anchor` re-reads the file a memory was anchored to and says whether it still matches; `accept` lets a memory that arrived from another machine into search; `topics` lists the topic keys, which are what `save_memory` replaces when a subject changes; `inbox` lists the memories waiting to be accepted. Deleting, exporting and editing are not here on purpose: those are decisions for the person at the keyboard.",
+       "inputSchema": {"type": "object", "required": ["action"], "properties": {
+          "action": {"type": "string", "enum": ["verify", "check_anchor", "accept", "topics", "inbox"]},
+          "id": {"type": "integer", "description": "The memory, for verify, check_anchor and accept."},
+          "all": {"type": "boolean", "description": "check_anchor: every anchored memory instead of one."}}}}
     ])
 }
 
@@ -534,6 +540,67 @@ fn call_tool(
                 .query_map([], |r| Ok(format!("{:<18} {}", r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
                 .collect::<rusqlite::Result<_>>()?;
             Ok(text_result(if rows.is_empty() { "No tags.".into() } else { rows.join("\n") }))
+        }
+        "memory_admin" => {
+            let action = args["action"].as_str().unwrap_or_default();
+            let id = args["id"].as_i64();
+            // A missing id is answered, not raised: the model reads the text
+            // and can correct itself, which an error envelope does not invite.
+            let missing = |what: &str| text_result(format!("{what} needs `id`: the memory to act on"));
+            match action {
+                "verify" => {
+                    let Some(id) = id else { return Ok(missing("verify")); };
+                    crate::maint::verify(conn, id, true)?;
+                    Ok(text_result(format!("memory {id} marked as verified")))
+                }
+                "check_anchor" => {
+                    let cwd = std::env::current_dir()
+                        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+                    if args["all"].as_bool().unwrap_or(false) {
+                        let (ok, moved, missing) = crate::anchor::check_all(conn, &cwd)?;
+                        return Ok(text_result(format!(
+                            "anchors: {ok} ok, {moved} changed, {missing} missing"
+                        )));
+                    }
+                    let Some(id) = id else { return Ok(missing("check_anchor")); };
+                    match crate::anchor::check(conn, id, &cwd)? {
+                        Some(state) => Ok(text_result(format!("memory {id}: anchor {state}"))),
+                        None => Ok(text_result(format!("memory {id} has no anchor to check"))),
+                    }
+                }
+                "accept" => {
+                    let Some(id) = id else { return Ok(missing("accept")); };
+                    Ok(text_result(crate::maint::accept(conn, id)?))
+                }
+                "topics" => {
+                    let rows = crate::maint::topics(conn)?;
+                    if rows.is_empty() {
+                        return Ok(text_result("No topic keys yet.".into()));
+                    }
+                    let out: Vec<String> = rows
+                        .iter()
+                        .map(|t| match t.current_one {
+                            Some(id) => format!("{:<20} {:<28} {id}", t.project, t.topic),
+                            None => format!("{:<20} {:<28} (none current)", t.project, t.topic),
+                        })
+                        .collect();
+                    Ok(text_result(format!("project              topic                        current\n{}", out.join("\n"))))
+                }
+                "inbox" => {
+                    let items = crate::recent::list_recent_filtered(conn, None, None, 20, 120, true)?;
+                    if items.is_empty() {
+                        return Ok(text_result("Nothing waiting to be accepted.".into()));
+                    }
+                    let out: Vec<String> = items
+                        .iter()
+                        .map(|i| format!("[id:{}] {} — {} (from {})", i.id, i.title,
+                            i.project, i.received_from.as_deref().unwrap_or("unknown")))
+                        .collect();
+                    Ok(text_result(format!("Waiting to be accepted:\n{}", out.join("\n"))))
+                }
+                "" => Ok(text_result("memory_admin needs an action: verify, check_anchor, accept, topics or inbox".into())),
+                other => Ok(text_result(format!("Unknown memory_admin action: {other}"))),
+            }
         }
         other => Ok(text_result(format!("Unknown tool: {other}"))),
     }

@@ -191,10 +191,14 @@ Saving with `--topic` is how a fact that will keep changing gets corrected:
 the next save under the same key replaces the previous one, which stays in
 the history rather than competing with it in searches.
 
-From an agent, none of this is typed. The MCP server exposes five tools —
-`search_memory`, `save_memory`, `get_memory`, `list_tags` and
-`recent_memories` — and they carry their own explanation, so there is
-nothing to learn by heart.
+From an agent, none of this is typed. The MCP server exposes six tools —
+`search_memory`, `save_memory`, `get_memory`, `list_tags`, `recent_memories`
+and `memory_admin` — and they carry their own explanation, so there is
+nothing to learn by heart. `memory_admin` is the one that keeps the surface
+small: `verify`, `check_anchor`, `accept`, `topics` and `inbox` share a
+single tool instead of five, because every tool costs context in every
+session. Deleting, exporting and editing are still command-line only: those
+are decisions for the person at the keyboard.
 
 ## Subcommands
 
@@ -449,7 +453,7 @@ Four things, and breaking any of them costs a major version:
   doctor` comes out clean afterwards.
 - An **export** taken under any 1.x imports into any later 1.x with nothing
   lost.
-- The **five MCP tools** keep their names and their required parameters.
+- The **MCP tools** keep their names and their required parameters.
   Adding an optional one is allowed; renaming a tool is not.
 - The **commands and flags documented here** keep working.
 

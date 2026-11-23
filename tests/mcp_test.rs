@@ -31,10 +31,13 @@ fn tools_list_exposes_every_tool() {
     let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req).unwrap().unwrap();
     let names: Vec<String> = res["result"]["tools"].as_array().unwrap().iter()
         .map(|t| t["name"].as_str().unwrap().to_string()).collect();
-    // The five the documentation promises. `recent_memories` was missing
-    // from this list, which is what the old name — "all four" — was quietly
+    // The six the documentation promises. `recent_memories` was missing from
+    // this list once, which is what the old name — "all four" — was quietly
     // describing: a tool nothing checked was exposed.
-    let expected = ["search_memory", "save_memory", "get_memory", "list_tags", "recent_memories"];
+    let expected = [
+        "search_memory", "save_memory", "get_memory", "list_tags", "recent_memories",
+        "memory_admin",
+    ];
     for n in expected {
         assert!(names.contains(&n.to_string()), "missing {n} in {names:?}");
     }
@@ -306,4 +309,23 @@ fn search_memory_asks_for_several_different_wordings_not_one_retry() {
         "it has to ask for more than one retry: {d}");
     assert!(d.contains("different"),
         "and for wordings that differ, since repeating the same nouns measures nothing: {d}");
+}
+
+#[test]
+fn memory_admin_answers_its_actions() {
+    let (_d, conn) = conn_with_data();
+    let ask = |args: serde_json::Value| {
+        let req = serde_json::json!({"jsonrpc":"2.0","id":9,"method":"tools/call",
+            "params":{"name":"memory_admin","arguments":args}});
+        let res = mcp::handle(&conn, &search::SearchContext::bm25_only(), &Config::default(), &req)
+            .unwrap().unwrap();
+        res["result"]["content"][0]["text"].as_str().unwrap().to_string()
+    };
+    // An empty database has no topics and nothing waiting, and neither is an
+    // error: the difference between "none" and "broken" is the whole point.
+    assert!(ask(serde_json::json!({"action":"topics"})).contains("No topic keys"));
+    assert!(ask(serde_json::json!({"action":"inbox"})).contains("Nothing waiting"));
+    assert!(ask(serde_json::json!({"action":"check_anchor","all":true})).contains("anchors:"));
+    assert!(ask(serde_json::json!({"action":"verify"})).contains("needs `id`"));
+    assert!(ask(serde_json::json!({"action":"nope"})).contains("Unknown memory_admin action"));
 }

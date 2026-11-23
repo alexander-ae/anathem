@@ -12,6 +12,18 @@ live in the database, not in the binary.
 
 ### Added
 
+- **A sixth MCP tool, `memory_admin`, so an agent can do the housekeeping it
+  could only reach through the shell.** `verify` marks a memory as checked,
+  `check_anchor` re-reads the file an anchor points at, `accept` lets a
+  received memory into search, `topics` lists the keys `save_memory` replaces,
+  and `inbox` lists what is waiting. One tool with five actions and not five
+  tools: the five that existed already cost about 2,700 tokens in every
+  session, and `search_memory` alone is 1,500 of them. Deleting, exporting and
+  editing stay command-line only — they are decisions for the person at the
+  keyboard, and a model should not be able to make them by accident.
+
+### Added
+
 - **Anchors: memory the repository can falsify.** `mem save --anchor
   <path>[:<symbol>]` records the file a memory was checked against and its
   SHA-256; `mem verify --check` re-reads it and says `ok`, `moved` or

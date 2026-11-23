@@ -108,8 +108,9 @@ mem doctor
 It has to end in `All good.` and exit with 0. The exit codes are 0 with no
 problems, 1 with problems, 2 if the diagnosis could not run.
 
-Then, in a new agent session, five tools have to show up: `search_memory`,
-`save_memory`, `get_memory`, `list_tags` and `recent_memories`. To really
+Then, in a new agent session, six tools have to show up: `search_memory`,
+`save_memory`, `get_memory`, `list_tags`, `recent_memories` and
+`memory_admin`. To really
 confirm it, save something and search for it:
 
 ```bash
