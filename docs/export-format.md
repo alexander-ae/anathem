@@ -64,7 +64,7 @@ does not invite confusing "has none" with "has null":
 | `received_from` | text | who sent this memory, when it was not written here (`mem save --external`). Absent for a local one |
 | `received_at` | timestamp | when it arrived |
 | `anchor` | text | `path` or `path:symbol` the memory was checked against, as it was typed |
-| `anchor_sha256` | text | the file's SHA-256 at save time; `mem verify --check` compares against it |
+| `anchor_sha256` | text | SHA-256 of the symbol's body when `anchor` names one, of the whole file otherwise; `mem verify --check` compares against it |
 | `anchor_state` | `ok` / `moved` / `missing` | what the last check found, travelling with the export so the other side knows what it inherited |
 | `anchor_checked_at` | timestamp | when that check ran |
 | `refs` | list of `{kind, value}` | tickets, PRs and commits extracted from the body; `kind` is `ticket`, `pr` or `sha` |

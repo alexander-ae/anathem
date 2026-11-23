@@ -9,8 +9,9 @@
 //! at save time and at check time. An agent writes and re-checks standing in
 //! the repository, so the same relative path means the same file; resolving
 //! against the database's directory would make every anchor point at nothing.
-use anyhow::Result;
+use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 pub const OK: &str = "ok";
@@ -49,6 +50,94 @@ fn resolve(root: &Path, spec: &str) -> PathBuf {
     }
 }
 
+/// The bytes that decide the state: the symbol's body when one is named and
+/// can be found, the whole file otherwise.
+///
+/// The whole file is too coarse to mean anything. Measured over eight local
+/// repositories (`tools/anchor_decay.py`), **88.5 % of file-level anchors were
+/// already stale at HEAD** and a third were stale within a week; an alarm that
+/// fires nine times out of ten is not a signal. The body of the function a
+/// memory talks about holds for weeks: 100 % unchanged within seven days and
+/// 62 % within thirty.
+///
+/// Returns `(hash, the symbol was found)`; the second value is what tells a
+/// renamed function apart from a changed one.
+fn fingerprint(file: &Path, symbol: Option<&str>) -> Result<(String, bool)> {
+    let bytes = std::fs::read(file)
+        .with_context(|| format!("could not read {}", file.display()))?;
+    if let Some(sym) = symbol {
+        if let Ok(text) = std::str::from_utf8(&bytes) {
+            if let Some(block) = symbol_body(text, sym) {
+                return Ok((hex(block.as_bytes()), true));
+            }
+        }
+        // The file is there and the symbol is not: the caller reads that as
+        // missing, so a renamed function is not reported as "changed".
+        return Ok((hex(&bytes), false));
+    }
+    Ok((hex(&bytes), true))
+}
+
+fn hex(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+/// From the body's first `{` to its matching `}`. `None` when the name is not
+/// there, or when what follows it is a call and not a definition.
+fn symbol_body<'a>(text: &'a str, symbol: &str) -> Option<&'a str> {
+    let name = symbol
+        .rsplit(|c: char| c.is_whitespace() || c == ':')
+        .next()
+        .unwrap_or(symbol);
+    if name.is_empty() {
+        return None;
+    }
+    let mut from = 0;
+    while let Some(rel) = text[from..].find(name) {
+        let at = from + rel;
+        let before = text[..at].chars().next_back();
+        let after = text[at + name.len()..].chars().next();
+        let boundary = !matches!(before, Some(c) if c.is_alphanumeric() || c == '_')
+            && !matches!(after, Some(c) if c.is_alphanumeric() || c == '_');
+        if boundary {
+            if let Some(rel_open) = text[at..].find('{') {
+                let start = at + rel_open;
+                let head = &text[at..start];
+                // A definition puts its arguments between the name and the
+                // body; a call ends with `;` and its block belongs to
+                // whatever encloses it.
+                if head.chars().count() < 300 && !head.contains(';') {
+                    if let Some(end) = matching_brace(text, start) {
+                        return Some(&text[start..=end]);
+                    }
+                }
+            }
+        }
+        from = at + name.len();
+        if from >= text.len() {
+            break;
+        }
+    }
+    None
+}
+
+fn matching_brace(text: &str, open: usize) -> Option<usize> {
+    let mut depth = 0i32;
+    for (i, c) in text[open..].char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(open + i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Records the anchor, and refuses one it cannot read.
 ///
 /// An anchor to a file that is not there is a claim nobody can check; saving
@@ -61,8 +150,8 @@ pub fn set(conn: &Connection, memory_id: i64, spec: &str, root: &Path) -> Result
             file.display()
         );
     }
-    let sha = crate::pack::sha256(&file)?;
     let (path, symbol) = parse(spec);
+    let (sha, _) = fingerprint(&file, symbol.as_deref())?;
     conn.execute(
         "insert into memory_anchors (memory_id, path, symbol, sha256, checked_at, state)
          values (?1, ?2, ?3, ?4, datetime('now'), 'ok')
@@ -80,16 +169,21 @@ pub fn set(conn: &Connection, memory_id: i64, spec: &str, root: &Path) -> Result
 /// Re-reads one anchor and records what it finds. `Ok(None)` when the memory
 /// has no anchor: nothing to check is not a failure.
 pub fn check(conn: &Connection, memory_id: i64, root: &Path) -> Result<Option<String>> {
-    let Some((path, sha)) = anchor_of(conn, memory_id)? else {
+    let Some((path, symbol, sha)) = anchor_of(conn, memory_id)? else {
         return Ok(None);
     };
     let file = resolve(root, &path);
     let state = if !file.is_file() {
         MISSING
-    } else if crate::pack::sha256(&file)? == sha {
-        OK
     } else {
-        MOVED
+        let (now, found) = fingerprint(&file, symbol.as_deref())?;
+        if !found {
+            MISSING
+        } else if now == sha {
+            OK
+        } else {
+            MOVED
+        }
     };
     conn.execute(
         "update memory_anchors set state = ?2, checked_at = datetime('now') where memory_id = ?1",
@@ -116,13 +210,13 @@ pub fn check_all(conn: &Connection, root: &Path) -> Result<(usize, usize, usize)
     Ok((ok, moved, missing))
 }
 
-/// `(path, sha256)` for one memory, when it has an anchor.
-pub fn anchor_of(conn: &Connection, memory_id: i64) -> Result<Option<(String, String)>> {
+/// `(path, symbol, sha256)` for one memory, when it has an anchor.
+pub fn anchor_of(conn: &Connection, memory_id: i64) -> Result<Option<(String, Option<String>, String)>> {
     Ok(conn
         .query_row(
-            "select path, sha256 from memory_anchors where memory_id = ?1",
+            "select path, symbol, sha256 from memory_anchors where memory_id = ?1",
             [memory_id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .optional()?)
 }

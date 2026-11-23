@@ -25,6 +25,14 @@ live in the database, not in the binary.
   stale, and **it does not move the ranking**: demoting a stale anchor needs
   its own measurement, so search is byte-identical until then.
 
+  **The hash is of the symbol's body, not of the file**, and that came from
+  measuring: over eight local repositories, 88.5 % of file-level anchors were
+  already stale at HEAD and a third within a week, while the body of the
+  function a memory talks about was unchanged 100 % of the time within seven
+  days and 62 % within thirty. `tools/anchor_decay.py` reproduces the table
+  over any set of git histories, which is the corpus this question needs —
+  dialogue benchmarks have no files to change.
+
 ## [1.3.1] - 2026-11-17
 
 ### Changed

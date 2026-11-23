@@ -81,3 +81,48 @@ fn the_symbol_is_parsed_only_when_it_is_one() {
     // A Windows drive letter is not a symbol.
     assert_eq!(anchor::parse("C:\\src\\a.rs"), ("C:\\src\\a.rs".to_string(), None));
 }
+
+#[test]
+fn a_symbol_anchor_ignores_changes_elsewhere_in_the_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    let file = dir.path().join("f.rs");
+    std::fs::write(&file, "fn a() { 1 }\nfn b() { 2 }\n").unwrap();
+
+    let id = seed(&conn, "a", "b returns 2");
+    anchor::set(&conn, id, "f.rs:b", dir.path()).unwrap();
+    assert_eq!(anchor::check(&conn, id, dir.path()).unwrap().as_deref(), Some(anchor::OK));
+
+    // The whole point: another function changing is not this memory going bad.
+    std::fs::write(&file, "fn a() { 99 }\nfn b() { 2 }\n").unwrap();
+    assert_eq!(
+        anchor::check(&conn, id, dir.path()).unwrap().as_deref(),
+        Some(anchor::OK),
+        "the anchored function did not change"
+    );
+
+    std::fs::write(&file, "fn a() { 99 }\nfn b() { 3 }\n").unwrap();
+    assert_eq!(anchor::check(&conn, id, dir.path()).unwrap().as_deref(), Some(anchor::MOVED));
+
+    // Renamed: the file is there and the function is not.
+    std::fs::write(&file, "fn a() { 99 }\nfn c() { 3 }\n").unwrap();
+    assert_eq!(anchor::check(&conn, id, dir.path()).unwrap().as_deref(), Some(anchor::MISSING));
+}
+
+#[test]
+fn a_symbol_that_is_only_called_is_not_a_definition() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    let file = dir.path().join("f.rs");
+    std::fs::write(&file, "fn main() {\n    run();\n}\n").unwrap();
+
+    let id = seed(&conn, "a", "run is called");
+    // `run` appears first as a call; the block it must not hash is main's.
+    anchor::set(&conn, id, "f.rs:run", dir.path()).unwrap();
+    std::fs::write(&file, "fn main() {\n    run();\n    extra();\n}\n").unwrap();
+    assert_eq!(
+        anchor::check(&conn, id, dir.path()).unwrap().as_deref(),
+        Some(anchor::MISSING),
+        "a call is not a definition, and the symbol the anchor names does not exist"
+    );
+}
