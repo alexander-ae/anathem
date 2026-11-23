@@ -26,12 +26,15 @@ live in the database, not in the binary.
   its own measurement, so search is byte-identical until then.
 
   **The hash is of the symbol's body, not of the file**, and that came from
-  measuring: over eight local repositories, 88.5 % of file-level anchors were
-  already stale at HEAD and a third within a week, while the body of the
-  function a memory talks about was unchanged 100 % of the time within seven
-  days and 62 % within thirty. `tools/anchor_decay.py` reproduces the table
-  over any set of git histories, which is the corpus this question needs —
-  dialogue benchmarks have no files to change.
+  measuring: over eight public repositories (ripgrep, serde, tokio, caddy,
+  gin, flask, httpx, django — 58,802 commits, histories of 8 to 21 years) and
+  219,138 (commit, file) pairs, **95.4 % of file-level anchors were already
+  stale at HEAD**. The body of the function a memory talks about holds far
+  better — unchanged 100 % within 7 days, 94 % within 30, 90 % within 90,
+  79 % within a year — and decays past that, which is why an anchor is a
+  check and not a guarantee. `tools/anchor_decay.py` reproduces the table
+  over any git histories, which is the corpus this question needs: dialogue
+  benchmarks have no files to change.
 
 ## [1.3.1] - 2026-11-17
 

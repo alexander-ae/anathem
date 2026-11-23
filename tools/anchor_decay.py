@@ -15,9 +15,10 @@ Method, and what it is not:
 
   * Every commit that touched a file contributes one pair per file. A pair is
     stale when the file was touched again after it, or is gone at HEAD.
-  * The symbol half is a sample: up to four functions defined in the version
-    of the file at that commit, with tests/ skipped. It says nothing about
-    functions the commit did not touch.
+  * The symbol half is a sample twice over: at most 300 commits, evenly
+    spaced, and up to four functions defined in the version of the file at
+    that commit, with tests/ skipped. Rust, Go and Python are understood;
+    Python's body is the indented block, the others brace-match.
   * Repositories here are young and fast-moving, so these are not rates for
     "a codebase" in general. They are enough to decide the granularity of a
     hash, which is what the question was.
@@ -73,15 +74,47 @@ def show(repo, rev, path):
     return r.stdout if r.returncode == 0 else None
 
 
-def names(src):
-    return sorted(set(re.findall(
-        r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+(\w+)", src, re.M)))
+def language(path):
+    return {".rs": "rust", ".go": "go", ".py": "python"}.get(path[path.rfind("."):])
 
 
-def block(src, name):
-    m = re.search(rf"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+{name}\b", src, re.M)
+def names(src, lang):
+    """Function names in a version of a file, per language."""
+    if lang == "rust":
+        pat = r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+(\w+)"
+    elif lang == "go":
+        pat = r"^\s*func\s+(?:\([^)]*\)\s*)?(\w+)"
+    else:
+        pat = r"^\s*(?:async\s+)?def\s+(\w+)"
+    return sorted(set(re.findall(pat, src, re.M)))
+
+
+def block(src, name, lang):
+    """Hash of the function's body, or None when it is not there.
+
+    Braces for Rust and Go; indentation for Python, which has no other
+    delimiter and where a hand-rolled tokenizer would be a bug factory.
+    """
+    if lang == "rust":
+        pat = rf"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+{name}\b"
+    elif lang == "go":
+        pat = rf"^\s*func\s+(?:\([^)]*\)\s*)?{name}\b"
+    else:
+        pat = rf"^\s*(?:async\s+)?def\s+{name}\b"
+    m = re.search(pat, src, re.M)
     if not m:
         return None
+    if lang == "python":
+        lines = src[m.start():].splitlines()
+        if not lines:
+            return None
+        indent = len(lines[0]) - len(lines[0].lstrip())
+        body = [lines[0]]
+        for line in lines[1:]:
+            if line.strip() and len(line) - len(line.lstrip()) <= indent:
+                break
+            body.append(line)
+        return hashlib.sha256("\n".join(body).encode()).hexdigest()
     i = src.find("{", m.end())
     if i < 0:
         return None
@@ -96,12 +129,16 @@ def block(src, name):
     return None
 
 
-def symbol_level(repo, commits, head, limit_files=None):
+def symbol_level(repo, commits, head, max_commits=300):
+    """Symbol rows, sampled: a `git show` per changed file per commit is what
+    makes this slow, and a twenty-year history does not need all of them."""
     rows = []
     cache = {}
-    for ts, sha, files in commits:
+    stride = max(1, len(commits) // max_commits)
+    for ts, sha, files in commits[::stride]:
         for f in files:
-            if not f.endswith(".rs") or f.startswith("tests/"):
+            lang = language(f)
+            if not lang or f.startswith(("tests/", "test/")) or "/test" in f:
                 continue
             src = show(repo, sha, f)
             if not src:
@@ -109,12 +146,12 @@ def symbol_level(repo, commits, head, limit_files=None):
             if f not in cache:
                 cache[f] = show(repo, "HEAD", f)
             head_src = cache[f]
-            for name in names(src)[:4]:
-                old = block(src, name)
+            for name in names(src, lang)[:4]:
+                old = block(src, name, lang)
                 if head_src is None:
                     state = "gone"
                 else:
-                    new = block(head_src, name)
+                    new = block(head_src, name, lang)
                     state = "gone" if new is None else ("same" if new == old else "changed")
                 rows.append(((head - ts) / 86400, state))
     return rows

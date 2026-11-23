@@ -53,12 +53,14 @@ fn resolve(root: &Path, spec: &str) -> PathBuf {
 /// The bytes that decide the state: the symbol's body when one is named and
 /// can be found, the whole file otherwise.
 ///
-/// The whole file is too coarse to mean anything. Measured over eight local
-/// repositories (`tools/anchor_decay.py`), **88.5 % of file-level anchors were
-/// already stale at HEAD** and a third were stale within a week; an alarm that
-/// fires nine times out of ten is not a signal. The body of the function a
-/// memory talks about holds for weeks: 100 % unchanged within seven days and
-/// 62 % within thirty.
+/// The whole file is too coarse to mean anything. Over eight public
+/// repositories and 219,138 (commit, file) pairs (`tools/anchor_decay.py`),
+/// **95.4 % of file-level anchors were already stale at HEAD**: an alarm that
+/// fires nineteen times out of twenty is not a signal. The body of the
+/// function a memory talks about holds far longer — unchanged 100 % within
+/// seven days, 94 % within a month, 90 % within three, 79 % within a year —
+/// and then it decays too, which is why an anchor is a check and not a
+/// guarantee.
 ///
 /// Returns `(hash, the symbol was found)`; the second value is what tells a
 /// renamed function apart from a changed one.
