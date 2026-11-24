@@ -513,6 +513,32 @@ would quietly bury a correct hunch, and nothing here moves a ranking on
 something that has not been measured. What the mark changes is what the model
 reads, not what it is shown.
 
+### `[anchor: …]`, the evidence behind a note
+
+A memory can be anchored to the file it was checked against — `mem save
+--anchor src/x.rs:fn run`, or the `anchor` argument of `save_memory`. The
+anchor records the function's body hash, and `mem verify --check` re-reads it
+later. When it no longer matches, `search_memory` says which of the two
+happened:
+
+```
+[id:52] [p] [anchor: the function changed] the retry uses three attempts
+[id:61] [p] [anchor: the function is gone] the parser lives in src/old.rs
+```
+
+It means the evidence moved on, not that the note was wrong when it was
+written, so the model is told not to repeat its value as fact. Unlike
+`[verified]`, this one **is** measured: with the label explained in the tool
+description, a stale value goes from being asserted 100 % of the time to 0 %,
+and a true value whose function changed is also refused — the price of not
+being able to tell. Demoting the memory instead of labelling it changed
+nothing, which is why the ranking is untouched.
+
+An anchor is a check with a horizon. Over eight public repositories only 27 %
+of function bodies survived a year, so `mem doctor` notices anchors nobody has
+revisited in six months. The measurement is reproducible:
+`tools/anchor_decay.py <repo>…`.
+
 Confirming is not correcting, so `verify` rewrites nothing — not the body,
 not the date, not the id. Going through `--topic` instead would create a new
 version and leave the old one superseded, which says the content changed when
