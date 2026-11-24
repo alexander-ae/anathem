@@ -163,15 +163,15 @@ fn an_export_from_an_earlier_version_imports_with_nothing_lost() {
     assert!(found.contains("migration"), "what was imported is not searchable:\n{found}");
 }
 
-// --------------------------------------------------- 3. the five tools
+// --------------------------------------------------- 3. the MCP tools
 
-/// The five tools keep their names and their required parameters.
+/// The tools keep their names and their required parameters.
 ///
 /// Renaming one, or making an existing parameter required, breaks every
 /// agent configuration that exists. Adding an *optional* parameter does not,
 /// and stays allowed — which is what `since` and `until` did in 0.10.0.
 #[test]
-fn the_five_tools_keep_their_names_and_required_parameters() {
+fn the_tools_keep_their_names_and_required_parameters() {
     let d = tempfile::tempdir().unwrap();
     let conn = anathem::db::open(&d.path().join("mem.db")).unwrap();
     let req = serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"});
@@ -209,6 +209,7 @@ fn the_five_tools_keep_their_names_and_required_parameters() {
     let expected: Vec<(String, Vec<String>)> = vec![
         ("get_memory", vec![]),
         ("list_tags", vec![]),
+        ("memory_admin", vec!["action"]),
         ("recent_memories", vec![]),
         ("save_memory", vec!["text"]),
         ("search_memory", vec!["query"]),

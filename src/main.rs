@@ -122,6 +122,12 @@ enum Cmd {
         /// imported.
         #[arg(long = "ext-id", value_name = "ID", requires = "external")]
         ext_id: Option<String>,
+        /// What this memory was checked against: `<path>` or
+        /// `<path>:<symbol>`, relative to where you are standing. The file's
+        /// hash is recorded so `mem verify --check` can tell you later
+        /// whether the code still says what the memory says
+        #[arg(long, value_name = "PATH[:SYMBOL]")]
+        anchor: Option<String>,
     },
     /// Edits an existing memory's body in $EDITOR
     Edit {
@@ -262,12 +268,22 @@ enum Cmd {
         #[arg(long = "in", value_name = "DIR")]
         roots: Vec<std::path::PathBuf>,
     },
-    /// Marks a memory as checked against the world, not merely written down
+    /// Marks a memory as checked against the world, not merely written down.
+    ///
+    /// With `--check`, does the opposite: re-reads the file the memory is
+    /// anchored to and says whether it still matches. A mark is a claim; a
+    /// check is evidence.
     Verify {
-        id: i64,
+        id: Option<i64>,
         /// Takes the mark away instead of putting it
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["check", "all"])]
         undo: bool,
+        /// Re-reads the anchor instead of marking the memory
+        #[arg(long)]
+        check: bool,
+        /// With `--check`: every anchored memory, not just one
+        #[arg(long = "all", requires = "check")]
+        all: bool,
     },
     /// Lists the topic keys: project, how many memories each had, and which is current
     Topics {
@@ -773,7 +789,7 @@ fn run(cli: Cli) -> Result<()> {
                 anathem::output::print_line(&format!("    {snippet}"), raw);
             }
         }
-        Cmd::Save { text, project, tag, topic, external, from, ext_id } => {
+        Cmd::Save { text, project, tag, topic, external, from, ext_id, anchor } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
             // `-` means the body comes on stdin, which is what lets a note
@@ -854,6 +870,16 @@ fn run(cli: Cli) -> Result<()> {
             let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
             let project = anathem::project::resolve(project, &cwd);
             let g = anathem::ingest::save_with_topic(&conn, &text, &project, tag, topic.as_deref(), None)?;
+            if let Some(spec) = anchor.as_deref() {
+                // Resolved against where the command runs, not the database:
+                // the agent is standing in the repository the anchor names.
+                if let Err(e) = anathem::anchor::set(&conn, g.id, spec, &cwd) {
+                    // The memory is already saved and searchable; an anchor
+                    // that cannot be checked is worth a warning, not a
+                    // half-written save.
+                    eprintln!("warning: memory {} was saved without an anchor: {e}", g.id);
+                }
+            }
             if json {
                 anathem::jsonout::print(&anathem::jsonout::saved(&g))?;
             } else {
@@ -1285,8 +1311,27 @@ every other key the file has, or put it in {} yourself:",
                  transcript measured."
             );
         }
-        Cmd::Verify { id, undo } => {
+        Cmd::Verify { id, undo, check, all } => {
             let conn = anathem::db::open(&path)?;
+            let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            if check {
+                if all {
+                    let (ok, moved, missing) = anathem::anchor::check_all(&conn, &cwd)?;
+                    println!("anchors: {ok} ok, {moved} changed, {missing} missing");
+                } else {
+                    let Some(id) = id else {
+                        anyhow::bail!("--check needs an id, or --all for every anchored memory");
+                    };
+                    match anathem::anchor::check(&conn, id, &cwd)? {
+                        Some(estado) => println!("memory {id}: anchor {estado}"),
+                        None => println!("memory {id} has no anchor to check"),
+                    }
+                }
+                return Ok(());
+            }
+            let Some(id) = id else {
+                anyhow::bail!("which memory? `mem verify <id>`, or `mem verify --check --all`");
+            };
             anathem::maint::verify(&conn, id, !undo)?;
             if undo {
                 println!("memory {id} is no longer marked as verified");
@@ -1445,6 +1490,13 @@ every other key the file has, or put it in {} yourself:",
             println!("saved: {}{who}", short_when(&m.when));
             if let Some(t) = &m.topic {
                 println!("topic: {t}");
+            }
+            if let Some((path, symbol, _, state, checked)) = anathem::anchor::get(&conn, id)? {
+                let what = match symbol {
+                    Some(s) => format!("{path}:{s}"),
+                    None => path,
+                };
+                println!("anchor: {what} — {state}, checked {}", short_when(&checked));
             }
             if m.status == "draft" {
                 println!("Waiting: nothing searches it until `mem accept {id}`.");

@@ -191,10 +191,14 @@ Saving with `--topic` is how a fact that will keep changing gets corrected:
 the next save under the same key replaces the previous one, which stays in
 the history rather than competing with it in searches.
 
-From an agent, none of this is typed. The MCP server exposes five tools —
-`search_memory`, `save_memory`, `get_memory`, `list_tags` and
-`recent_memories` — and they carry their own explanation, so there is
-nothing to learn by heart.
+From an agent, none of this is typed. The MCP server exposes six tools —
+`search_memory`, `save_memory`, `get_memory`, `list_tags`, `recent_memories`
+and `memory_admin` — and they carry their own explanation, so there is
+nothing to learn by heart. `memory_admin` is the one that keeps the surface
+small: `verify`, `check_anchor`, `accept`, `topics` and `inbox` share a
+single tool instead of five, because every tool costs context in every
+session. Deleting, exporting and editing are still command-line only: those
+are decisions for the person at the keyboard.
 
 ## Subcommands
 
@@ -208,6 +212,7 @@ nothing to learn by heart.
 | `save <text>` | Saves a new memory; without `--project` it derives it from the repository you are standing in | `mem save "The /api/x endpoint now pages by 50"` |
 | `save <text> --topic <key>` | With a topic key, the new memory replaces the active one holding the same key in the same project (the old one is left `superseded`, not edited and not deleted). It says which one it replaced. Without `--topic`, nothing changes | `mem save "The payment provider is Adyen" --topic payment-provider` |
 | `topics` | Lists the topic keys: project, how many memories each one has had and the id of the current one | `mem topics` |
+| `save <text> --anchor <path>[:<symbol>]` | Records what the memory was checked against — the file, and the symbol inside it — resolved from where you are standing. With a symbol, the hash is of that function's body, not of the file: a file anchor goes stale in days because any unrelated edit moves it. See `tools/anchor_decay.py`. `mem verify --check` re-reads it later and says whether the code still matches. Refused when the path is not a file: an anchor nobody can check is not an anchor | `mem save "run() returns the padded length" --anchor src/search.rs` |
 | `save <text> --external --from <label> --project <p> [--ext-id <id>]` | Saves a memory **sent by another agent or another machine**. With `--ext-id`, a delivery retried after a lost connection writes one draft and not two: the second says which memory already holds that id and exits 0. It arrives as a draft, invisible to search until someone accepts it, and keeps who sent it. `<text>` can be `-` to read the body from stdin, so a note pipes over SSH | `ssh host mem save - --external --from claude@laptop --project api < note.md` |
 | `accept <id>` | Lets a received memory into search. `--all --from <label>` does a whole sender's batch | `mem accept 42` |
 | `show <id>` | Prints one memory whole, whatever its status: the body, where it came from and whether it is still waiting | `mem show 42` |
@@ -227,6 +232,7 @@ nothing to learn by heart.
 | `stale` | Memories nobody has opened, oldest first, to start a review pass from. It orders by `last_accessed`, which only counts fetching a whole body, so it says where to start looking rather than which notes are neglected | `mem stale --limit 10` |
 | `origin <id>` | Which transcript a memory was written down in, and on what line. Saving is a tool call and tool calls are logged, so the note finds itself; one written by hand in a terminal is in no log and that is said plainly | `mem origin 781` |
 | `verify <id>` | Marks a memory as checked against the world rather than merely written down; it comes back labelled `[verified]`. `--undo` takes the mark away. It rewrites nothing — not the body, not the date — because confirming a note is not correcting it, and it moves no ranking | `mem verify 88` |
+| `verify --check <id>` / `verify --check --all` | The opposite: re-reads the file the memory is anchored to and records `ok`, `moved` or `missing`. A mark is a claim; this is evidence. It reports and moves nothing, because demoting a stale anchor in the ranking has to be measured first | `mem verify --check 88` |
 | `history <id>` | Shows a memory's supersession chain, newest to oldest | `mem history 42` |
 | `recent` | What was saved lately, newest to oldest, and which agent saved it. It is the opposite of `search`, which orders by relevance. `--since` accepts `6h`, `90m`, `2d` or `todo` (no bound); 24h by default | `mem recent --since 6h` |
 | `stats` | What the search log says about whether this is earning its place: how often a search led to opening a memory, what it cost in tokens, and the queries that found nothing. `--by project`, `--by agent` or `--by dir` breaks the same counts down, which is the only way to tell "this project is not searched" from "this project is not logged" — a search with no project came from a server started outside a repository, and `--by dir` says which directory that was. Read-only, and it says above the table what it cannot measure | `mem stats --since 30d --by project` |
@@ -447,7 +453,7 @@ Four things, and breaking any of them costs a major version:
   doctor` comes out clean afterwards.
 - An **export** taken under any 1.x imports into any later 1.x with nothing
   lost.
-- The **five MCP tools** keep their names and their required parameters.
+- The **MCP tools** keep their names and their required parameters.
   Adding an optional one is allowed; renaming a tool is not.
 - The **commands and flags documented here** keep working.
 

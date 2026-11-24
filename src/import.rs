@@ -35,6 +35,10 @@ pub struct ParsedMemory {
     /// `db::add_provenance_columns`.
     pub received_from: Option<String>,
     pub received_at: Option<String>,
+    /// What it was checked against: path, symbol, hash, state, when. Kept as
+    /// exported: the state was true where it was written, and the first
+    /// `mem verify --check` decides what it is here.
+    pub anchor: Option<(String, Option<String>, String, String, String)>,
     pub tags: Vec<String>,
     pub refs: Vec<(String, String)>,
 }
@@ -89,6 +93,8 @@ pub fn parse(text: &str) -> Option<ParsedMemory> {
     m.source = "explicit".into();
 
     let lines: Vec<&str> = cabecera.lines().collect();
+    let mut campos_ancla: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     let mut i = 0;
     while i < lines.len() {
         let l = lines[i];
@@ -129,9 +135,21 @@ pub fn parse(text: &str) -> Option<ParsedMemory> {
             "event_end" => m.event_end = Some(unquote(v)).filter(|s| !s.is_empty()),
             "received_from" => m.received_from = Some(unquote(v)).filter(|s| !s.is_empty()),
             "received_at" => m.received_at = Some(unquote(v)).filter(|s| !s.is_empty()),
+            "anchor" | "anchor_sha256" | "anchor_state" | "anchor_checked_at" => {
+                campos_ancla.insert(k.to_string(), unquote(v));
+            }
             "tags" => m.tags = inline_list(v),
             _ => {}
         }
+    }
+    // The four anchor keys arrive together or not at all: a hash without the
+    // path it belongs to is not an anchor, and a path without a hash cannot
+    // be checked.
+    if let (Some(path), Some(sha)) = (campos_ancla.remove("anchor"), campos_ancla.remove("anchor_sha256")) {
+        let state = campos_ancla.remove("anchor_state").unwrap_or_else(|| "ok".into());
+        let checked = campos_ancla.remove("anchor_checked_at").unwrap_or_default();
+        let (path, symbol) = crate::anchor::parse(&path);
+        m.anchor = Some((path, symbol, sha, state, checked));
     }
     if m.project.is_empty() || m.body.is_empty() {
         return None;
@@ -213,6 +231,14 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
             ],
         )?;
         let new_id = tx.last_insert_rowid();
+        if let Some((path, symbol, sha, state, checked)) = &m.anchor {
+            tx.execute(
+                "insert or replace into memory_anchors
+                   (memory_id, path, symbol, sha256, checked_at, state)
+                 values (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![new_id, path, symbol, sha, checked, state],
+            )?;
+        }
         if let Some(old) = m.old_id {
             mapping.insert(old, new_id);
         }

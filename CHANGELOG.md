@@ -8,6 +8,59 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 what you would be getting. Memories are never touched by an upgrade: they
 live in the database, not in the binary.
 
+## [Unreleased]
+
+### Added
+
+- **A sixth MCP tool, `memory_admin`, so an agent can do the housekeeping it
+  could only reach through the shell.** `verify` marks a memory as checked,
+  `check_anchor` re-reads the file an anchor points at, `accept` lets a
+  received memory into search, `topics` lists the keys `save_memory` replaces,
+  and `inbox` lists what is waiting. One tool with five actions and not five
+  tools: the five that existed already cost about 2,700 tokens in every
+  session, and `search_memory` alone is 1,500 of them. Deleting, exporting and
+  editing stay command-line only — they are decisions for the person at the
+  keyboard, and a model should not be able to make them by accident.
+
+### Added
+
+- **Anchors: memory the repository can falsify.** `mem save --anchor
+  <path>[:<symbol>]` records the file a memory was checked against and its
+  SHA-256; `mem verify --check` re-reads it and says `ok`, `moved` or
+  `missing`. `mem verify` so far recorded a claim and nothing ever revisited
+  it, so a note kept saying "verified" after the function it named had been
+  renamed away. Two November results put the value there rather than in
+  prose: CoReMem (arXiv 2611.17316) finds coding-agent memory worth what its
+  anchors are worth, and 2608.20685 measures RAG serving a superseded value
+  36–38 % of the time over real GitHub fixes. The anchor travels in `mem
+  export` and back through `mem import`, `mem doctor` counts anchored and
+  stale, and **it does not move the ranking**: demoting a stale anchor needs
+  its own measurement, so search is byte-identical until then.
+
+  **The hash is of the symbol's body, not of the file**, and that came from
+  measuring: over eight public repositories (ripgrep, serde, tokio, caddy,
+  gin, flask, httpx, django — 58,802 commits, histories of 8 to 21 years) and
+  219,138 (commit, file) pairs, **95.4 % of file-level anchors were already
+  stale at HEAD**. The body of the function a memory talks about holds far
+  better — unchanged 100 % within 7 days, 94 % within 30, 90 % within 90,
+  79 % within a year — and decays past that, which is why an anchor is a
+  check and not a guarantee. `tools/anchor_decay.py` reproduces the table
+  over any git histories, which is the corpus this question needs: dialogue
+  benchmarks have no files to change.
+
+  **The label alone does nothing; explained, it does what it says.** Over real
+  function histories (`tools/anchor_eval.py`, 45 memories, DeepSeek Flash,
+  225 calls), with `[anchor: …]` appended and no explanation the model asserts
+  the stale value **100 %** of the time. Told in one sentence of the system
+  prompt what the line means, it asserts it **0 %** of the time and caveats
+  100 % — on true claims whose body changed too, which is the price of not
+  being able to tell. Moving the memory to the end of five made **no
+  difference at all**: rank is not the lever. Hiding it works, and also hides
+  the true ones. A neutral "last checked N days ago" line with no alarm makes
+  the model doubt *everything*, including fresh notes. So the protocol teaches
+  the mark and the ranking is left alone: the model refusing what it cannot
+  verify is the behaviour that was asked for.
+
 ## [1.3.1] - 2026-11-17
 
 ### Changed

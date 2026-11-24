@@ -42,7 +42,7 @@ Every brain reports three health scores from 0 to 100: **Freshness**,
 90-day history and suggestions. Prices are 8 $ per million input tokens and
 0.50 $ per million output.
 
-anathem is one 3 MB Rust binary, one SQLite file, five MCP tools, no daemon,
+anathem is one 3 MB Rust binary, one SQLite file, six MCP tools, no daemon,
 no model, no account and no API key, under MIT.
 
 ## Where Living Brain wins, without haggling

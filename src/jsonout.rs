@@ -123,6 +123,15 @@ pub fn show(conn: &Connection, m: &maint::Memory) -> Result<Value> {
             [m.id],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
         )?;
+    let anchor = crate::anchor::get(conn, m.id)?.map(|(path, symbol, sha, state, checked)| {
+        json!({
+            "path": path,
+            "symbol": symbol,
+            "sha256": sha,
+            "state": state,
+            "checked_at": checked,
+        })
+    });
     Ok(json!({
         "schema": SCHEMA,
         "id": m.id,
@@ -136,6 +145,7 @@ pub fn show(conn: &Connection, m: &maint::Memory) -> Result<Value> {
         "topic": m.topic,
         "received_from": m.received_from,
         "verified": verified != 0,
+        "anchor": anchor,
         "pinned": pinned != 0,
         "supersedes": supersedes,
         "ext_id": ext_id,
@@ -207,6 +217,7 @@ pub fn recent(items: &[RecentItem]) -> Value {
             "topic": it.topic,
             "received_from": it.received_from,
             "status": it.status,
+            "anchor": it.anchor,
             "excerpt": it.excerpt,
         }))
         .collect();

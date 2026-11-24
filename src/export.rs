@@ -74,6 +74,8 @@ struct Fila {
     topic: Option<String>,
     received_from: Option<String>,
     received_at: Option<String>,
+    /// What it was checked against: path, symbol, hash, state, when.
+    anchor: Option<(String, Option<String>, String, String, String)>,
 }
 
 /// Exports each memory to a markdown file with frontmatter. The format is
@@ -111,9 +113,28 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
                 topic: r.get(13)?,
                 received_from: r.get(14)?,
                 received_at: r.get(15)?,
+                anchor: None,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;
+
+    // Anchors are a separate table, and an export that dropped them would
+    // promise a check that no longer exists on the other side.
+    let mut anchors: std::collections::HashMap<i64, (String, Option<String>, String, String, String)> =
+        std::collections::HashMap::new();
+    for row in conn
+        .prepare("select memory_id, path, symbol, sha256, state, checked_at from memory_anchors")?
+        .query_map([], |r| {
+            Ok((r.get::<_, i64>(0)?, (r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)))
+        })?
+    {
+        let (id, anchor) = row?;
+        anchors.insert(id, anchor);
+    }
+    let mut rows = rows;
+    for f in rows.iter_mut() {
+        f.anchor = anchors.remove(&f.id);
+    }
 
     // slug() truncates to the first 8 words, so two memories with the same
     // project, creation date and title up to word 8 would produce the same
@@ -222,6 +243,16 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
         }
         if let Some(e) = &f.event_end {
             optional.push_str(&format!("event_end: {}\n", yaml_dq(e)));
+        }
+        if let Some((path, symbol, sha, state, checked)) = &f.anchor {
+            let spec = match symbol {
+                Some(sym) => format!("{path}:{sym}"),
+                None => path.clone(),
+            };
+            optional.push_str(&format!("anchor: {}\n", yaml_dq(&spec)));
+            optional.push_str(&format!("anchor_sha256: {}\n", yaml_dq(sha)));
+            optional.push_str(&format!("anchor_state: {}\n", yaml_dq(state)));
+            optional.push_str(&format!("anchor_checked_at: {}\n", yaml_dq(checked)));
         }
         if !refs.is_empty() {
             optional.push_str("refs:\n");
