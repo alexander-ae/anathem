@@ -516,14 +516,16 @@ reads, not what it is shown.
 ### `[anchor: …]`, the evidence behind a note
 
 A memory can be anchored to the file it was checked against — `mem save
---anchor src/x.rs:fn run`, or the `anchor` argument of `save_memory`. The
+--anchor src/search.rs`, with an optional `:<symbol>` suffix to hash one
+function instead of the whole file — or through the `anchor` argument of
+`save_memory`. The
 anchor records the function's body hash, and `mem verify --check` re-reads it
 later. When it no longer matches, `search_memory` says which of the two
 happened:
 
 ```
 [id:52] [p] [anchor: the function changed] the retry uses three attempts
-[id:61] [p] [anchor: the function is gone] the parser lives in src/old.rs
+[id:61] [p] [anchor: the function is gone] the parser lives in src/search.rs
 ```
 
 It means the evidence moved on, not that the note was wrong when it was
