@@ -8,7 +8,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 what you would be getting. Memories are never touched by an upgrade: they
 live in the database, not in the binary.
 
-## [Unreleased]
+## [1.4.0] - 2026-11-23
 
 ### Added
 
@@ -21,8 +21,6 @@ live in the database, not in the binary.
   session, and `search_memory` alone is 1,500 of them. Deleting, exporting and
   editing stay command-line only — they are decisions for the person at the
   keyboard, and a model should not be able to make them by accident.
-
-### Added
 
 - **Anchors: memory the repository can falsify.** `mem save --anchor
   <path>[:<symbol>]` records the file a memory was checked against and its
@@ -60,6 +58,16 @@ live in the database, not in the binary.
   the model doubt *everything*, including fresh notes. So the protocol teaches
   the mark and the ranking is left alone: the model refusing what it cannot
   verify is the behaviour that was asked for.
+
+### Changed
+
+- **The MCP surface is 24 % smaller: 2,863 → 2,185 tokens.** The six tool
+  definitions are read at the start of every session, and two of them —
+  `search_memory` and `save_memory` — were 83 % of the cost. The rules stayed
+  (a test pins the wording that was added after measuring), the restatements
+  and the rationale went, and the parameter descriptions are one line each.
+  `save_memory` also gained `anchor`, so recording what a memory was checked
+  against is no longer command-line only.
 
 ## [1.3.1] - 2026-11-17
 
