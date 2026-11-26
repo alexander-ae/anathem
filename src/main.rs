@@ -194,6 +194,10 @@ enum Cmd {
         /// the ranking with an unlimited budget
         #[arg(long)]
         as_mcp: bool,
+        /// Runs the same cases through BM25 alone, the vector arm alone and
+        /// the fused ranking, and reports the per-query cost of fusing them
+        #[arg(long, conflicts_with = "as_mcp")]
+        compare: bool,
     },
     /// Starts the MCP server over stdio
     Serve,
@@ -1184,7 +1188,7 @@ every other key the file has, or put it in {} yourself:",
                 println!("\n    {{ \"bm25_weight\": {best} }}");
             }
         }
-        Cmd::Eval { evalset, label, out, as_mcp } => {
+        Cmd::Eval { evalset, label, out, as_mcp, compare } => {
             let evalset = evalset.unwrap_or_else(|| {
                 path.parent().unwrap_or(std::path::Path::new(".")).join("evalset.json")
             });
@@ -1193,6 +1197,66 @@ every other key the file has, or put it in {} yourself:",
             let cfg = anathem::config::load(dir)?;
             let p = anathem::packstore::resolve_and_warn(&conn, dir);
             let ctx = anathem::search::SearchContext::for_reading(p.as_ref(), cfg.bm25_weight);
+            if compare {
+                let bm25_ctx = anathem::search::SearchContext::bm25_only();
+                let vector_ctx = p.as_ref().map(anathem::search::SearchContext::vector_only);
+                let r = anathem::evalrun::compare(
+                    &conn, &evalset, &label, &ctx, &bm25_ctx, vector_ctx.as_ref(),
+                )?;
+                for arm in std::iter::once(&r.fused)
+                    .chain(std::iter::once(&r.bm25))
+                    .chain(r.vector.iter())
+                {
+                    println!(
+                        "{}  recall@5={:.0}%  recall@50={:.0}%  MRR={:.3}  p50={:.1}ms  n={}",
+                        arm.system, arm.recall_at_5 * 100.0, arm.recall_at_50 * 100.0,
+                        arm.mrr, arm.p50_ms, arm.n_cases
+                    );
+                }
+                let n = r.n_cases.max(1);
+                println!(
+                    "\nfused below bm25: {} of {} ({:.0}%)",
+                    r.fused_below_bm25, r.n_cases, r.fused_below_bm25 as f64 / n as f64 * 100.0
+                );
+                if r.vector_available {
+                    println!(
+                        "fused below the vector arm: {} of {} ({:.0}%)",
+                        r.fused_below_vector, r.n_cases,
+                        r.fused_below_vector as f64 / n as f64 * 100.0
+                    );
+                } else {
+                    println!(
+                        "no vocabulary pack: the vector arm was not measured, so the \
+                         comparison is fused against bm25 only"
+                    );
+                }
+                println!(
+                    "fused below the better component: {} of {} ({:.0}%)",
+                    r.fused_below_better, r.n_cases,
+                    r.fused_below_better as f64 / n as f64 * 100.0
+                );
+                let rank = |r: Option<usize>| {
+                    r.map(|n| n.to_string()).unwrap_or_else(|| "-".to_string())
+                };
+                let mut peores: Vec<_> = r.per_case.iter().filter(|c| c.below_better).collect();
+                peores.sort_by_key(|c| std::cmp::Reverse(c.fused_rank.unwrap_or(usize::MAX)));
+                if !peores.is_empty() {
+                    println!("\nworst cases (fused rank / bm25 / vector):");
+                    for c in peores.iter().take(10) {
+                        println!(
+                            "  {}  {} / {} / {}  expected={}  {}",
+                            c.id, rank(c.fused_rank), rank(c.bm25_rank), rank(c.vector_rank),
+                            c.expected.join(","), c.query
+                        );
+                    }
+                }
+                if let Some(o) = out {
+                    if let Some(p) = o.parent() { std::fs::create_dir_all(p)?; }
+                    std::fs::write(&o, serde_json::to_string_pretty(&r)?)?;
+                    println!("-> {}", o.display());
+                }
+                return Ok(());
+            }
             if as_mcp {
                 let p = anathem::evalrun::run_as_mcp(&conn, &evalset, &label, &ctx, &cfg)?;
                 println!(

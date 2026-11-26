@@ -1,3 +1,5 @@
+mod support;
+
 use anathem::{db, evalrun, ingest, model::NewMemory, search};
 use std::io::Write;
 
@@ -329,4 +331,101 @@ fn contamination_is_not_measured_when_no_case_labels_its_versions() {
     write!(f, r#"{{"cases":[{{"id":"q1","query":"cache","expect_docs":["a"]}}]}}"#).unwrap();
     let r = evalrun::run(&conn, &evalset, "x", &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(r.contamination_at_5, None, "a zero it did not earn is not a measurement");
+}
+
+#[test]
+fn compare_without_a_pack_measures_two_arms_and_zero_tax() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    for (ext, body) in [
+        ("a", "El cache del breakdown no se justifica por staleness"),
+        ("b", "Convenciones de rspec para request specs"),
+        ("c", "El design system interno define los colores"),
+    ] {
+        ingest::insert(&conn, &NewMemory {
+            project: "p".into(), title: body.into(), body: body.into(),
+            created: "2026-09-01".into(), event_start: None, event_end: None,
+            source: "migrated".into(), ext_id: Some(ext.into()),
+            tags: vec![], refs: vec![],
+        }).unwrap();
+    }
+    let evalset = dir.path().join("evalset.json");
+    let mut f = std::fs::File::create(&evalset).unwrap();
+    write!(f, r#"{{"cases": [
+        {{"id":"q1","query":"cache staleness","expect_docs":["a"]}},
+        {{"id":"q2","query":"rspec request specs","expect_docs":["b"]}},
+        {{"id":"q3","query":"algo que no existe","expect_docs":["c"]}}
+      ]}}"#).unwrap();
+
+    let arm = search::SearchContext::bm25_only();
+    let r = evalrun::compare(&conn, &evalset, "x", &arm, &arm, None).unwrap();
+    assert!(!r.vector_available);
+    assert!(r.vector.is_none());
+    assert_eq!(r.fused_below_bm25, 0, "there is only one arm without a pack");
+    assert_eq!(r.fused_below_vector, 0);
+    assert_eq!(r.fused_below_better, 0);
+    assert_eq!(r.per_case.len(), 3);
+    for c in &r.per_case {
+        assert_eq!(c.fused_rank, c.bm25_rank);
+        assert_eq!(c.vector_rank, None);
+        assert!(!c.below_better);
+    }
+    let j: serde_json::Value = serde_json::to_value(&r).unwrap();
+    for k in ["fused", "bm25", "vector", "fused_below_bm25", "per_case"] {
+        assert!(j.get(k).is_some(), "key {k} is missing in {j}");
+    }
+}
+
+#[test]
+fn compare_reports_a_case_where_fusion_demotes_the_vector_winner() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    // `a` contains the query word but also an unknown one, so its vector is
+    // diluted. `b` shares no word with the query but its single token has
+    // the same vector as the query: BM25 cannot see it, the vector arm puts
+    // it first, and RRF prefers `a` because both arms return it.
+    for (ext, body) in [("a", "hola zzz"), ("b", "mundo")] {
+        ingest::insert(&conn, &NewMemory {
+            project: "p".into(), title: body.into(), body: body.into(),
+            created: "2026-09-01".into(), event_start: None, event_end: None,
+            source: "migrated".into(), ext_id: Some(ext.into()),
+            tags: vec![], refs: vec![],
+        }).unwrap();
+    }
+    let pack_path = dir.path().join("mini.anathem-pack");
+    // Rows: <unk>, hola, mundo, s. `hola` and `mundo` point the same way;
+    // <unk> is orthogonal, which is what dilutes `a`.
+    support::write_pack_rows(&pack_path, "mini", 4, &[
+        vec![0, 100, 0, 0],
+        vec![100, 0, 0, 0],
+        vec![100, 0, 0, 0],
+        vec![0, 0, 100, 0],
+    ]);
+    anathem::packstore::install(
+        &conn, dir.path(), &pack_path, anathem::packstore::Sidecar::Optional,
+    ).unwrap();
+    let live = anathem::packstore::resolve(&conn, dir.path());
+    let pack = live.pack.as_ref().expect("the mini pack installed");
+
+    let fused = search::SearchContext::for_reading(Some(pack), 1.0);
+    let bm25 = search::SearchContext::bm25_only();
+    let vector = search::SearchContext::vector_only(pack);
+
+    let evalset = dir.path().join("evalset.json");
+    let mut f = std::fs::File::create(&evalset).unwrap();
+    write!(f, r#"{{"cases": [
+        {{"id":"q1","query":"hola","expect_docs":["b"]}}
+      ]}}"#).unwrap();
+
+    let r = evalrun::compare(&conn, &evalset, "x", &fused, &bm25, Some(&vector)).unwrap();
+    assert!(r.vector_available);
+    assert_eq!(r.bm25.per_case[0].first_rank, None, "bm25 cannot see b");
+    assert_eq!(
+        r.vector.as_ref().unwrap().per_case[0].first_rank, Some(1),
+        "the vector arm puts b first"
+    );
+    assert_eq!(r.fused.per_case[0].first_rank, Some(2), "RRF prefers a");
+    assert_eq!(r.fused_below_vector, 1, "the vector winner was demoted");
+    assert_eq!(r.fused_below_better, 1, "the better component had b at 1");
+    assert!(r.per_case[0].below_better);
 }

@@ -12,6 +12,13 @@ live in the database, not in the binary.
 
 ### Added
 
+- **`mem eval --compare`: the per-query cost of fusing two rankings.** Runs
+  the same cases through BM25 alone, the vector arm alone and the fused
+  ranking, and reports how often fusion places the expected memory below the
+  better of its components — the fusion tax (arXiv 2610.30612), which
+  aggregate recall hides. Without a pack the vector arm is not measured and
+  the command says so. No ranking changes; this is the instrument.
+
 - **`mem search --as-of <date>`: what was true then.** Every memory carries a
   validity interval — from the day it was saved until something replaced it —
   and `mem supersede` (including a save over a topic key) closes the old one

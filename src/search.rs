@@ -431,12 +431,18 @@ pub struct SearchContext<'a> {
     pack: Option<&'a Pack>,
     identity: Option<&'a crate::vecstore::PackIdentity>,
     pub bm25_weight: f64,
+    /// Whether the lexical ranking runs at all. False is the vector-only
+    /// arm of `mem eval --compare`; it is not a config value, because a
+    /// weight of zero means the lexical side contributes no score but its
+    /// hits still occupy the tail of the merged list, and the comparison
+    /// wants what the vector side returns on its own.
+    lexical: bool,
 }
 
 impl SearchContext<'static> {
     /// Search with no vector layer: the long-standing behaviour.
     pub fn bm25_only() -> SearchContext<'static> {
-        SearchContext { pack: None, identity: None, bm25_weight: 1.0 }
+        SearchContext { pack: None, identity: None, bm25_weight: 1.0, lexical: true }
     }
 }
 
@@ -444,7 +450,14 @@ impl<'a> SearchContext<'a> {
     /// For searching. Reading with the wrong pack gives a worse result, not
     /// a mixed index, so reads do not need the identity.
     pub fn for_reading(pack: Option<&'a Pack>, bm25_weight: f64) -> SearchContext<'a> {
-        SearchContext { pack, identity: None, bm25_weight }
+        SearchContext { pack, identity: None, bm25_weight, lexical: true }
+    }
+
+    /// The vector ranking alone, for `mem eval --compare`. When there is no
+    /// pack this answers nothing, which is the honest result: there is no
+    /// vector arm to compare.
+    pub fn vector_only(pack: &'a Pack) -> SearchContext<'a> {
+        SearchContext { pack: Some(pack), identity: None, bm25_weight: 1.0, lexical: false }
     }
 
     /// For the MCP server, which searches and also saves.
@@ -452,7 +465,12 @@ impl<'a> SearchContext<'a> {
         active: Option<(&'a Pack, &'a crate::vecstore::PackIdentity)>,
         bm25_weight: f64,
     ) -> SearchContext<'a> {
-        SearchContext { pack: active.map(|(p, _)| p), identity: active.map(|(_, i)| i), bm25_weight }
+        SearchContext {
+            pack: active.map(|(p, _)| p),
+            identity: active.map(|(_, i)| i),
+            bm25_weight,
+            lexical: true,
+        }
     }
 
     /// The pack to embed the query with, if there is one.
@@ -885,7 +903,7 @@ pub fn run_explained(
     // --- lexical retrieval: identical to how it was ---
     let mut best: HashMap<i64, (SearchHit, i64)> = HashMap::new();
     let mut orden_bm25: Vec<i64> = Vec::new();
-    if !m.is_empty() {
+    if ctx.lexical && !m.is_empty() {
         // Main pool: the CANDIDATES best chunks by bm25, pinned or not.
         let mut rows = candidate_rows(conn, &m, q, chunk_range, "", Some(CANDIDATES))?;
         if rows.is_empty() && podado {

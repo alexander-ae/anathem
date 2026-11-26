@@ -109,6 +109,116 @@ pub fn run(
     run_cases(conn, &set.cases, system, ctx)
 }
 
+/// One case, with the rank each arm gave the expected memory.
+#[derive(Serialize, Debug)]
+pub struct CompareCase {
+    pub id: String,
+    pub query: String,
+    pub expected: Vec<String>,
+    /// 1-based position of the expected memory, or `null` when the arm did
+    /// not return it.
+    pub fused_rank: Option<usize>,
+    pub bm25_rank: Option<usize>,
+    pub vector_rank: Option<usize>,
+    /// The fused ranking put the expected memory below the better of the two
+    /// components that found it. This is the fusion tax, per case.
+    pub below_better: bool,
+}
+
+/// Three arms over one eval set, and the per-query cost of fusing them.
+#[derive(Serialize, Debug)]
+pub struct CompareResult {
+    pub date: String,
+    pub n_cases: usize,
+    pub vector_available: bool,
+    pub fused: EvalResult,
+    pub bm25: EvalResult,
+    pub vector: Option<EvalResult>,
+    /// Cases where fusion ranked the expected memory below BM25 alone.
+    pub fused_below_bm25: usize,
+    /// Cases where fusion ranked it below the vector arm alone.
+    pub fused_below_vector: usize,
+    /// Cases where fusion ranked it below the better of the two components.
+    pub fused_below_better: usize,
+    pub per_case: Vec<CompareCase>,
+}
+
+/// True when `a` is worse than `b`: not returned at all counts as worse than
+/// any position. Two missing ranks are not a tax; they are a case neither arm
+/// answered.
+fn below(a: Option<usize>, b: Option<usize>) -> bool {
+    match (a, b) {
+        (None, Some(_)) => true,
+        (Some(a), Some(b)) => a > b,
+        _ => false,
+    }
+}
+
+/// Runs the same cases through the three arms. No ranking changes: this is
+/// the instrument #77 asks for, and the fused arm is the one search uses.
+pub fn compare(
+    conn: &Connection,
+    evalset: &Path,
+    label: &str,
+    fused_ctx: &search::SearchContext,
+    bm25_ctx: &search::SearchContext,
+    vector_ctx: Option<&search::SearchContext>,
+) -> Result<CompareResult> {
+    let set = read_evalset(evalset)?;
+    let fused = run_cases(conn, &set.cases, &format!("{label} fused"), fused_ctx)?;
+    let bm25 = run_cases(conn, &set.cases, &format!("{label} bm25"), bm25_ctx)?;
+    let vector = match vector_ctx {
+        Some(ctx) => Some(run_cases(conn, &set.cases, &format!("{label} vector"), ctx)?),
+        None => None,
+    };
+
+    let (mut below_bm25, mut below_vector, mut below_better) = (0usize, 0usize, 0usize);
+    let mut per_case = Vec::with_capacity(set.cases.len());
+    for (i, case) in set.cases.iter().enumerate() {
+        let fused_rank = fused.per_case[i].first_rank;
+        let bm25_rank = bm25.per_case[i].first_rank;
+        let vector_rank = vector.as_ref().and_then(|v| v.per_case[i].first_rank);
+        let better = match (bm25_rank, vector_rank) {
+            (Some(b), Some(v)) => Some(b.min(v)),
+            (Some(b), None) => Some(b),
+            (None, Some(v)) => Some(v),
+            (None, None) => None,
+        };
+        if below(fused_rank, bm25_rank) {
+            below_bm25 += 1;
+        }
+        if below(fused_rank, vector_rank) {
+            below_vector += 1;
+        }
+        let tax = below(fused_rank, better);
+        if tax {
+            below_better += 1;
+        }
+        per_case.push(CompareCase {
+            id: case.id.clone(),
+            query: case.query.clone(),
+            expected: case.expect_docs.clone(),
+            fused_rank,
+            bm25_rank,
+            vector_rank,
+            below_better: tax,
+        });
+    }
+
+    Ok(CompareResult {
+        date: chrono::Local::now().format("%Y-%m-%d").to_string(),
+        n_cases: set.cases.len(),
+        vector_available: vector.is_some(),
+        fused,
+        bm25,
+        vector,
+        fused_below_bm25: below_bm25,
+        fused_below_vector: below_vector,
+        fused_below_better: below_better,
+        per_case,
+    })
+}
+
 /// Reads the eval set, and says how to write one when it cannot.
 fn read_evalset(evalset: &Path) -> Result<EvalSet> {
     let raw = std::fs::read_to_string(evalset)
