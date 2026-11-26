@@ -43,7 +43,8 @@ pub fn candidates(conn: &Connection, body: &str, project: &str, k: usize) -> Res
         // this fact, and bounding the search by when would be a way of not
         // finding it.
         since: None,
-        until: None,
+        as_of: None,
+                until: None,
     };
     // Called right after an insert, when the vector for the just-saved
     // memory may not be synced yet: the vector index would be incomplete in
@@ -115,9 +116,19 @@ pub fn link(conn: &Connection, newer: i64, older: i64) -> Result<()> {
     // fails everything is undone together with their insert.
     let propia = if conn.is_autocommit() { Some(conn.unchecked_transaction()?) } else { None };
     conn.execute("update memories set supersedes_id = ?2 where id = ?1", params![newer, older])?;
+    let ahora = chrono::Local::now();
     conn.execute(
-        "update memories set status = 'superseded', updated = ?2 where id = ?1",
-        params![older, chrono::Local::now().format("%Y-%m-%d").to_string()],
+        "update memories set status = 'superseded', updated = ?2,
+                valid_until = coalesce(valid_until, ?3)
+          where id = ?1",
+        params![older, ahora.format("%Y-%m-%d").to_string(),
+                ahora.format("%Y-%m-%d %H:%M:%S").to_string()],
+    )?;
+    // The replacement starts being true now, unless it already had an
+    // interval of its own.
+    conn.execute(
+        "update memories set valid_from = coalesce(valid_from, ?2) where id = ?1",
+        params![newer, ahora.format("%Y-%m-%d %H:%M:%S").to_string()],
     )?;
     if let Some(tx) = propia {
         tx.commit()?;

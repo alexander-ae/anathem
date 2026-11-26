@@ -248,3 +248,87 @@ fn the_cli_spells_the_window_the_same_way() {
     assert!(!ok, "it had to fail: {out}");
     assert!(out.contains("cannot read the date"), "{out}");
 }
+
+/// A superseded memory kept its interval, and `--as-of` reaches it by date.
+#[test]
+fn as_of_answers_with_the_version_that_was_current_then() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    let mut old = 0;
+    let mut new = 0;
+    // The old fact was learned in September; the correction arrived today,
+    // which is what makes the two intervals different.
+    let hoy = chrono::Local::now().date_naive().format("%Y-%m-%d").to_string();
+    for (ext, body, keep, created) in [
+        ("vieja", "el equipo de Ana es Riot", false, "2026-09-01".to_string()),
+        ("nueva", "el equipo de Ana es Cloud9", true, hoy.clone()),
+    ] {
+        let id = anathem::ingest::insert(&conn, &NewMemory {
+            project: "p".into(), title: body.into(), body: body.into(),
+            created, event_start: None, event_end: None,
+            source: "migrated".into(), ext_id: Some(ext.into()),
+            tags: vec![], refs: vec![],
+        }).unwrap();
+        if keep { new = id } else { old = id }
+    }
+    anathem::supersede::link(&conn, new, old).unwrap();
+
+    let interval: (Option<String>, Option<String>) = conn.query_row(
+        "select valid_from, valid_until from memories where id = ?1", [old],
+        |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+    assert!(interval.0.is_some(), "the old one has a start");
+    assert!(interval.1.is_some(), "and a closing date, now that it was replaced");
+
+    let ayer = chrono::Local::now().date_naive() - chrono::Duration::days(1);
+    let q = search::Query {
+        text: "equipo de Ana".into(),
+        limit: 10,
+        as_of: Some(ayer.format("%Y-%m-%d").to_string()),
+        ..Default::default()
+    };
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
+    let ext: Vec<_> = hits.iter().filter_map(|h| h.ext_id.clone()).collect();
+    assert!(ext.contains(&"vieja".to_string()), "lo que era cierto ayer vuelve: {ext:?}");
+    assert!(!ext.contains(&"nueva".to_string()), "y lo de hoy no estaba: {ext:?}");
+
+    // Today, the other way around.
+    let q = search::Query {
+        text: "equipo de Ana".into(),
+        limit: 10,
+        as_of: Some(chrono::Local::now().date_naive().format("%Y-%m-%d").to_string()),
+        ..Default::default()
+    };
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
+    let ext: Vec<_> = hits.iter().filter_map(|h| h.ext_id.clone()).collect();
+    assert!(!ext.contains(&"vieja".to_string()), "hoy ya no: {ext:?}");
+}
+
+/// The interval has to survive the copy that leaves the machine, or an
+/// `--as-of` question asked of a restored backup answers differently.
+#[test]
+fn the_interval_travels_through_export_and_import() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    let mut ids = Vec::new();
+    for (ext, body) in [("vieja", "el equipo de Ana es Riot"),
+                        ("nueva", "el equipo de Ana es Cloud9")] {
+        ids.push(anathem::ingest::insert(&conn, &NewMemory {
+            project: "p".into(), title: body.into(), body: body.into(),
+            created: "2026-09-01".into(), event_start: None, event_end: None,
+            source: "migrated".into(), ext_id: Some(ext.into()),
+            tags: vec![], refs: vec![],
+        }).unwrap());
+    }
+    anathem::supersede::link(&conn, ids[1], ids[0]).unwrap();
+    let out = dir.path().join("out");
+    anathem::export::to_markdown(&conn, &out).unwrap();
+
+    let otro = db::open(&dir.path().join("otro.db")).unwrap();
+    anathem::import::import_dir(&otro, &out, false).unwrap();
+    let until: Option<String> = otro.query_row(
+        "select valid_until from memories where ext_id = 'vieja'", [], |r| r.get(0)).unwrap();
+    let from: Option<String> = otro.query_row(
+        "select valid_from from memories where ext_id = 'nueva'", [], |r| r.get(0)).unwrap();
+    assert!(until.is_some(), "the closing date came back");
+    assert!(from.is_some(), "and the opening one");
+}

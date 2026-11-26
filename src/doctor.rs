@@ -586,6 +586,38 @@ fn check_database(conn: &Connection, s: &mut Section) {
     guard(s, "the topic keys", |s| topic_keys(conn, s));
     guard(s, "the near-duplicates", |s| near_duplicates(conn, s));
     guard(s, "the anchors", |s| anchors(conn, s));
+    guard(s, "the validity intervals", |s| validity(conn, s));
+}
+
+/// The interval a memory was true for, and whether the two ends agree with
+/// the status.
+///
+/// A superseded memory with no closing date is one `--as-of` cannot place;
+/// an active one with a closing date says it stopped being true while still
+/// being served. Both are findings, not repairs: the command reports.
+fn validity(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
+    if !column_exists(conn, "memories", "valid_until") {
+        return Ok(());
+    }
+    let open = entero(conn,
+        "select count(*) from memories where status = 'superseded' and valid_until is null")?;
+    let closed = entero(conn,
+        "select count(*) from memories where status = 'active' and valid_until is not null")?;
+    if open == 0 && closed == 0 {
+        s.bien("validity intervals agree with the status");
+    } else {
+        if open > 0 {
+            s.warning(format!(
+                "{open} superseded memories have no closing date: `mem search --as-of` cannot \
+                 place them"));
+        }
+        if closed > 0 {
+            s.mal(format!(
+                "{closed} active memories carry a closing date: they stopped being true and \
+                 are still served"));
+        }
+    }
+    Ok(())
 }
 
 /// What was checked against a file, and whether that file still matches.

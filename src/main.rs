@@ -66,6 +66,11 @@ enum Cmd {
         /// question is what was decided *before* something, the least
         /// correct. A value it cannot read is an error, never a filter
         /// quietly dropped.
+        /// Answers what was true on that date, from the memories' validity
+        /// intervals instead of their status: a version superseded later
+        /// comes back if it covered the day
+        #[arg(long = "as-of", value_name = "DATE")]
+        as_of: Option<String>,
         #[arg(long, value_name = "WHEN")]
         since: Option<String>,
         /// Only memories written up to then, the date included. Same forms
@@ -699,7 +704,7 @@ fn run(cli: Cli) -> Result<()> {
             }
             sync_after_write(&conn, &dir, json);
         }
-        Cmd::Search { query, project, tag, scope, since, until, limit, explain, budget } => {
+        Cmd::Search { query, project, tag, scope, as_of, since, until, limit, explain, budget } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new("."));
             let cfg = anathem::config::load(dir)?;
@@ -725,6 +730,7 @@ fn run(cli: Cli) -> Result<()> {
                     .map(anathem::search::until_bound)
                     .transpose()?
                     .flatten(),
+                as_of,
             };
             let q = scopes.onto(q)?;
             let hits = anathem::search::run_explained(&conn, &q, &ctx)?;
@@ -1680,8 +1686,14 @@ every other key the file has, or put it in {} yourself:",
                 anathem::jsonout::print(&anathem::jsonout::history(id, &chain))?;
                 return Ok(());
             }
-            for (i, title, status) in chain {
-                anathem::output::print_line(&format!("{i:5}  [{status:10}]  {title}"), raw);
+            for (i, title, status, from, until) in chain {
+                let cuando = match (from.as_deref(), until.as_deref()) {
+                    (Some(a), Some(b)) => format!("{} → {}", &a[..10.min(a.len())], &b[..10.min(b.len())]),
+                    (Some(a), None) => format!("{} →", &a[..10.min(a.len())]),
+                    _ => String::new(),
+                };
+                anathem::output::print_line(
+                    &format!("{i:5}  [{status:10}]  {cuando:<24}  {title}"), raw);
             }
         }
         Cmd::Log { project, since, limit, prune } => {

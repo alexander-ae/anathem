@@ -628,3 +628,34 @@ fn a_word_in_more_than_half_the_chunks_is_not_evidence() {
         "una memoria no puede coincidir con una palabra descartada"
     );
 }
+
+/// Pruning drops the terms that carry no ranking signal, and must never drop
+/// all of them: a query made only of common words still has to answer.
+#[test]
+fn an_unscoped_search_survives_having_all_its_terms_pruned() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    for i in 0..40 {
+        let body = if i < 30 {
+            format!("comun nota {i}")
+        } else {
+            format!("comun raro nota {i}")
+        };
+        seed(&conn, &format!("m{i}"), "p", &body);
+    }
+    // "comun" is in 30 of 40 chunks, past half the corpus: pruning drops it.
+    // "raro" is in 10, so the pair keeps one term and the search runs.
+    let q = search::Query { text: "comun raro".into(), ..Default::default() };
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
+    assert!(!hits.is_empty(), "the pair survives on its rare term");
+    assert!(
+        hits.iter().take(5).any(|h| h.snippet.contains("raro")),
+        "and the rare term is what the ranking is made of"
+    );
+
+    // Only common words: pruning would leave an empty expression, so the
+    // original one is used and the answer is what it always was.
+    let q = search::Query { text: "comun".into(), ..Default::default() };
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
+    assert!(!hits.is_empty(), "a corpus of 40 with a term in 30 still answers");
+}

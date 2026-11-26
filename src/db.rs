@@ -154,6 +154,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     add_search_cwd_column(&conn)?;
     add_provenance_columns(&conn)?;
     add_verified_column(&conn)?;
+    add_validity_columns(&conn)?;
     migrate_indexed_body(&conn)?;
     migrate_project_name(&conn)?;
     restringir(path);
@@ -404,6 +405,32 @@ fn add_provenance_columns(conn: &Connection) -> Result<()> {
 /// value without that cost. Today it holds 0 and 1.
 ///
 /// `default 0` is what makes this additive. Every memory that existed before
+/// The interval a memory was true for, so `mem search --as-of` can answer
+/// what held then. `valid_until` NULL means "still" — a memory that was never
+/// superseded.
+///
+/// The backfill runs once, when the column is born: every memory has been
+/// valid since it was created, and one already superseded stopped when it was
+/// last touched. That is the best the database knows, and it is said here so
+/// nobody reads it as a recorded fact.
+fn add_validity_columns(conn: &Connection) -> Result<()> {
+    let nacen = !has_column(conn, "memories", "valid_from")?;
+    add_column(conn, "memories", "valid_from", "text")?;
+    add_column(conn, "memories", "valid_until", "text")?;
+    if nacen {
+        conn.execute(
+            "update memories set valid_from = created where valid_from is null",
+            [],
+        )?;
+        conn.execute(
+            "update memories set valid_until = updated
+              where status = 'superseded' and valid_until is null",
+            [],
+        )?;
+    }
+    Ok(())
+}
+
 /// the column reads as unverified, which is exactly what it is: nobody
 /// checked it, because there was no way to say so. No backfill, and nothing
 /// a reader has to be told about their old notes.

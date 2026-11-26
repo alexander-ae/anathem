@@ -66,6 +66,10 @@ pub struct Query {
     /// Upper bound on when the memory was written, exclusive at the instant
     /// it names — a bare date names the whole day, so the day is included.
     pub until: Option<DateBound>,
+    /// Answers what was true on that date instead of what is true now: the
+    /// filter is the memory's validity interval, not its status, so a version
+    /// that has since been superseded comes back if it covered the day.
+    pub as_of: Option<String>,
 }
 
 impl Default for Query {
@@ -81,6 +85,7 @@ impl Default for Query {
             outline: false,
             since: None,
             until: None,
+            as_of: None,
         }
     }
 }
@@ -349,9 +354,17 @@ fn candidate_rows(
            join chunks c on c.id = chunks_fts.rowid
            join memories m on m.id = c.memory_id
           where chunks_fts match ?1
-            and m.status = 'active'",
+            and ({status})",
     );
     let mut params: Vec<Value> = vec![Value::Text(match_expr.to_string())];
+    // With `--as-of` the interval decides, so a superseded memory has to be
+    // able to come back: what it said then is what the question is about.
+    let status = if q.as_of.is_some() {
+        "m.status in ('active','superseded')"
+    } else {
+        "m.status = 'active'"
+    };
+    sql = sql.replace("{status}", status);
 
     sql.push_str(&filters_for(q, &mut params));
     if let Some((lo, hi)) = range {
@@ -493,6 +506,17 @@ pub(crate) fn filters_for(q: &Query, params: &mut Vec<Value>) -> String {
     if let Some(b) = &q.until {
         params.push(Value::Text(b.at.clone()));
         sql.push_str(&format!(" and {} < ?{}", b.column, params.len()));
+    }
+    if let Some(day) = &q.as_of {
+        // Day granularity: `--as-of 2026-10-01` means that day. A memory with
+        // no interval yet (an older database, or one never superseded) falls
+        // back to the day it was created, which is what the backfill says.
+        params.push(Value::Text(day.clone()));
+        let n = params.len();
+        sql.push_str(&format!(
+            " and date(coalesce(m.valid_from, m.created)) <= date(?{n}) \
+              and (m.valid_until is null or date(m.valid_until) > date(?{n}))"
+        ));
     }
     sql
 }
@@ -783,6 +807,42 @@ fn memories_with(
     Ok(seen)
 }
 
+/// The match expression without the terms that carry no ranking signal.
+///
+/// A term present in more than half the chunks has a BM25 idf at or past
+/// zero: it contributes nothing to the order, but it still widens the match
+/// set, and widening it is what makes an unscoped search score 600,000
+/// chunks to keep twenty. On the LongMemEval-S corpus "the" alone is
+/// 515,043 of 623,648.
+///
+/// `None` means "keep what you had": nothing was dropped, or everything was,
+/// and a query made only of common words has to return what it always
+/// returned rather than nothing.
+fn without_common_terms(conn: &Connection, terms: &[String]) -> Option<String> {
+    if terms.len() < 2 {
+        return None;
+    }
+    let chunks: i64 = conn.query_row("select count(*) from chunks", [], |r| r.get(0)).ok()?;
+    if (chunks as usize) < MIN_CHUNKS_FOR_DF {
+        return None;
+    }
+    // Half the corpus is where BM25's idf reaches zero: dropping those terms
+    // cannot reorder anything. It was measured on an unscoped eval of 1,536
+    // questions: recall@5 84.9 % before and after, MRR 0.719, one first_rank
+    // moved out of 1,536. Tighter thresholds buy more time and cost recall —
+    // a quarter took 0.6 points and a tenth took 4.2 — so the line stays at
+    // the zero point and the rest of the cost is left where it is.
+    let cap = chunks / 2;
+    let kept: Vec<&String> = terms
+        .iter()
+        .filter(|term| doc_freq(conn, term).map_or(true, |df| df <= cap))
+        .collect();
+    if kept.is_empty() || kept.len() == terms.len() {
+        return None;
+    }
+    Some(kept.into_iter().cloned().collect::<Vec<_>>().join(" OR "))
+}
+
 pub fn run_explained(
     conn: &Connection,
     q: &Query,
@@ -799,7 +859,9 @@ pub fn run_explained(
     } else {
         &q.text
     };
-    let m = to_match(text);
+    let original = to_match(text);
+    let mut m = original.clone();
+    let mut podado = false;
 
     // The chunks a scoped search may read, computed once and handed to both
     // queries below: `chunks_fts.rowid` is `chunks.id`, and FTS5 turns a
@@ -810,6 +872,15 @@ pub fn run_explained(
         Some(p) => project_chunk_range(conn, p)?,
         None => None,
     };
+    if chunk_range.is_none() {
+        // Only the unscoped search pays the whole-corpus scan, and only it
+        // is treated: a scoped one is already 20x faster, and pruning there
+        // would change what its benchmarks measure for no gain.
+        if let Some(pruned) = without_common_terms(conn, &match_terms(text)) {
+            m = pruned;
+            podado = true;
+        }
+    }
 
     // --- lexical retrieval: identical to how it was ---
     let mut best: HashMap<i64, (SearchHit, i64)> = HashMap::new();
@@ -817,6 +888,15 @@ pub fn run_explained(
     if !m.is_empty() {
         // Main pool: the CANDIDATES best chunks by bm25, pinned or not.
         let mut rows = candidate_rows(conn, &m, q, chunk_range, "", Some(CANDIDATES))?;
+        if rows.is_empty() && podado {
+            // The terms that were dropped still had the power to bring the
+            // corpus back: a query of one rare word and one stopword used to
+            // answer with everything the stopword matched, and pruning it to
+            // nothing is a regression, not an optimisation.
+            m = original.clone();
+            podado = false;
+            rows = candidate_rows(conn, &m, q, chunk_range, "", Some(CANDIDATES))?;
+        }
         // A separate, unlimited guarantee: every pinned memory matching the
         // query is always a candidate, even when its best chunk falls
         // outside the top CANDIDATES by pure bm25. Without this, `order by

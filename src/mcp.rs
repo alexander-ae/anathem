@@ -292,6 +292,7 @@ fn call_tool(
                 topic: None,
                 since,
                 until,
+                as_of: None,
                 // `limit` can still override `cfg.candidates` (20) per
                 // call, just as it used to override the fixed 10.
                 limit: args["limit"].as_u64().map(|l| l as usize)

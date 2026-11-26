@@ -12,6 +12,25 @@ live in the database, not in the binary.
 
 ### Added
 
+- **`mem search --as-of <date>`: what was true then.** Every memory carries a
+  validity interval — from the day it was saved until something replaced it —
+  and `mem supersede` (including a save over a topic key) closes the old one
+  at that instant instead of only flipping its status. `--as-of` filters on
+  the interval, so a version superseded in November comes back for an October
+  question; without the flag nothing changes. `mem history` prints the
+  interval, it travels through `mem export`/`mem import`, and `mem doctor`
+  flags a superseded memory with no closing date or an active one that has
+  one. The dates of anything stored before this are a backfill — valid since
+  creation, closed when last touched — and the document says so.
+- **An unscoped search no longer feeds the terms that cannot rank anything.**
+  A term in more than half the chunks has a BM25 idf at or past zero: it
+  widens the match set and contributes nothing to the order. Dropping it is
+  free by construction, and measured on an unscoped eval of 1,536 questions:
+  recall@5 84.9 % before and after, MRR 0.719, one `first_rank` of 1,536 moved.
+  Tighter thresholds buy more speed and cost recall — a quarter took 0.6
+  points, a tenth took 4.2 — so the line stays at the zero point and the rest
+  of the cost is documented in #80 rather than paid for with answers.
+
 - **`contamination@5`: the metric that sees a superseded value.** `mem eval`
   measured whether the right memory arrived, never whether it was still true;
   after a rename or a bump the stale statement matches the query as well as
