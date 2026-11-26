@@ -106,6 +106,15 @@ the active value of each correctly keyed slot eliminates observed stale
 exposure. That is the gain this project's topic keys and `supersede` were
 already buying. *State: adopted, already the design.*
 
+**arXiv 2611.19752 — *StaleBench: Isolating Stale Retrieval in Agent Memory,
+and Pricing the Fix*.** 892 real updating facts from Wikidata, with currency
+labels from the source and a frozen evaluator. Store-all retrieval puts both
+a current and a stale version in the top five for **99.1 %** of queries;
+the keep-latest oracle reaches **0.0 %**. Its point is that retrieval
+metrics can rank policies backwards while `contamination@5` does not.
+*State: adopted and measured here, #70; the store-all and superseded rows
+are in [`benchmarks.md`](benchmarks.md).*
+
 **arXiv 2610.09348 — *Relevance Is Not Sufficiency*.** Top-k results can
 each be relevant and still jointly omit the complementary fact an answer
 needs. Budgeted Flat Reconstruction raises judged accuracy on LongMemEval-S
@@ -271,7 +280,7 @@ with the primary encoder, yet ranks relevant documents below the better of
 its two components on **13–48 % of queries** (8–21 % below dense-only). RRF
 carries the higher tax wherever one side is clearly stronger, and per-query
 routing does not transfer reliably across corpora. *State: adopted as a
-constraint; `mem eval` does not measure the per-query tax yet, #77.*
+constraint; `mem eval --compare` now measures the per-query tax, #77.*
 
 **arXiv 2605.10848 — *Rethinking Agentic Search with Pi-Serini: Is Lexical
 Retrieval Sufficient?*.** A well-configured BM25 with sufficient depth and a
@@ -280,8 +289,9 @@ capable agent beats released dense-retriever agents on BrowseComp-Plus
 moving Anserini's default `(k1, b) = (0.9, 0.4)` to `(16–25, 1.0)` raised
 answer accuracy from **64.0 % to 82.0 %** and evidence recall from **84.6 %
 to 95.7 %**; increasing retrieval depth added **25.3 %** evidence recall
-over the shallow setting. *State: adopted — FTS5 hardcodes its own
-parameters and the depth is a constant, #75 and #78.*
+over the shallow setting. *State: measured — `k1`/`b`/`delta` and
+`retrieval_depth` shipped in #75 and #78; on LongMemEval neither tuning nor
+deeper pools improved over FTS5's defaults, so both defaults stayed.*
 
 **arXiv 2605.18561 — *Improving BM25 Code Retrieval Under Fixed Generic
 Tokenization: Adaptive q-Log Odds as a Drop-In BM25 Fix*.** Under a frozen
@@ -289,8 +299,8 @@ generic tokenizer, BM25's IDF under-separates the identifier tail. Replacing
 the outer logarithm with a q-logarithm raised NDCG@10 on CoIR CodeSearchNet
 Go from **0.2575 to 0.4874** (+89.3 %), while the effect is near zero on
 BEIR text. The ablation is the part that transfers: identifier-aware
-tokenization "largely removes" the gain. *State: adopted as the direction
-for #76; the q-log transform itself is not proposed.*
+tokenization "largely removes" the gain. *State: adopted — #76 ships the
+adjacent-token phrase; the q-log transform itself is not proposed.*
 
 **arXiv 2604.01733 — *From BM25 to Corrective RAG: Benchmarking Retrieval
 Strategies for Text-and-Table Documents*.** Over 23,088 financial queries,
@@ -303,8 +313,8 @@ if it is opt-in and measured.*
 **Lv & Zhai, CIKM 2011 — *Lower-bounding term frequency normalization*.**
 The paper behind BM25+: BM25 over-penalizes long documents because TF
 normalization is not lower-bounded. Anathem's chunks are near-uniform, so
-the expected gain is small. *State: open, folded into #75's grid rather
-than assumed either way.*
+the expected gain is small. *State: measured — #75 put BM25+ in the grid;
+on LongMemEval no setting beat FTS5's defaults, so the default stays.*
 
 **Kamphuis et al., ECIR 2020 — *Which BM25 Do You Mean? A Large-Scale
 Reproducibility Study of Scoring Variants*.** The name "BM25" covers
@@ -321,9 +331,11 @@ retrieval.*
 
 **What would reverse the decision.** A local transformer that fits the
 pack's 22.5 MB and keeps p50 near 110 ms, or an eval where BM25 has
-saturated and the vector layer cannot close the gap. Until one of those
-arrives, the work is #75 (parameters), #76 (identifiers), #78 (depth) and
-#77 (per-query fusion cost); the rows below say what is still open.
+saturated and the vector layer cannot close the gap. The four levers that
+did not need one — parameters, identifiers, depth and per-query fusion cost
+— shipped in #75–#78; none beat the defaults on LongMemEval, so the default
+path stands. What remains is the same measurement on a corpus where the two
+sides disagree, and the private notes corpus for tuning.
 
 ## The table
 
@@ -339,6 +351,7 @@ arrives, the work is #75 (parameters), #76 (identifiers), #78 (depth) and
 | 2610.18052 | nobody keeps a forget promise | ≤1.5 % end to end | `mem delete` | adopted (#49) |
 | 2610.36308 | an obsolete fact beside the current one | 100 % → 44.6 % | confirmed `status = 'active'` | already so |
 | 2610.10265 | stale values reach the prompt | 70.3 % of prompts | confirmed topic keys | already so |
+| 2611.19752 | store-all retrieval keeps both versions | contamination 0.991 → 0.000 | StaleBench measured | adopted (#70) |
 | 2610.09348 | relevance is not sufficiency | 72.4 % → 82.2 % | per-topic cap: impossible here | rejected (#51) |
 | 2611.04003 | prescriptive organisation hurts | 7.0–10.9 % | dedup stays a report | adopted (#47) |
 | 2611.07689 | agents do not stop on unreachable goals | 0.458, 23.2 % pass | measured; text unchanged | checked (#56) |
@@ -356,10 +369,10 @@ arrives, the work is #75 (parameters), #76 (identifiers), #78 (depth) and
 | 2610.22588 | lexical index, no LLM at index time, model at query time | recall@10 86.62% MuSiQue | the boundary: multi-hop wants a model | open |
 | 2104.08663 | BM25 is a robust zero-shot baseline | rerank/late interaction best, expensive | BM25 first; neural opt-in | adopted |
 | 2403.06789 | SPLADE-v3 beats BM25 | >40 MRR@10; +2 % OOD | not the default: needs a transformer | rejected for now |
-| 2610.30612 | fusion helps in aggregate, hurts per query | 13–48 % demoted | measure the per-query tax | open (#77) |
-| 2605.10848 | tuned BM25 plus depth beats dense agents | 64→82 % accuracy; +25.3 % recall | tune k1/b and depth | open (#75, #78) |
-| 2605.18561 | identifier tokenization is the transferable fix | +89.3 % NDCG@10 on code; ~0 on BEIR text | fix identifiers first | open (#76) |
+| 2610.30612 | fusion helps in aggregate, hurts per query | 13–48 % demoted | `mem eval --compare` measures it | measured (#77) |
+| 2605.10848 | tuned BM25 plus depth beats dense agents | 64→82 % accuracy; +25.3 % recall | settings shipped; no gain on LongMemEval | checked (#75, #78) |
+| 2605.18561 | identifier tokenization is the transferable fix | +89.3 % NDCG@10 on code; ~0 on BEIR text | adjacent-token phrases | adopted (#76) |
 | 2604.01733 | BM25 beats dense on financial documents | R@5 0.816 hybrid + rerank | BM25 first; rerank opt-in | adopted |
 | 2204.12755 | dense underperforms BM25 zero-shot | — | qualifies the dense wins | adopted |
-| Lv & Zhai 2011 | BM25 over-penalizes long documents | — | BM25+ in the grid | open (#75) |
+| Lv & Zhai 2011 | BM25 over-penalizes long documents | — | BM25+ in the grid; no gain here | checked (#75) |
 | Kamphuis 2020 | variants and parameters change rankings | — | name both in every claim | adopted |

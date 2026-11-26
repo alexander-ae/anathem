@@ -336,10 +336,10 @@ replace the whole file.
 
 This tells Claude Code to start `mem serve` as an MCP server over stdio,
 pointed at your database. After saving the file, in a **new** Claude Code
-session 5 tools should appear: `search_memory`, `save_memory`, `get_memory`,
-`list_tags` and `recent_memories`. To verify, ask Claude to search for
-something you have already saved and confirm that `search_memory` returns real
-results.
+session 6 tools should appear: `search_memory`, `save_memory`, `get_memory`,
+`list_tags`, `recent_memories` and `memory_admin`. To verify, ask Claude to
+search for something you have already saved and confirm that `search_memory`
+returns real results.
 
 ## 7. Connecting it to opencode
 

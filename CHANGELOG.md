@@ -10,57 +10,24 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-26
+
 ### Added
 
-- **StaleBench, measured: 0 contamination after a correction.**
+- **Versioned facts are measured, not assumed: `contamination@5` and
+  StaleBench.** `mem eval` now takes an optional `stale_docs` per case and
+  reports whether the top five holds **both** a current and a stale version
+  of the asked fact — StaleBench's frozen definition (`arXiv 2611.19752`);
+  a context with only the old value is a miss, which `current@k` reports. A
+  case without labels is *not measured* rather than zero, and
+  `tools/eval_metrics.py` prints the mean beside the recall tables.
   `tools/stalebench.py` converts a release split into memories and an eval
   set and turns a `mem eval` result into the frozen evaluator's submission.
-  On `anchored/test` (468 queries, 995 statements): store-all gives
+  On `anchored/test` — 468 queries, 995 statements — store-all gives
   `current@1` 0.466 and `contamination@5` 0.987; after supersession,
-  `current@1` 0.979, `stale@1` 0.000 and `contamination@5` 0.000 — the
-  keep-latest oracle's row. The same retrieval engine, a different write
-  policy. The numbers and the exact commands are in `docs/benchmarks.md`.
-- **`contamination@5` uses StaleBench's frozen definition.** A case is
-  contaminated when the top five holds **both** a current and a stale
-  version of the asked fact, not when it contains a stale row; a context
-  with only the old value is a miss, which `current@k` already reports.
-
-- **An unscoped search stops paying twice.** When nothing is pinned, the
-  pinned-memory guarantee query is skipped instead of scoring the corpus a
-  second time; `word_evidence` reads the bodies of the final candidates
-  instead of walking every query term's postings over the whole corpus; and
-  an unfiltered search over a database with no superseded rows scores the
-  FTS index alone, joining the bodies after the limit. On the 23,854-memory
-  LongMemEval database the prose query from #80 goes from **1.5 s to 0.30 s**
-  (2.2 s before its first half). Scoped recall and ranks are unchanged.
-
-- **`bm25_k1`, `bm25_b` and `bm25_delta`: FTS5's scorer becomes tunable.**
-  FTS5 fixes `k1 = 1.2` and `b = 0.75` with no SQL knob. Setting any of the
-  three keys turns on a rescoring pass over the candidate pool (FTS5 still
-  chooses it), with BM25+ `delta` available; with none set, FTS5 scores
-  exactly as before. `mem tune --bm25` walks `k1`, `b` and `delta` and
-  prints the table. Measured on LongMemEval-S: the tuned value gained
-  nothing over FTS5 on the full 470 questions (MRR 0.912 in both, p50
-  101.5 → 106.1 ms), so the default stays absent.
-- **`retrieval_depth`: the pool each retriever nominates is a setting, not a
-  constant.** It is separate from `candidates` — the twenty the agent sees —
-  and defaults to 200. `mem tune --depth` sweeps 100/200/500/1000 and prints
-  recall, MRR, latency and the payload's tokens. Measured on LongMemEval-S
-  (470 scoped questions, 23,854 memories): all four rows give recall@5
-  96.2 %, recall@50 100 %, MRR 0.912, p50 ~102 ms and 1,153 tokens, so 200
-  stays. The private notes corpus still has to confirm it.
-- **An identifier query is a phrase, not a bag of fragments.** `unicode61`
-  splits `OP-204` into `op` and `204`, so an `OR` of the parts let a note
-  that repeated `204` outrank the note carrying the identifier. The query
-  now also emits the adjacent-token phrase (`"OP 204"`), so the exact
-  identifier wins. It is query-side only — no reindex — and a prose query
-  keeps the expression it had.
-- **`mem eval --compare`: the per-query cost of fusing two rankings.** Runs
-  the same cases through BM25 alone, the vector arm alone and the fused
-  ranking, and reports how often fusion places the expected memory below the
-  better of its components — the fusion tax (arXiv 2610.30612), which
-  aggregate recall hides. Without a pack the vector arm is not measured and
-  the command says so. No ranking changes; this is the instrument.
+  `current@1` 0.979, `stale@1` 0.000 and `contamination@5` 0.000, which is
+  the keep-latest oracle's row. Same retrieval engine, different write
+  policy. The commands and the table are in `docs/benchmarks.md`.
 
 - **`mem search --as-of <date>`: what was true then.** Every memory carries a
   validity interval — from the day it was saved until something replaced it —
@@ -72,27 +39,48 @@ live in the database, not in the binary.
   flags a superseded memory with no closing date or an active one that has
   one. The dates of anything stored before this are a backfill — valid since
   creation, closed when last touched — and the document says so.
-- **An unscoped search no longer feeds the terms that cannot rank anything.**
-  A term in more than half the chunks has a BM25 idf at or past zero: it
-  widens the match set and contributes nothing to the order. Dropping it is
-  free by construction, and measured on an unscoped eval of 1,536 questions:
-  recall@5 84.9 % before and after, MRR 0.719, one `first_rank` of 1,536 moved.
-  Tighter thresholds buy more speed and cost recall — a quarter took 0.6
-  points, a tenth took 4.2 — so the line stays at the zero point and the rest
-  of the cost is documented in #80 rather than paid for with answers.
 
-- **`contamination@5`: the metric that sees a superseded value.** `mem eval`
-  measured whether the right memory arrived, never whether it was still true;
-  after a rename or a bump the stale statement matches the query as well as
-  the current one. A case may now carry `stale_docs`, and the run reports
-  whether the top five holds both a current and a stale version — StaleBench's
-  frozen metric
-  (arXiv 2611.19752), which also shows that the usual retrieval metrics can
-  rank memory policies backwards. `tools/eval_metrics.py` prints the mean next
-  to the recall tables, a case without the field is reported as *not
-  measured* rather than zero, and `tests/eval_test.rs` pins both halves on a
-  corpus where supersession is the only thing that can tell the versions
-  apart.
+- **An unscoped search goes from 2.2 s to 0.30 s on 23,854 memories.** Terms
+  past BM25's zero IDF are dropped from the `MATCH` expression; the
+  pinned-memory guarantee query is skipped when nothing is pinned;
+  `word_evidence` reads the bodies of the final candidates instead of walking
+  every term's postings over the whole corpus; and an unfiltered search over
+  a database with no superseded rows scores FTS alone, joining the bodies
+  after the limit. Scoped search and every filtered search keep the general
+  path, and their ranks did not move on LongMemEval-S. Tighter pruning than
+  the zero point costs recall — a quarter took 0.6 points, a tenth 4.2 — so
+  the line stays there and the cost is documented in #80.
+
+- **An identifier query is a phrase, not a bag of fragments.** `unicode61`
+  splits `OP-204` into `op` and `204`, so an `OR` of the parts let a note
+  that repeated `204` outrank the note carrying the identifier. The query
+  now also emits the adjacent-token phrase (`"OP 204"`), so the exact
+  identifier wins. It is query-side only — no reindex — and a prose query
+  keeps the expression it had.
+
+- **`bm25_k1`, `bm25_b` and `bm25_delta`: FTS5's scorer becomes tunable.**
+  FTS5 fixes `k1 = 1.2` and `b = 0.75` with no SQL knob. Setting any of the
+  three keys turns on a rescoring pass over the candidate pool (FTS5 still
+  chooses it), with BM25+ `delta` available; with none set, FTS5 scores
+  exactly as before. `mem tune --bm25` walks `k1`, `b` and `delta` and prints
+  the table. Measured on LongMemEval-S: the tuned value gained nothing over
+  FTS5 on the full 470 questions (MRR 0.912 in both, p50 101.5 → 106.1 ms),
+  so the default stays absent.
+
+- **`retrieval_depth`: the pool each retriever nominates is a setting, not a
+  constant.** It is separate from `candidates` — the twenty the agent sees —
+  and defaults to 200. `mem tune --depth` sweeps 100/200/500/1000 and prints
+  recall, MRR, latency and the payload's tokens. Measured on LongMemEval-S
+  (470 scoped questions, 23,854 memories): all four rows give recall@5
+  96.2 %, recall@50 100 %, MRR 0.912, p50 ~102 ms and 1,153 tokens, so 200
+  stays. The private notes corpus still has to confirm it.
+
+- **`mem eval --compare`: the per-query cost of fusing two rankings.** Runs
+  the same cases through BM25 alone, the vector arm alone and the fused
+  ranking, and reports how often fusion places the expected memory below the
+  better of its components — the fusion tax (`arXiv 2610.30612`), which
+  aggregate recall hides. Without a pack the vector arm is not measured and
+  the command says so. No ranking changes; this is the instrument.
 
 - **A credential is refused; where it lives is saved.** `docs/security.md`
   covered injection and control characters and did not mention secrets once,
@@ -106,11 +94,13 @@ live in the database, not in the binary.
   the value class excludes `/` and `.`: that sentence is the point.
   `--allow-secret` for fixtures; the MCP path has no such flag. Import and
   migrate skip those rows and report how many.
-- **`mem doctor --secrets`**, which reads every body and reports the ones
-  that carry a credential — ids and titles, never the value, because the
-  title is the first line of the body — and exits 1 when it finds any. Read
-  only: what is already stored is reported, never rewritten.
-- **`mem taint`**, and `mem pin` refuses a memory that arrived from another
+
+- **`mem doctor --secrets`** reads every body and reports the ones that carry
+  a credential — ids and titles, never the value, because the title is the
+  first line of the body — and exits 1 when it finds any. Read only: what is
+  already stored is reported, never rewritten.
+
+- **`mem taint`, and `mem pin` refuses a memory that arrived from another
   machine.** The greeting goes into the system prompt of every session, so a
   note nobody here has read is the last thing that should ride there.
   `--force` is the person taking responsibility; `mem doctor` flags one pinned
@@ -1491,7 +1481,12 @@ First release with prebuilt binaries.
 - The project lives on GitLab. GitHub remains only as the macOS builder, since
   GitLab's macOS runners are Premium and Ultimate only.
 
-[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v1.1.0...main
+[Unreleased]: https://gitlab.com/__alexander__/anathem/-/compare/v1.5.0...main
+[1.5.0]: https://gitlab.com/__alexander__/anathem/-/compare/v1.4.0...v1.5.0
+[1.4.0]: https://gitlab.com/__alexander__/anathem/-/compare/v1.3.1...v1.4.0
+[1.3.1]: https://gitlab.com/__alexander__/anathem/-/compare/v1.3.0...v1.3.1
+[1.3.0]: https://gitlab.com/__alexander__/anathem/-/compare/v1.2.0...v1.3.0
+[1.2.0]: https://gitlab.com/__alexander__/anathem/-/compare/v1.1.0...v1.2.0
 [1.1.0]: https://gitlab.com/__alexander__/anathem/-/compare/v1.0.1...v1.1.0
 [1.0.1]: https://gitlab.com/__alexander__/anathem/-/compare/v1.0.0...v1.0.1
 [1.0.0]: https://gitlab.com/__alexander__/anathem/-/compare/v0.10.0...v1.0.0
