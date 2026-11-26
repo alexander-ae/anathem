@@ -736,3 +736,21 @@ fn at_fts5_defaults_the_rescorer_keeps_the_order_on_a_fixture() {
     let b: Vec<_> = rescored.iter().map(|h| h.ext_id.clone()).collect();
     assert_eq!(a, b, "the rescoring pass changed an order at FTS5's defaults");
 }
+
+#[test]
+fn the_unscoped_fast_path_keeps_the_order_of_the_filtered_one() {
+    // With no superseded rows an unfiltered search scores FTS alone and
+    // joins the bodies after the limit. As soon as one inactive row exists
+    // it takes the general path, which filters before the limit. The active
+    // answer must not move between them.
+    let (_d, conn) = fixture();
+    let q = search::Query { text: "cache design".into(), ..Default::default() };
+    let fast: Vec<_> = search::run(&conn, &q, &search::SearchContext::bm25_only())
+        .unwrap().into_iter().map(|h| h.ext_id).collect();
+
+    seed(&conn, "vieja", "acme-billing", "una nota que ya no vale sobre cache");
+    conn.execute("update memories set status = 'superseded' where ext_id = 'vieja'", []).unwrap();
+    let slow: Vec<_> = search::run(&conn, &q, &search::SearchContext::bm25_only())
+        .unwrap().into_iter().map(|h| h.ext_id).collect();
+    assert_eq!(fast, slow, "the fast path changed the order of the active answers");
+}

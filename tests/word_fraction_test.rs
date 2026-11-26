@@ -173,3 +173,19 @@ fn the_label_does_not_remove_the_hit() {
     let out = answer(&conn, "de quuxly frobnicate");
     assert!(hits(&out).len() > 1, "labelled hits were dropped from the answer:\n{out}");
 }
+
+#[test]
+fn a_word_in_a_later_chunk_still_counts_as_evidence() {
+    // Evidence used to be counted by walking the postings of every term and
+    // intersecting the candidate memories. Reading the candidate bodies is
+    // faster, but it must not collapse to "the winning chunk": a term that
+    // appears later in the memory is still part of what the memory says.
+    let cuerpo = format!("alpha {} beta", "relleno ".repeat(120));
+    let (_d, conn) = corpus(&[("largo", &cuerpo)]);
+    let out = answer(&conn, "alpha beta");
+    assert!(out.contains("[id:41]"), "the long memory is missing:\n{out}");
+    assert!(
+        !out.contains("[1/2 words]"),
+        "a term in the second chunk was lost as evidence:\n{out}"
+    );
+}

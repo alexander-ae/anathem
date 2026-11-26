@@ -113,6 +113,7 @@ create table if not exists search_log (
 );
 
 create index if not exists idx_mem_project_status on memories(project, status);
+create index if not exists idx_mem_pinned        on memories(pinned) where pinned = 1;
 create index if not exists idx_chunks_memory      on chunks(memory_id);
 create index if not exists idx_tags_tag           on memory_tags(tag);
 create index if not exists idx_refs_value         on memory_refs(value);
