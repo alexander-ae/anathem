@@ -55,6 +55,31 @@ counts it. It is the harness for deciding whether to trade fewer long
 excerpts for more short ones; the ranking numbers and these do not have to
 agree, and when they disagree the payload is the one a person sees.
 
+### The per-query cost of fusion
+
+With a pack installed the ranking is RRF of BM25 and the vector layer, and
+the aggregate can hide the queries where fusing is worse than one of its
+components. `--compare` runs the same cases three times — `fused`, `bm25`
+and `vector`, the last only when there is a pack — and reports, next to the
+usual recall and MRR:
+
+```bash
+mem --db bench.db eval --evalset bench/evalset.json --compare \
+  --out bench/compare.json
+```
+
+- `fused below bm25`: cases where fusion ranked the expected memory lower
+  than BM25 alone (or did not return it).
+- `fused below the vector arm`: the same against the vector side.
+- `fused below the better component`: the fusion tax, per case. The
+  `per_case` block carries the three ranks and `below_better`.
+
+This changes no ranking. It is the instrument for deciding whether the
+fusion is earning its place; the 13–48 % reported by *The Fusion Tax*
+(arXiv 2610.30612) is a measurement on seven BEIR corpora, not a target. A
+corpus where one side is clearly stronger will show a larger tax, and one
+where the two agree will show none.
+
 
 ```bash
 python3 tools/longmemeval_to_memories.py longmemeval_s_cleaned.json bench/
