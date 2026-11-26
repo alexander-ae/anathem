@@ -151,3 +151,46 @@ fn a_zero_budget_is_rejected() {
     let e = config::load(d.path()).unwrap_err().to_string();
     assert!(e.contains("budget"), "the error has to name the key: {e}");
 }
+
+#[test]
+fn with_no_file_the_retrieval_depth_is_two_hundred() {
+    let d = tempfile::tempdir().unwrap();
+    assert_eq!(config::load(d.path()).unwrap().retrieval_depth, 200);
+}
+
+#[test]
+fn it_reads_the_retrieval_depth_without_touching_candidates() {
+    // They are different numbers: `candidates` is what the agent sees,
+    // `retrieval_depth` is the pool the ranking may consider. Setting one
+    // must not move the other.
+    let d = tempfile::tempdir().unwrap();
+    std::fs::write(
+        d.path().join("config.json"),
+        r#"{"candidates": 12, "retrieval_depth": 600}"#,
+    ).unwrap();
+    let cfg = config::load(d.path()).unwrap();
+    assert_eq!(cfg.candidates, 12);
+    assert_eq!(cfg.retrieval_depth, 600);
+}
+
+#[test]
+fn retrieval_depth_at_zero_is_rejected_naming_file_and_field() {
+    let d = tempfile::tempdir().unwrap();
+    std::fs::write(d.path().join("config.json"), r#"{"retrieval_depth": 0}"#).unwrap();
+    let e = config::load(d.path()).unwrap_err().to_string();
+    assert!(e.contains("config.json"), "the error has to name the file: {e}");
+    assert!(e.contains("retrieval_depth"), "the error has to name the field: {e}");
+}
+
+#[test]
+fn retrieval_depth_past_the_ceiling_is_rejected_instead_of_clamped() {
+    let d = tempfile::tempdir().unwrap();
+    let too_deep = anathem::search::MAX_RETRIEVAL_DEPTH + 1;
+    std::fs::write(
+        d.path().join("config.json"),
+        format!(r#"{{"retrieval_depth": {too_deep}}}"#),
+    ).unwrap();
+    let e = config::load(d.path()).unwrap_err().to_string();
+    assert!(e.contains("retrieval_depth"), "the error has to name the field: {e}");
+    assert!(e.contains(&too_deep.to_string()), "and the value it read: {e}");
+}

@@ -66,6 +66,20 @@ pub struct Config {
     #[serde(default = "default_budget")]
     pub budget: usize,
 
+    /// How many chunks each retriever may nominate before the rankings are
+    /// deduplicated, fused and trimmed to `candidates`. It is not
+    /// `candidates`: that is what the model sees, and the pool has to be
+    /// deeper than it or fusion only ever chooses among the twenty already
+    /// returned.
+    ///
+    /// 200 until `mem tune --depth` measures this corpus. The cost is work
+    /// on every search; the gain is evidence that would otherwise be
+    /// discarded before the agent can see it. Bounded: zero or a number
+    /// past `search::MAX_RETRIEVAL_DEPTH` is rejected rather than silently
+    /// clamped, like every other invalid value here.
+    #[serde(default = "default_retrieval_depth")]
+    pub retrieval_depth: usize,
+
     /// Replaces a long memory's excerpt with a deterministic outline of the
     /// whole memory: its first paragraph and its headings. Off by default.
     ///
@@ -143,6 +157,10 @@ fn default_budget() -> usize {
     crate::search::DEFAULT_BUDGET_TOKENS
 }
 
+fn default_retrieval_depth() -> usize {
+    crate::search::DEFAULT_RETRIEVAL_DEPTH
+}
+
 fn default_handoff_items() -> usize {
     5
 }
@@ -162,6 +180,7 @@ impl Default for Config {
             candidates: default_candidates(),
             excerpt: default_excerpt(),
             budget: default_budget(),
+            retrieval_depth: default_retrieval_depth(),
             outline: false,
             handoff_items: default_handoff_items(),
             handoff_window: default_handoff_window(),
@@ -258,6 +277,21 @@ pub fn load(dir: &Path) -> Result<Config> {
     }
     if c.budget == 0 {
         bail!("{}: budget has to be greater than zero, not {}", pack_path.display(), c.budget);
+    }
+    if c.retrieval_depth == 0 {
+        bail!(
+            "{}: retrieval_depth has to be greater than zero, not {}",
+            pack_path.display(),
+            c.retrieval_depth
+        );
+    }
+    if c.retrieval_depth > crate::search::MAX_RETRIEVAL_DEPTH {
+        bail!(
+            "{}: retrieval_depth has to be at most {}, not {}",
+            pack_path.display(),
+            crate::search::MAX_RETRIEVAL_DEPTH,
+            c.retrieval_depth
+        );
     }
     Ok(c)
 }

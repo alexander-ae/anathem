@@ -85,3 +85,21 @@ fn it_recommends_the_weight_with_the_best_mrr() {
 fn with_one_weight_it_recommends_that_one() {
     assert_eq!(tune::best_weight(&[(1.0, 0.5)]), 1.0);
 }
+
+#[test]
+fn depth_sweep_reports_every_grid_point_and_the_payload_tokens() {
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&d.path().join("t.db")).unwrap();
+    for i in 0..3 {
+        save(&conn, &format!("cache {i}"), &format!("cache del breakdown {i}"), Some(&format!("tema-{i}")));
+    }
+    let cases = tune::cases_from_topics(&conn).unwrap();
+    let cfg = anathem::config::Config::default();
+    let points = tune::sweep_depth(&conn, &cases, None, cfg.bm25_weight, &cfg).unwrap();
+    let depths: Vec<usize> = points.iter().map(|p| p.depth).collect();
+    assert_eq!(depths, tune::DEPTHS);
+    for p in &points {
+        assert!((0.0..=1.0).contains(&p.recall_at_5), "{p:?}");
+        assert!(p.tokens_p50 > 0, "the payload is measured too: {p:?}");
+    }
+}

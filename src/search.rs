@@ -8,7 +8,16 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 pub const DEFAULT_BUDGET_TOKENS: usize = 1200;
-const CANDIDATES: usize = 200;
+/// How many chunks each retriever may nominate before interpretation: the
+/// pool that is deduplicated, fused and only then trimmed to the twenty the
+/// agent sees. It was a constant; `retrieval_depth` in `config.json` moves
+/// it, and `mem tune --depth` measures whether 200 is the right number.
+pub const DEFAULT_RETRIEVAL_DEPTH: usize = 200;
+
+/// The ceiling a `config.json` may set. It exists so a typo cannot ask the
+/// ranking to hold a million candidates: the pool is work done on every
+/// search, and beyond a few thousand it is memory spent for no new evidence.
+pub const MAX_RETRIEVAL_DEPTH: usize = 2000;
 
 /// Ceilings for what a caller may ask for (finding B-4).
 ///
@@ -19,9 +28,9 @@ const CANDIDATES: usize = 200;
 /// `limit: 100000` because it was feeling thorough should get a large
 /// answer, not an unresponsive one.
 ///
-/// `MAX_LIMIT` sits above `CANDIDATES` on purpose: the lexical pool is
-/// capped at `CANDIDATES` anyway, and pinned memories come in over and
-/// above it, so a legitimate caller can still ask for more than the pool.
+/// `MAX_LIMIT` sits above the retrieval depth on purpose: the lexical pool
+/// is capped there anyway, and pinned memories come in over and above it, so
+/// a legitimate caller can still ask for more than the pool.
 pub const MAX_LIMIT: usize = 500;
 pub const MAX_BUDGET_TOKENS: usize = 100_000;
 
@@ -488,12 +497,21 @@ pub struct SearchContext<'a> {
     /// hits still occupy the tail of the merged list, and the comparison
     /// wants what the vector side returns on its own.
     lexical: bool,
+    /// How many chunks each retriever may nominate before deduplication and
+    /// fusion. See `DEFAULT_RETRIEVAL_DEPTH`.
+    depth: usize,
 }
 
 impl SearchContext<'static> {
     /// Search with no vector layer: the long-standing behaviour.
     pub fn bm25_only() -> SearchContext<'static> {
-        SearchContext { pack: None, identity: None, bm25_weight: 1.0, lexical: true }
+        SearchContext {
+            pack: None,
+            identity: None,
+            bm25_weight: 1.0,
+            lexical: true,
+            depth: DEFAULT_RETRIEVAL_DEPTH,
+        }
     }
 }
 
@@ -501,14 +519,34 @@ impl<'a> SearchContext<'a> {
     /// For searching. Reading with the wrong pack gives a worse result, not
     /// a mixed index, so reads do not need the identity.
     pub fn for_reading(pack: Option<&'a Pack>, bm25_weight: f64) -> SearchContext<'a> {
-        SearchContext { pack, identity: None, bm25_weight, lexical: true }
+        SearchContext {
+            pack,
+            identity: None,
+            bm25_weight,
+            lexical: true,
+            depth: DEFAULT_RETRIEVAL_DEPTH,
+        }
     }
 
     /// The vector ranking alone, for `mem eval --compare`. When there is no
     /// pack this answers nothing, which is the honest result: there is no
     /// vector arm to compare.
     pub fn vector_only(pack: &'a Pack) -> SearchContext<'a> {
-        SearchContext { pack: Some(pack), identity: None, bm25_weight: 1.0, lexical: false }
+        SearchContext {
+            pack: Some(pack),
+            identity: None,
+            bm25_weight: 1.0,
+            lexical: false,
+            depth: DEFAULT_RETRIEVAL_DEPTH,
+        }
+    }
+
+    /// The same context with a different retrieval depth. Clamped to the
+    /// interval `config::load` accepts, so a caller cannot construct the
+    /// pathological pool the configuration refuses.
+    pub fn with_depth(mut self, depth: usize) -> SearchContext<'a> {
+        self.depth = depth.clamp(1, MAX_RETRIEVAL_DEPTH);
+        self
     }
 
     /// For the MCP server, which searches and also saves.
@@ -521,12 +559,19 @@ impl<'a> SearchContext<'a> {
             identity: active.map(|(_, i)| i),
             bm25_weight,
             lexical: true,
+            depth: DEFAULT_RETRIEVAL_DEPTH,
         }
     }
 
     /// The pack to embed the query with, if there is one.
     pub fn pack(&self) -> Option<&Pack> {
         self.pack
+    }
+
+    /// The pool each retriever nominates. Exposed so `mem tune --depth` and
+    /// the tests can say which setting they measured.
+    pub fn depth(&self) -> usize {
+        self.depth
     }
 
     /// The pair `vecstore::sync` demands. `None` in a read context even
@@ -959,29 +1004,29 @@ pub fn run_explained(
     let mut best: HashMap<i64, (SearchHit, i64)> = HashMap::new();
     let mut orden_bm25: Vec<i64> = Vec::new();
     if ctx.lexical && !m.is_empty() {
-        // Main pool: the CANDIDATES best chunks by bm25, pinned or not.
-        let mut rows = candidate_rows(conn, &m, q, chunk_range, "", Some(CANDIDATES))?;
+        // Main pool: the best chunks by bm25, pinned or not.
+        let mut rows = candidate_rows(conn, &m, q, chunk_range, "", Some(ctx.depth))?;
         if rows.is_empty() && podado {
             // The terms that were dropped still had the power to bring the
             // corpus back: a query of one rare word and one stopword used to
             // answer with everything the stopword matched, and pruning it to
             // nothing is a regression, not an optimisation.
             m = original.clone();
-            rows = candidate_rows(conn, &m, q, chunk_range, "", Some(CANDIDATES))?;
+            rows = candidate_rows(conn, &m, q, chunk_range, "", Some(ctx.depth))?;
         }
         // A separate, unlimited guarantee: every pinned memory matching the
         // query is always a candidate, even when its best chunk falls
-        // outside the top CANDIDATES by pure bm25. Without this, `order by
+        // outside the top `depth` by pure bm25. Without this, `order by
         // score limit N` can leave out a relevant but verbose pinned memory
         // once the candidate pool exceeds N (in the real corpus, a common
         // connective like "que" already matches >700 chunks).
-        // The cap is `CANDIDATES` and not `None` (finding B-4). The
+        // The cap is `ctx.depth` and not `None` (finding B-4). The
         // guarantee this query exists for is unchanged in practice —
         // pinning is a deliberate act, so no real corpus has two hundred
         // pinned memories matching one query — but a query with no `LIMIT`
         // at all makes the work SQLite does depend on the size of the
         // corpus rather than on what was asked for.
-        rows.extend(candidate_rows(conn, &m, q, chunk_range, " and m.pinned = 1", Some(CANDIDATES))?);
+        rows.extend(candidate_rows(conn, &m, q, chunk_range, " and m.pinned = 1", Some(ctx.depth))?);
 
         // SQLite's bm25() returns negative values; more negative is better.
         // We deduplicate by keeping the best (most negative) chunk per
@@ -1022,11 +1067,11 @@ pub fn run_explained(
             // A null vector (a query with no tokens the pack knows: only
             // punctuation, an emoji, a script it does not cover) has cosine
             // 0 against everything, so `vecstore::search_vectors` would
-            // return up to CANDIDATES arbitrary memories all tied at 0 —
+            // return up to `depth` arbitrary memories all tied at 0 —
             // garbage shaped like a result. With no real signal, there is
             // nothing to retrieve by vector.
             let nulo = cv.iter().all(|&x| x == 0.0);
-            let vec_hits = if nulo { Vec::new() } else { crate::vecstore::search_vectors(conn, &cv, q, CANDIDATES)? };
+            let vec_hits = if nulo { Vec::new() } else { crate::vecstore::search_vectors(conn, &cv, q, ctx.depth)? };
             for a in vec_hits {
                 cosines.insert(a.memory_id, a.cosine);
                 orden_vec.push(a.memory_id);

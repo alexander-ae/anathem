@@ -12,6 +12,13 @@ live in the database, not in the binary.
 
 ### Added
 
+- **`retrieval_depth`: the pool each retriever nominates is a setting, not a
+  constant.** It is separate from `candidates` — the twenty the agent sees —
+  and defaults to 200. `mem tune --depth` sweeps 100/200/500/1000 and prints
+  recall, MRR, latency and the payload's tokens. Measured on LongMemEval-S
+  (470 scoped questions, 23,854 memories): all four rows give recall@5
+  96.2 %, recall@50 100 %, MRR 0.912, p50 ~102 ms and 1,153 tokens, so 200
+  stays. The private notes corpus still has to confirm it.
 - **An identifier query is a phrase, not a bag of fragments.** `unicode61`
   splits `OP-204` into `op` and `204`, so an `OR` of the parts let a note
   that repeated `204` outrank the note carrying the identifier. The query
