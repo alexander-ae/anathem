@@ -1,8 +1,9 @@
 # What the literature says, and what it changed here
 
-Last reviewed: **2026-11-15**. "Reviewed" means the abstracts were read and
-every figure below was checked against the paper's own page — not that the
-papers were read in full, and not that anything here was reproduced.
+Last reviewed: **2026-11-26** for the retrieval section, **2026-11-15** for
+the agent-memory entries. "Reviewed" means the abstracts were read and every
+figure below was checked against the paper's own page — not that the papers
+were read in full, and not that anything here was reproduced.
 
 **An entry is here because it changed a decision or a measurement, not
 because it agrees.** A page that only collects supporting papers is
@@ -240,6 +241,90 @@ OpenCode; whether `AGENTS.md` was covered is **not stated**, so this entry
 does not claim it was. *State: open; relevant to
 [`security.md`](security.md).*
 
+## Retrieval: why BM25, and what would replace it
+
+Reviewed **2026-11-26**. These entries are about the ranking algorithm
+itself rather than about memory. The short version: BM25 is not the best
+ranker in absolute quality, but it is the best first stage that needs no
+model, and the next gains here are its parameters, its tokenizer, its depth
+and its fusion accounting — not a different family. What would reverse
+that is written at the end of the section.
+
+**arXiv 2104.08663 — *BEIR: A Heterogenous Benchmark for Zero-shot
+Evaluation of Information Retrieval Models*.** Eighteen datasets and ten
+systems. BM25 is "a robust baseline"; re-ranking and late-interaction
+models average best zero-shot, "however, at high computational costs",
+while dense and sparse retrievers are cheaper but "often underperform".
+*State: adopted — it is why the first stage is lexical and a neural stage
+is opt-in, not the default.*
+
+**arXiv 2403.06789 — *SPLADE-v3: New baselines for SPLADE*.** Learned sparse
+retrieval is statistically more effective than BM25 and SPLADE++, with more
+than **40 MRR@10** on MS MARCO dev and **+2 %** out-of-domain on BEIR. It
+still needs a transformer at index and query time. *State: rejected for
+now; the cost that would reverse it is a local model that fits the pack's
+22.5 MB and the query latency budget.*
+
+**arXiv 2610.30612 — *The Fusion Tax: A Diagnostic Analysis of When Hybrid
+Retrieval Hurts*.** Fusion beats dense-only in aggregate on every corpus
+with the primary encoder, yet ranks relevant documents below the better of
+its two components on **13–48 % of queries** (8–21 % below dense-only). RRF
+carries the higher tax wherever one side is clearly stronger, and per-query
+routing does not transfer reliably across corpora. *State: adopted as a
+constraint; `mem eval` does not measure the per-query tax yet, #77.*
+
+**arXiv 2605.10848 — *Rethinking Agentic Search with Pi-Serini: Is Lexical
+Retrieval Sufficient?*.** A well-configured BM25 with sufficient depth and a
+capable agent beats released dense-retriever agents on BrowseComp-Plus
+(**83.1 %** answer accuracy, **94.7 %** evidence recall). In the ablation,
+moving Anserini's default `(k1, b) = (0.9, 0.4)` to `(16–25, 1.0)` raised
+answer accuracy from **64.0 % to 82.0 %** and evidence recall from **84.6 %
+to 95.7 %**; increasing retrieval depth added **25.3 %** evidence recall
+over the shallow setting. *State: adopted — FTS5 hardcodes its own
+parameters and the depth is a constant, #75 and #78.*
+
+**arXiv 2605.18561 — *Improving BM25 Code Retrieval Under Fixed Generic
+Tokenization: Adaptive q-Log Odds as a Drop-In BM25 Fix*.** Under a frozen
+generic tokenizer, BM25's IDF under-separates the identifier tail. Replacing
+the outer logarithm with a q-logarithm raised NDCG@10 on CoIR CodeSearchNet
+Go from **0.2575 to 0.4874** (+89.3 %), while the effect is near zero on
+BEIR text. The ablation is the part that transfers: identifier-aware
+tokenization "largely removes" the gain. *State: adopted as the direction
+for #76; the q-log transform itself is not proposed.*
+
+**arXiv 2604.01733 — *From BM25 to Corrective RAG: Benchmarking Retrieval
+Strategies for Text-and-Table Documents*.** Over 23,088 financial queries,
+BM25 beats state-of-the-art dense retrieval, and the best pipeline is hybrid
+plus neural reranking (Recall@5 **0.816**, MRR@3 **0.605**), well above any
+single-stage method; query expansion and adaptive retrieval give limited
+benefit for precise queries. *State: adopted — BM25 first; reranking only
+if it is opt-in and measured.*
+
+**Lv & Zhai, CIKM 2011 — *Lower-bounding term frequency normalization*.**
+The paper behind BM25+: BM25 over-penalizes long documents because TF
+normalization is not lower-bounded. Anathem's chunks are near-uniform, so
+the expected gain is small. *State: open, folded into #75's grid rather
+than assumed either way.*
+
+**Kamphuis et al., ECIR 2020 — *Which BM25 Do You Mean? A Large-Scale
+Reproducibility Study of Scoring Variants*.** The name "BM25" covers
+variants and parameter settings that rank materially differently; a result
+is reproducible only when both are stated. *State: adopted as a caution —
+this file and the code should name the variant and the parameters.*
+
+**arXiv 2204.12755 — *A Thorough Examination on Zero-shot Dense
+Retrieval*.** Dense retrievers are "shown to be not as competitive as
+traditional sparse retrieval models (e.g., BM25) in a zero-shot retrieval
+setting"; the paper isolates the factors, including the source training set
+and target bias. *State: adopted — it qualifies the in-domain wins of dense
+retrieval.*
+
+**What would reverse the decision.** A local transformer that fits the
+pack's 22.5 MB and keeps p50 near 110 ms, or an eval where BM25 has
+saturated and the vector layer cannot close the gap. Until one of those
+arrives, the work is #75 (parameters), #76 (identifiers), #78 (depth) and
+#77 (per-query fusion cost); the rows below say what is still open.
+
 ## The table
 
 | paper | claim | figure | what it changed here | state |
@@ -269,3 +354,12 @@ does not claim it was. *State: open; relevant to
 | 2611.11840 | right by guess over insufficient history | 87 of 203 matched | the accuracy caveat | adopted |
 | 2610.41172 | compilation is a supply layer, not a retriever | no accuracy gain on FRAMES; −91% tokens | the argument against compiling | adopted |
 | 2610.22588 | lexical index, no LLM at index time, model at query time | recall@10 86.62% MuSiQue | the boundary: multi-hop wants a model | open |
+| 2104.08663 | BM25 is a robust zero-shot baseline | rerank/late interaction best, expensive | BM25 first; neural opt-in | adopted |
+| 2403.06789 | SPLADE-v3 beats BM25 | >40 MRR@10; +2 % OOD | not the default: needs a transformer | rejected for now |
+| 2610.30612 | fusion helps in aggregate, hurts per query | 13–48 % demoted | measure the per-query tax | open (#77) |
+| 2605.10848 | tuned BM25 plus depth beats dense agents | 64→82 % accuracy; +25.3 % recall | tune k1/b and depth | open (#75, #78) |
+| 2605.18561 | identifier tokenization is the transferable fix | +89.3 % NDCG@10 on code; ~0 on BEIR text | fix identifiers first | open (#76) |
+| 2604.01733 | BM25 beats dense on financial documents | R@5 0.816 hybrid + rerank | BM25 first; rerank opt-in | adopted |
+| 2204.12755 | dense underperforms BM25 zero-shot | — | qualifies the dense wins | adopted |
+| Lv & Zhai 2011 | BM25 over-penalizes long documents | — | BM25+ in the grid | open (#75) |
+| Kamphuis 2020 | variants and parameters change rankings | — | name both in every claim | adopted |
