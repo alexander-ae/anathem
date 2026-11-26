@@ -906,3 +906,43 @@ Three things come out of it:
 
 After the run the corpus was deleted; what stays is the harness that produced
 it (`mem eval --as-mcp`) and this table.
+
+## Versioned facts: contamination@5
+
+Every number above measures whether the right *session* reached the model. None
+of them can see a memory that is right about the entity and wrong about the
+value: after a rename, a bump or a transfer, the superseded statement matches
+the query exactly as well as the current one, so a policy that keeps everything
+scores the same as one that keeps only what holds.
+
+**StaleBench** (arXiv 2611.19752) isolates that failure on 892 real updating
+facts and names the metric: `contamination@5`, the share of the top five that
+carries a superseded version of the asked fact. Its central result is that the
+usual retrieval metrics can rank memory policies *backwards* — a retention
+policy and its retain-everything control return the identical statement at rank
+1, yet differ by tens of points in reader accuracy.
+
+`mem eval` reports it when the eval set labels the versions. A case takes an
+optional `stale_docs`, with the same name forms as `expect_docs`:
+
+```json
+{"id": "q1", "query": "which team does Ana play for",
+ "expect_docs": ["nueva"], "stale_docs": ["vieja"]}
+```
+
+A case without the field is **not measured**, and the column is omitted rather
+than printed as zero: a zero it did not earn is the kind of number that gets
+quoted. `tools/eval_metrics.py` prints the mean next to the recall tables.
+
+The harness was checked against a corpus where the difference is knowable: two
+near-identical memories, one current and one superseded, and the query matches
+both. Before supersession the top five holds the stale one
+(`contamination@5 = 20 %`, and the current one can rank *second* — the point of
+the metric); after `mem supersede` the contamination is 0 and the current
+version is first. The test lives in `tests/eval_test.rs`.
+
+What is missing: StaleBench's own 892 facts. Its release is a scorer over
+per-query rankings, and neither the Zenodo record (a PDF) nor the public
+repository carries the fact inventory, so the adapter is blocked on those
+files rather than on this harness. Until then this metric is measured on eval
+sets built here — which is what `mem eval` is for anyway.

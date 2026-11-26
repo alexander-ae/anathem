@@ -27,6 +27,14 @@ pub struct Case {
     pub parafrastica: Option<bool>,
     #[serde(default)]
     pub words: Option<u64>,
+    /// Documents that carry a **superseded** version of the fact this case
+    /// asks about, when a version-agnostic question would still match them.
+    ///
+    /// Empty means the case says nothing about currency, and then
+    /// `contamination@5` reports "not measured" instead of zero: a zero it
+    /// did not earn is the kind of number that gets quoted.
+    #[serde(default)]
+    pub stale_docs: Vec<String>,
 }
 
 #[derive(Serialize, Debug)]
@@ -38,6 +46,11 @@ pub struct CaseResult {
     pub returned: Vec<String>,
     pub parafrastica: Option<bool>,
     pub words: Option<u64>,
+    /// Share of the top 5 that holds a superseded version of the asked
+    /// fact: StaleBench's `contamination@5`, per case. `None` when the case
+    /// carries no currency labels.
+    #[serde(default)]
+    pub contamination_at_5: Option<f64>,
 }
 
 #[derive(Serialize, Debug)]
@@ -49,6 +62,10 @@ pub struct EvalResult {
     pub recall_at_50: f64,
     pub mrr: f64,
     pub p50_ms: f64,
+    /// Mean `contamination@5` over the cases that label their stale
+    /// versions. `None` when none does.
+    #[serde(default)]
+    pub contamination_at_5: Option<f64>,
     pub per_case: Vec<CaseResult>,
 }
 
@@ -105,7 +122,12 @@ fn read_evalset(evalset: &Path) -> Result<EvalSet> {
              \n\
              An `expect_docs` entry is a `memories.ext_id`, or `id:<number>`\n\
              for a `memories.id` — which is how you name a memory anathem\n\
-             saved itself, since those have no ext_id. See the README.",
+             saved itself, since those have no ext_id. Add \"stale_docs\" with\n\
+             the entries that hold a SUPERSEDED version of the same fact and\n\
+             the run also reports contamination@5: the share of the top five\n\
+             carrying a value that is no longer true. Without that field the\n\
+             column is not measured, which is not the same as zero. See the\n\
+             README.",
             evalset.display()))?;
     serde_json::from_str(&raw).context("eval set with invalid JSON")
 }
@@ -208,6 +230,7 @@ pub fn run_cases(
 
     let (mut h5, mut h50) = (0usize, 0usize);
     let (mut rr, mut lat, mut per_case) = (Vec::new(), Vec::new(), Vec::new());
+    let mut contams: Vec<f64> = Vec::new();
 
     for c in &set.cases {
         let q = search::Query {
@@ -244,6 +267,22 @@ pub fn run_cases(
             h50 += 1;
         }
         rr.push(rank.map_or(0.0, |r| 1.0 / (r as f64 + 1.0)));
+        // Currency is a different question from recall: the right entity
+        // with the wrong value matches the query exactly as well as the
+        // current one, which is why a stale fact needs its own column.
+        let contam = if c.stale_docs.is_empty() {
+            None
+        } else {
+            let n = hits
+                .iter()
+                .take(5)
+                .filter(|h| c.stale_docs.iter().any(|d| matches(d, h)))
+                .count();
+            Some(n as f64 / 5.0)
+        };
+        if let Some(v) = contam {
+            contams.push(v);
+        }
         per_case.push(CaseResult {
             id: c.id.clone(),
             kind: c.kind.clone(),
@@ -252,6 +291,7 @@ pub fn run_cases(
             returned: got.into_iter().take(10).collect(),
             parafrastica: c.parafrastica,
             words: c.words,
+            contamination_at_5: contam,
         });
     }
 
@@ -264,6 +304,11 @@ pub fn run_cases(
         recall_at_50: h50 as f64 / n as f64,
         mrr: rr.iter().sum::<f64>() / n as f64,
         p50_ms: median(lat),
+        contamination_at_5: if contams.is_empty() {
+            None
+        } else {
+            Some(contams.iter().sum::<f64>() / contams.len() as f64)
+        },
         per_case,
     })
 }

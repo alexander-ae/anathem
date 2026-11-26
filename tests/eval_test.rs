@@ -245,6 +245,7 @@ fn the_mcp_measurement_sees_only_what_the_answer_would_show() {
         kind: None,
         parafrastica: None,
         words: None,
+        stale_docs: Vec::new(),
     };
 
     let mut cfg = anathem::config::Config::default();
@@ -268,4 +269,64 @@ fn the_mcp_measurement_sees_only_what_the_answer_would_show() {
     ).unwrap();
     assert_eq!(kept.found, 1.0);
     assert_eq!(kept.first, 0.0);
+}
+
+/// StaleBench's question: the right entity carrying the wrong value matches
+/// a query exactly as well as the current one, so recall cannot see it.
+#[test]
+fn a_superseded_value_in_the_top_five_is_contamination_and_supersede_clears_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    let mut old = 0;
+    let mut new = 0;
+    for (ext, body, keep) in [
+        ("vieja", "El equipo de Ana es Riot", false),
+        ("nueva", "El equipo de Ana es Cloud9", true),
+    ] {
+        let id = ingest::insert(&conn, &NewMemory {
+            project: "p".into(), title: body.into(), body: body.into(),
+            created: "2026-09-01".into(), event_start: None, event_end: None,
+            source: "migrated".into(), ext_id: Some(ext.into()),
+            tags: vec![], refs: vec![],
+        }).unwrap();
+        if keep { new = id } else { old = id }
+    }
+
+    let evalset = dir.path().join("evalset.json");
+    let mut f = std::fs::File::create(&evalset).unwrap();
+    write!(f, r#"{{"cases": [
+      {{"id":"q1","query":"equipo de Ana","expect_docs":["nueva"],"stale_docs":["vieja"]}}
+    ]}}"#).unwrap();
+
+    let r = evalrun::run(&conn, &evalset, "before", &search::SearchContext::bm25_only()).unwrap();
+    // The two bodies are near-identical, which is the point: the ranker
+    // cannot tell a current value from a superseded one, so the current one
+    // may well come second.
+    let rank = r.per_case[0].first_rank.expect("the current one is in the results");
+    assert!(rank <= 5, "both versions are near the top: rank {rank}");
+    let before = r.contamination_at_5.expect("the case labels its stale doc");
+    assert!(before > 0.0, "the superseded value is in the top 5: {before}");
+
+    anathem::supersede::link(&conn, new, old).unwrap();
+    let r = evalrun::run(&conn, &evalset, "after", &search::SearchContext::bm25_only()).unwrap();
+    assert_eq!(r.contamination_at_5, Some(0.0), "supersession takes it out of the results");
+    assert_eq!(r.per_case[0].first_rank, Some(1), "and the current one still wins");
+}
+
+#[test]
+fn contamination_is_not_measured_when_no_case_labels_its_versions() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    ingest::insert(&conn, &NewMemory {
+        project: "p".into(), title: "cache del breakdown".into(),
+        body: "El cache del breakdown no se justifica".into(),
+        created: "2026-09-01".into(), event_start: None, event_end: None,
+        source: "migrated".into(), ext_id: Some("a".into()),
+        tags: vec![], refs: vec![],
+    }).unwrap();
+    let evalset = dir.path().join("evalset.json");
+    let mut f = std::fs::File::create(&evalset).unwrap();
+    write!(f, r#"{{"cases":[{{"id":"q1","query":"cache","expect_docs":["a"]}}]}}"#).unwrap();
+    let r = evalrun::run(&conn, &evalset, "x", &search::SearchContext::bm25_only()).unwrap();
+    assert_eq!(r.contamination_at_5, None, "a zero it did not earn is not a measurement");
 }

@@ -66,6 +66,7 @@ pub fn cases_from_topics(conn: &Connection) -> Result<Vec<Case>> {
             kind: Some("topic".into()),
             parafrastica: Some(false),
             words: None,
+            stale_docs: Vec::new(),
         });
     }
     Ok(cases)

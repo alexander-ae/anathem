@@ -45,6 +45,19 @@ def measures(path, evalset):
     return r, fraction, every
 
 
+def contamination(path):
+    """Mean contamination@5 over the cases that label their stale versions.
+
+    StaleBench's metric: the share of the top 5 holding a superseded version
+    of the fact the question asks about. `None` when no case labels any, so
+    a zero that was not measured is never printed as one.
+    """
+    r = json.load(open(path, encoding="utf-8"))
+    vals = [c["contamination_at_5"] for c in r["per_case"]
+            if c.get("contamination_at_5") is not None]
+    return sum(vals) / len(vals) * 100 if vals else None
+
+
 def mean(d, kind):
     v = d.get(kind)
     return sum(v) / len(v) * 100 if v else None
@@ -66,6 +79,13 @@ def main(argv):
         print("no scored cases: does the eval set carry expect_docs?", file=sys.stderr)
         return 1
     width = max(len(k) for k in kinds) + 2
+
+    measured = [(r["system"], contamination(p)) for p, (r, _, _) in zip(argv[2:], rows)]
+    measured = [(name, v) for name, v in measured if v is not None]
+    if measured:
+        print("\ncontamination@5, share of the top 5 holding a superseded value")
+        for name, v in measured:
+            print(f"  {name:<30} {v:5.1f} %")
 
     for title, which in (("fraction of the evidence", 1), ("every evidence session", 2)):
         print(f"\nrecall@5, {title}")
