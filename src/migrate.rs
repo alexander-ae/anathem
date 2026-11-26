@@ -11,6 +11,8 @@ pub struct MigrateReport {
     pub migrated: usize,
     pub archived: usize,
     pub failed: usize,
+    /// Documents left out because they contain a credential.
+    pub secrets: usize,
     /// (ext_id, title) of `failed` documents whose type is curated: their
     /// content is intact in the export but they are not migrated — they have
     /// to be reimported by hand.
@@ -73,6 +75,10 @@ pub fn run(conn: &Connection, path: &Path) -> Result<MigrateReport> {
             continue;
         }
 
+        if crate::secrets::find(&raw).is_some() {
+            rep.secrets += 1;
+            continue;
+        }
         let (body, save_date) = tags::strip_save_prefix(&raw);
         let created = save_date.unwrap_or_else(|| {
             row.created_at.as_deref().unwrap_or("").chars().take(10).collect()

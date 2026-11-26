@@ -199,6 +199,46 @@ pub fn pin(conn: &Connection, id: i64, on: bool) -> Result<()> {
     Ok(())
 }
 
+/// `pin`, with the rule that matters: a memory that arrived from elsewhere
+/// does not travel by itself.
+///
+/// Pinning puts a memory in the greeting, which goes into the system prompt
+/// at `initialize` — every session of the project, in a position of trust.
+/// A note received from another machine has not been read by anybody here,
+/// so it is the last thing that should ride there. `force` is the person
+/// saying they read it, which is the same gate `mem accept` is.
+pub fn pin_checked(conn: &Connection, id: i64, on: bool, force: bool) -> Result<()> {
+    if on && !force {
+        let from: Option<String> = conn
+            .query_row("select received_from from memories where id = ?1", [id], |r| r.get(0))
+            .optional()?
+            .flatten();
+        if let Some(from) = from {
+            anyhow::bail!(
+                "memory {id} arrived from {from}: pinning it would put it in every session's \
+                 greeting, before anyone here has read it. Read it, then `mem pin {id} --force` \
+                 if you trust it."
+            );
+        }
+    }
+    pin(conn, id, on)
+}
+
+/// The memories that arrived from elsewhere: (id, title, sender, when).
+pub fn tainted(conn: &Connection, limit: usize) -> Result<Vec<(i64, String, String, String)>> {
+    let mut st = conn.prepare(
+        "select id, title, coalesce(received_from, 'unknown'), coalesce(received_at, '')
+           from memories
+          where received_from is not null
+          order by coalesce(received_at, '') desc, id desc
+          limit ?1",
+    )?;
+    let rows = st.query_map([limit as i64], |r| {
+        Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+    })?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
 /// Marks a memory as checked against the world, or takes the mark away.
 ///
 /// Separate from saving on purpose: confirming a note is not correcting it.

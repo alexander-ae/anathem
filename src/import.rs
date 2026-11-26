@@ -48,6 +48,8 @@ pub struct Summary {
     pub inserted: usize,
     pub skipped: usize,
     pub chains: usize,
+    /// Left out because they carry a credential. Reported, never silent.
+    pub secrets: usize,
 }
 
 /// Strips the quotes from a YAML value written by `export::yaml_dq`.
@@ -217,6 +219,12 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
     for m in &parsed {
         if existing.contains(&(m.project.clone(), m.body.clone())) {
             resumen.skipped += 1;
+            continue;
+        }
+        // Importing is not an excuse to launder a credential into the
+        // database: the export it came from may have been somebody else's.
+        if crate::secrets::find(&m.body).is_some() {
+            resumen.secrets += 1;
             continue;
         }
         tx.execute(

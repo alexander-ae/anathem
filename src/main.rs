@@ -128,6 +128,9 @@ enum Cmd {
         /// whether the code still says what the memory says
         #[arg(long, value_name = "PATH[:SYMBOL]")]
         anchor: Option<String>,
+        /// Saves the text even when it looks like a credential
+        #[arg(long)]
+        allow_secret: bool,
     },
     /// Edits an existing memory's body in $EDITOR
     Edit {
@@ -199,6 +202,14 @@ enum Cmd {
     /// Pins a memory so it survives the candidate trimming in search
     Pin {
         id: i64,
+        /// Pins it even though it arrived from another machine
+        #[arg(long)]
+        force: bool,
+    },
+    /// Lists the memories that arrived from elsewhere, with who sent them
+    Taint {
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
     },
     /// Removes a memory's pin
     Unpin {
@@ -406,7 +417,11 @@ enum Cmd {
     ///
     /// Exits with 0 if there are no problems (warnings and information do
     /// not count), with 1 if there are, and with 2 if it could not run.
-    Doctor,
+    Doctor {
+        /// Also reports memories that carry a credential
+        #[arg(long)]
+        secrets: bool,
+    },
     /// Manages the vector layer's vocabulary pack
     Model {
         #[command(subcommand)]
@@ -549,7 +564,7 @@ fn json_supported(cmd: &Cmd) -> bool {
             | Cmd::Stale { .. }
             | Cmd::Save { .. }
             | Cmd::Accept { .. }
-            | Cmd::Doctor
+            | Cmd::Doctor { .. }
     )
 }
 
@@ -624,7 +639,7 @@ fn die_on_closed_pipe() {}
 fn main() {
     die_on_closed_pipe();
     let cli = Cli::parse();
-    let is_doctor = matches!(cli.cmd, Cmd::Doctor);
+    let is_doctor = matches!(cli.cmd, Cmd::Doctor { .. });
     if let Err(e) = run(cli) {
         // The same format `fn main() -> Result<()>` would print. `doctor`
         // exiting 2 and not 1 is what lets a script tell "found problems"
@@ -668,6 +683,12 @@ fn run(cli: Cli) -> Result<()> {
                 "migrated={} archived={} failed={}",
                 rep.migrated, rep.archived, rep.failed
             );
+            if rep.secrets > 0 {
+                println!(
+                    "{secrets} left out because they carry a credential",
+                    secrets = rep.secrets
+                );
+            }
             if !rep.curated_failed.is_empty() {
                 println!(
                     "curated ones with status failed (not migrated, reimport by hand):"
@@ -789,7 +810,7 @@ fn run(cli: Cli) -> Result<()> {
                 anathem::output::print_line(&format!("    {snippet}"), raw);
             }
         }
-        Cmd::Save { text, project, tag, topic, external, from, ext_id, anchor } => {
+        Cmd::Save { text, project, tag, topic, external, from, ext_id, anchor, allow_secret } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
             // `-` means the body comes on stdin, which is what lets a note
@@ -802,6 +823,11 @@ fn run(cli: Cli) -> Result<()> {
             } else {
                 text
             };
+            if !allow_secret {
+                if let Some(what) = anathem::secrets::find(&text) {
+                    anyhow::bail!("{}", anathem::secrets::refusal(what));
+                }
+            }
             if external {
                 let Some(from) = from else {
                     anyhow::bail!("--external needs --from <label>: a received memory with no \
@@ -926,6 +952,9 @@ fn run(cli: Cli) -> Result<()> {
                 anyhow::bail!("{editor} exited with an error, nothing was saved");
             }
             let new_id = std::fs::read_to_string(&tmp)?;
+            if let Some(what) = anathem::secrets::find(&new_id) {
+                anyhow::bail!("{}", anathem::secrets::refusal(what));
+            }
             if new_id != body {
                 // `replace_body` re-chunks, and the cascade takes the old
                 // text's vectors with it. Without this, nobody rebuilt the
@@ -1189,10 +1218,22 @@ every other key the file has, or put it in {} yourself:",
             anathem::supersede::link(&conn, newer, older)?;
             println!("memory {older} marked as superseded by {newer}");
         }
-        Cmd::Pin { id } => {
+        Cmd::Pin { id, force } => {
             let conn = anathem::db::open(&path)?;
-            anathem::maint::pin(&conn, id, true)?;
+            anathem::maint::pin_checked(&conn, id, true, force)?;
             println!("memory {id} pinned");
+        }
+        Cmd::Taint { limit } => {
+            let conn = anathem::db::open(&path)?;
+            let rows = anathem::maint::tainted(&conn, limit)?;
+            if rows.is_empty() {
+                println!("no memories from elsewhere: everything here was saved on this machine.");
+                return Ok(());
+            }
+            for (id, title, from, when) in rows {
+                let day = when.get(..16).unwrap_or(&when);
+                println!("{id:>5}  {from:<24} {day}  {title}");
+            }
         }
         Cmd::Unpin { id } => {
             let conn = anathem::db::open(&path)?;
@@ -1567,6 +1608,12 @@ every other key the file has, or put it in {} yourself:",
                 "imported {} memories, {} skipped as already present, {} supersession chains rebuilt",
                 r.inserted, r.skipped, r.chains
             );
+            if r.secrets > 0 {
+                println!(
+                    "{} left out because they carry a credential: save where it lives, not the value.",
+                    r.secrets
+                );
+            }
             if r.inserted > 0 {
                 println!("If you have a vocabulary pack, run `mem reindex` for the vectors.");
             }
@@ -1703,11 +1750,11 @@ every other key the file has, or put it in {} yourself:",
                 }
             }
         }
-        Cmd::Doctor => {
+        Cmd::Doctor { secrets } => {
             // Not `db::open`: that one opens for writing and creates
             // whatever is missing, and a diagnostic cannot modify what it is
             // diagnosing.
-            let informe = anathem::doctor::diagnose(&path);
+            let informe = anathem::doctor::diagnose_with(&path, secrets);
             if json {
                 anathem::jsonout::print(&anathem::jsonout::doctor(
                     &informe, &path, path.exists()))?;

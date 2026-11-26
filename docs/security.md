@@ -154,6 +154,46 @@ somebody else may have written. Whoever reads it decides what it means, and an
 integration that treats a note as an instruction is the injection this page is
 about — see [`integrations.md`](integrations.md).
 
+## Secrets: the address, not the value
+
+A memory that says *"the deploy token is in `~/.config/deploy/env`"* stays
+useful for years. A memory that says *"the deploy token is `glpat-…`"* is a
+second copy of the credential in a place that is **read into the context of
+every session that searches**, and that context goes to the model provider.
+The database being `0600` says nothing about that trip — nor about `mem
+export`, which writes markdown, or about a memory sent to another machine.
+
+So the value is refused and the address is not:
+
+```
+$ mem save "the token is glpat-0123456789abcdefghij"
+Error: Not saved: that is a GitLab token. A credential in a memory is a second
+copy of it, and it travels: every search that matches it puts it in a session's
+context, and that goes to the model provider. Save where it lives instead —
+"the deploy token is in ~/.config/deploy/env" — and keep the value in the file.
+```
+
+- **Where it applies**: `mem save`, `mem edit`, `save_memory` over MCP, `mem
+  import` and `mem migrate`. The last two skip those rows and say how many, so
+  a migration cannot launder a credential from somebody else's export.
+- **What it matches**: PEM private keys, AWS access keys, GitHub/GitLab/Slack
+  tokens, `sk-` keys, JWTs, connection strings with a password, and
+  `password|token|secret|api_key = <value>`. The value class excludes `/` and
+  `.`, which is why the sentence with the path keeps being saved.
+- **What it does not do**: rewrite what is already stored. `mem doctor
+  --secrets` reports it — ids and titles, never the value — and `mem edit` is
+  there if you want to change it. Changing somebody's memory silently is worse
+  than the finding.
+- **The escape hatch**: `--allow-secret`, for fixtures and for whoever knows
+  why. The MCP path has no such flag: an agent cannot reach it.
+- **The search log** keeps the row and loses the value: an agent that pastes a
+  token into a query to ask whether it is stored does not get it written to
+  disk by `mem stats`.
+
+What this cannot do: if the agent writes the credential into its own
+transcript, that copy is outside anathem. This one at least does not become
+another.
+
 ## What you can do
 
 - **Look at what comes in.** `mem recent` shows the latest along with who

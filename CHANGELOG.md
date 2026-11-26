@@ -8,6 +8,38 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 what you would be getting. Memories are never touched by an upgrade: they
 live in the database, not in the binary.
 
+## [Unreleased]
+
+### Added
+
+- **A credential is refused; where it lives is saved.** `docs/security.md`
+  covered injection and control characters and did not mention secrets once,
+  and a stored token is not only on disk: every search that matches it puts
+  it in a session's context, and that goes to the model provider. `mem save`,
+  `mem edit`, `save_memory`, `mem import` and `mem migrate` now refuse a body
+  that looks like a PEM key, an AWS/GitHub/GitLab/Slack token, an `sk-` key, a
+  JWT, a connection string with a password, or `password|token|secret|api_key
+  = <value>`, and the refusal says what to do instead. The address sentence —
+  "the deploy token is in ~/.config/deploy/env" — is a negative case, because
+  the value class excludes `/` and `.`: that sentence is the point.
+  `--allow-secret` for fixtures; the MCP path has no such flag. Import and
+  migrate skip those rows and report how many.
+- **`mem doctor --secrets`**, which reads every body and reports the ones
+  that carry a credential — ids and titles, never the value, because the
+  title is the first line of the body — and exits 1 when it finds any. Read
+  only: what is already stored is reported, never rewritten.
+- **`mem taint`**, and `mem pin` refuses a memory that arrived from another
+  machine.** The greeting goes into the system prompt of every session, so a
+  note nobody here has read is the last thing that should ride there.
+  `--force` is the person taking responsibility; `mem doctor` flags one pinned
+  before the rule existed.
+
+### Changed
+
+- **The search log keeps the query and loses the value.** An agent that
+  pastes a token into a search to ask whether it is stored no longer writes
+  it to disk by `mem stats`.
+
 ## [1.4.0] - 2026-11-23
 
 ### Added
