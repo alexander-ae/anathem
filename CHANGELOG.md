@@ -12,6 +12,15 @@ live in the database, not in the binary.
 
 ### Added
 
+- **An unscoped search stops paying twice.** When nothing is pinned, the
+  pinned-memory guarantee query is skipped instead of scoring the corpus a
+  second time; `word_evidence` reads the bodies of the final candidates
+  instead of walking every query term's postings over the whole corpus; and
+  an unfiltered search over a database with no superseded rows scores the
+  FTS index alone, joining the bodies after the limit. On the 23,854-memory
+  LongMemEval database the prose query from #80 goes from **1.5 s to 0.30 s**
+  (2.2 s before its first half). Scoped recall and ranks are unchanged.
+
 - **`bm25_k1`, `bm25_b` and `bm25_delta`: FTS5's scorer becomes tunable.**
   FTS5 fixes `k1 = 1.2` and `b = 0.75` with no SQL knob. Setting any of the
   three keys turns on a rescoring pass over the candidate pool (FTS5 still

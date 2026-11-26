@@ -582,6 +582,45 @@ fn candidate_rows(
     Ok(out)
 }
 
+/// The same pool when the query has no filters and there is no memory
+/// outside `active`. The FTS scoring runs alone, over the index, and the
+/// joins that fetch the bodies happen after the limit: joining every match
+/// to `memories` was most of the cost of an unscoped prose question.
+fn candidate_rows_unscoped(
+    conn: &Connection,
+    match_expr: &str,
+    limit: usize,
+) -> Result<Vec<Row>> {
+    let sql = "select m.id, m.ext_id, m.project, m.title, c.body, s.score, m.pinned
+                 from (
+                   select rowid as cid, bm25(chunks_fts) as score
+                     from chunks_fts
+                    where chunks_fts match ?1
+                    order by score
+                    limit ?2
+                 ) s
+                 join chunks c on c.id = s.cid
+                 join memories m on m.id = c.memory_id
+                order by s.score";
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt.query_map(rusqlite::params![match_expr, limit as i64], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, Option<String>>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, String>(3)?,
+            r.get::<_, String>(4)?,
+            r.get::<_, f64>(5)?,
+            r.get::<_, i64>(6)?,
+        ))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+
 /// A result with its raw signals exposed, for `--explain` and for anyone
 /// who needs the number and not just the order. A result that got in by bm25
 /// alone has no cosine, and one that got in by vector alone has no bm25.
@@ -959,7 +998,6 @@ fn word_evidence(
     conn: &Connection,
     terms: &[String],
     ids: &[i64],
-    range: Option<(i64, i64)>,
     frequencies: Option<&HashMap<String, i64>>,
 ) -> Result<(usize, HashMap<i64, usize>)> {
     let mut per: HashMap<i64, usize> = HashMap::new();
@@ -968,12 +1006,28 @@ fn word_evidence(
     }
     let chunks: i64 = conn.query_row("select count(*) from chunks", [], |r| r.get(0))?;
     let cap: i64 = if (chunks as usize) >= MIN_CHUNKS_FOR_DF { chunks / 2 } else { i64::MAX };
-    let wanted: std::collections::HashSet<i64> = ids.iter().copied().collect();
+    let stemming = crate::stem::enabled(conn);
+
+    // Only the candidates can carry evidence, and there are at most a few
+    // dozen of them: reading their bodies once is cheaper than walking the
+    // postings of every query term over the whole corpus, which is what this
+    // did when the same query was unscoped.
+    let marks = vec!["?"; ids.len()].join(",");
+    let sql = format!("select id, body from memories where id in ({marks})");
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(rusqlite::params_from_iter(ids.iter()), |r| {
+        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+    })?;
+    let mut bodies: HashMap<i64, std::collections::HashSet<String>> = HashMap::new();
+    for row in rows {
+        let (id, body) = row?;
+        let indexed = crate::stem::indexed_form(&body, stemming);
+        let (counts, _) = token_counts(&indexed);
+        bodies.insert(id, counts.into_keys().collect());
+    }
 
     let mut total = 0usize;
     for term in terms {
-        // One past the threshold is all it takes to know the term is over
-        // it, and the vocabulary is what keeps this from being a walk.
         let key = term.trim_matches('"').to_lowercase();
         let df = match frequencies.and_then(|m| m.get(&key).copied()) {
             Some(n) => n,
@@ -986,10 +1040,11 @@ fn word_evidence(
             continue;
         }
         total += 1;
-        // Only the candidates can add evidence, so only the chunks inside the
-        // span the candidates came from are read.
-        for id in memories_with(conn, term, &wanted, range)? {
-            *per.entry(id).or_insert(0) += 1;
+        let needle: String = key.chars().map(fold_diacritic).collect();
+        for (id, terms_in_body) in &bodies {
+            if terms_in_body.contains(&needle) {
+                *per.entry(*id).or_insert(0) += 1;
+            }
         }
     }
     Ok((total, per))
@@ -1029,40 +1084,6 @@ fn count_chunks_with(conn: &Connection, term: &str, cap: i64) -> Result<i64> {
         rusqlite::params![term, cap.saturating_add(1)],
         |r| r.get(0),
     )?)
-}
-
-/// The memories among `wanted` that hold the term, once each.
-///
-/// `range` is the span the candidate query used, so the walk reads what the
-/// search already looked at instead of the corpus behind it.
-fn memories_with(
-    conn: &Connection,
-    term: &str,
-    wanted: &std::collections::HashSet<i64>,
-    range: Option<(i64, i64)>,
-) -> Result<std::collections::HashSet<i64>> {
-    let mut sql = String::from(
-        "select c.memory_id
-           from chunks_fts join chunks c on c.id = chunks_fts.rowid
-          where chunks_fts match ?1",
-    );
-    let mut params = vec![Value::Text(term.to_string())];
-    if let Some((lo, hi)) = range {
-        sql.push_str(" and chunks_fts.rowid between ?2 and ?3");
-        params.push(Value::Integer(lo));
-        params.push(Value::Integer(hi));
-    }
-    let mut stmt = conn.prepare(&sql)?;
-    let mut seen = std::collections::HashSet::new();
-    for row in stmt.query_map(rusqlite::params_from_iter(params.iter()), |r| {
-        r.get::<_, i64>(0)
-    })? {
-        let id = row?;
-        if wanted.contains(&id) {
-            seen.insert(id);
-        }
-    }
-    Ok(seen)
 }
 
 /// The match expression without the terms that carry no ranking signal.
@@ -1144,13 +1165,26 @@ pub fn run_explained(
         }
     }
 
+    // An unscoped query with no inactive memories needs no filter join
+    // before the limit; the same holds for every filter-free search on a
+    // database that has never superseded anything.
+    let unfiltered = q.project.is_none() && q.tags.is_empty() && q.topic.is_none()
+        && q.since.is_none() && q.until.is_none() && q.as_of.is_none();
+    let fast_unscoped = chunk_range.is_none() && unfiltered && !conn.query_row(
+        "select exists(select 1 from memories where status <> 'active')", [], |r| r.get::<_, i64>(0),
+    )? .eq(&1);
+
     // --- lexical retrieval: identical to how it was ---
     let mut bm25_frequencies: Option<HashMap<String, i64>> = None;
     let mut best: HashMap<i64, (SearchHit, i64)> = HashMap::new();
     let mut orden_bm25: Vec<i64> = Vec::new();
     if ctx.lexical && !m.is_empty() {
         // Main pool: the best chunks by bm25, pinned or not.
-        let mut rows = candidate_rows(conn, &m, q, chunk_range, "", Some(ctx.depth))?;
+        let mut rows = if fast_unscoped {
+            candidate_rows_unscoped(conn, &m, ctx.depth)?
+        } else {
+            candidate_rows(conn, &m, q, chunk_range, "", Some(ctx.depth))?
+        };
         if rows.is_empty() && podado {
             // The terms that were dropped still had the power to bring the
             // corpus back: a query of one rare word and one stopword used to
@@ -1171,7 +1205,14 @@ pub fn run_explained(
         // pinned memories matching one query — but a query with no `LIMIT`
         // at all makes the work SQLite does depend on the size of the
         // corpus rather than on what was asked for.
-        rows.extend(candidate_rows(conn, &m, q, chunk_range, " and m.pinned = 1", Some(ctx.depth))?);
+        let any_pinned: i64 = conn.query_row(
+            "select exists(select 1 from memories where pinned = 1)", [], |r| r.get(0),
+        )?;
+        if any_pinned > 0 {
+            rows.extend(candidate_rows(
+                conn, &m, q, chunk_range, " and m.pinned = 1", Some(ctx.depth),
+            )?);
+        }
 
         // SQLite's bm25() returns negative values; more negative is better.
         // We deduplicate by keeping the best (most negative) chunk per
@@ -1317,7 +1358,7 @@ pub fn run_explained(
     // is returned and not to the candidate pool.
     let ids: Vec<i64> = out.iter().map(|e| e.hit.memory_id).collect();
     let (words_total, per) = word_evidence(
-        conn, &match_terms(text), &ids, chunk_range, bm25_frequencies.as_ref(),
+        conn, &match_terms(text), &ids, bm25_frequencies.as_ref(),
     )?;
     for e in out.iter_mut() {
         e.words_total = words_total;
