@@ -1392,8 +1392,10 @@ every other key the file has, or put it in {} yourself:",
                 r.mrr, r.p50_ms, r.n_cases
             );
             if let Some(c) = r.contamination_at_5 {
-                println!("  contamination@5={:.1}%  (share of the top 5 holding a superseded value)",
-                    c * 100.0);
+                println!(
+                    "  contamination@5={:.1}%  (top 5 holding both a current and a stale version)",
+                    c * 100.0
+                );
             }
             if let Some(o) = out {
                 if let Some(p) = o.parent() { std::fs::create_dir_all(p)?; }

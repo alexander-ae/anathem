@@ -941,11 +941,12 @@ the query exactly as well as the current one, so a policy that keeps everything
 scores the same as one that keeps only what holds.
 
 **StaleBench** (arXiv 2611.19752) isolates that failure on 892 real updating
-facts and names the metric: `contamination@5`, the share of the top five that
-carries a superseded version of the asked fact. Its central result is that the
-usual retrieval metrics can rank memory policies *backwards* — a retention
-policy and its retain-everything control return the identical statement at rank
-1, yet differ by tens of points in reader accuracy.
+facts and names the metric: `contamination@5`, the share of queries whose top
+five holds both a current and a stale version of the asked fact. Its central
+result is that the usual retrieval metrics can rank memory policies
+*backwards* — a retention policy and its retain-everything control return the
+identical statement at rank 1, yet differ by tens of points in reader
+accuracy.
 
 `mem eval` reports it when the eval set labels the versions. A case takes an
 optional `stale_docs`, with the same name forms as `expect_docs`:
@@ -961,13 +962,50 @@ quoted. `tools/eval_metrics.py` prints the mean next to the recall tables.
 
 The harness was checked against a corpus where the difference is knowable: two
 near-identical memories, one current and one superseded, and the query matches
-both. Before supersession the top five holds the stale one
-(`contamination@5 = 20 %`, and the current one can rank *second* — the point of
-the metric); after `mem supersede` the contamination is 0 and the current
+both. Before supersession the top five holds both versions
+(`contamination@5 = 100 %`, and the current one can rank *second* — the point
+of the metric); after `mem supersede` the contamination is 0 and the current
 version is first. The test lives in `tests/eval_test.rs`.
 
-What is missing: StaleBench's own 892 facts. Its release is a scorer over
-per-query rankings, and neither the Zenodo record (a PDF) nor the public
-repository carries the fact inventory, so the adapter is blocked on those
-files rather than on this harness. Until then this metric is measured on eval
-sets built here — which is what `mem eval` is for anyway.
+The definition is StaleBench's frozen one: a case is contaminated when its top
+five holds **both** a current and a stale version of the asked fact, not when
+it merely contains a stale row. A context with only the old value is a miss,
+which `current@k` reports; counting it as contamination would conflate the two.
+
+The 892 facts are now public: `thenexuslab/stalebench-release` (Apache-2.0 code,
+CC0 data; Zenodo `10.5281/zenodo.24237231`). `tools/stalebench.py` converts a
+release split into memories and an eval set, and turns a `mem eval` result into
+the frozen evaluator's submission format:
+
+```bash
+python3 tools/stalebench.py release/ --config anchored --split test --out bench/
+mem --db bench.db init
+mem --db bench.db import --from bench/memories
+mem --db bench.db eval --evalset bench/evalset.json --out bench/anathem.json
+python3 tools/stalebench.py release/ --config anchored --split test \
+  --submission bench/anathem.json --out bench/submission.jsonl
+python3 release/evaluate.py --key release/key_anchored_test.jsonl \
+  --submission bench/submission.jsonl
+```
+
+Anchored test split — 468 queries, 995 statements, scored by the frozen
+`evaluate.py` on the top five:
+
+| policy | current@1 | stale@1 | contamination@5 |
+|---|--:|--:|--:|
+| anathem, store-all | 0.466 | 0.519 | 0.987 |
+| anathem, superseded | **0.979** | **0.000** | **0.000** |
+| StaleBench BM25 store-all (paper) | 0.400 | 0.592 | 0.991 |
+| Keep-latest oracle (paper) | 0.979 | 0.000 | 0.000 |
+
+The two anathem rows are the same retrieval engine and the same 994 imported
+statements; the only difference is the write policy. Store-all is what the
+paper's BM25 baseline does, and it lands next to it. `superseded` marks every
+statement the key does not call current as `superseded`, which is the state
+anathem leaves after a correction, and it matches the oracle on all three
+columns. One of the 995 statements shares its exact text with another and is
+skipped by `mem import`, whose identity is project plus body; the count is 994.
+
+This is the measurement the project's claim hangs on: the ranking can look
+good while the context argues with itself, and only the write policy — not a
+better retriever — takes contamination to zero.

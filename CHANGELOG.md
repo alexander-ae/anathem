@@ -12,6 +12,19 @@ live in the database, not in the binary.
 
 ### Added
 
+- **StaleBench, measured: 0 contamination after a correction.**
+  `tools/stalebench.py` converts a release split into memories and an eval
+  set and turns a `mem eval` result into the frozen evaluator's submission.
+  On `anchored/test` (468 queries, 995 statements): store-all gives
+  `current@1` 0.466 and `contamination@5` 0.987; after supersession,
+  `current@1` 0.979, `stale@1` 0.000 and `contamination@5` 0.000 — the
+  keep-latest oracle's row. The same retrieval engine, a different write
+  policy. The numbers and the exact commands are in `docs/benchmarks.md`.
+- **`contamination@5` uses StaleBench's frozen definition.** A case is
+  contaminated when the top five holds **both** a current and a stale
+  version of the asked fact, not when it contains a stale row; a context
+  with only the old value is a miss, which `current@k` already reports.
+
 - **An unscoped search stops paying twice.** When nothing is pinned, the
   pinned-memory guarantee query is skipped instead of scoring the corpus a
   second time; `word_evidence` reads the bodies of the final candidates
@@ -71,8 +84,9 @@ live in the database, not in the binary.
 - **`contamination@5`: the metric that sees a superseded value.** `mem eval`
   measured whether the right memory arrived, never whether it was still true;
   after a rename or a bump the stale statement matches the query as well as
-  the current one. A case may now carry `stale_docs`, and the run reports the
-  share of the top five holding a superseded version — StaleBench's metric
+  the current one. A case may now carry `stale_docs`, and the run reports
+  whether the top five holds both a current and a stale version — StaleBench's
+  frozen metric
   (arXiv 2611.19752), which also shows that the usual retrieval metrics can
   rank memory policies backwards. `tools/eval_metrics.py` prints the mean next
   to the recall tables, a case without the field is reported as *not
