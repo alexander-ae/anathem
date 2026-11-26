@@ -196,6 +196,14 @@ fn plural(n: usize, uno: &'static str, several: &'static str) -> &'static str {
 /// it. It writes nothing and does not fail: whatever cannot be checked is
 /// stated in the report.
 pub fn diagnose(db: &Path) -> Informe {
+    diagnose_with(db, false)
+}
+
+/// `diagnose`, plus the credential scan when it is asked for.
+///
+/// Off by default because it reads every body: on a large corpus that is
+/// seconds, and a diagnostic nobody runs is worse than one that is quick.
+pub fn diagnose_with(db: &Path, secrets: bool) -> Informe {
     // `parent()` of a path with no folder (`mem.db`) is `""`, which joined
     // with a name gives a path relative to the current directory: the right
     // thing.
@@ -207,7 +215,62 @@ pub fn diagnose(db: &Path) -> Informe {
         sections.push(vector_section(conn, dir));
     }
     sections.push(config_section(dir));
+    if secrets {
+        if let Some(conn) = &conn {
+            sections.push(secrets_section(conn));
+        }
+    }
     Informe { sections }
+}
+
+/// Memories whose body carries something that looks like a credential.
+///
+/// Reports ids and titles, never the value: printing a secret into a
+/// terminal that an agent reads would repeat the leak the section exists to
+/// name. A finding is a problem, so `mem doctor --secrets` exits 1.
+fn secrets_section(conn: &Connection) -> Section {
+    let mut s = Section::new("Secrets");
+    if !has_table(conn, "memories").unwrap_or(false) {
+        return s;
+    }
+    let rows: rusqlite::Result<Vec<(i64, String, String)>> = conn
+        .prepare("select id, title, body from memories where status != 'deleted' order by id")
+        .and_then(|mut st| {
+            st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+                .and_then(|it| it.collect())
+        });
+    match rows {
+        Ok(rows) => {
+            let found: Vec<(i64, String, &'static str)> = rows
+                .into_iter()
+                .filter_map(|(id, title, body)| {
+                    crate::secrets::find(&body).map(|what| (id, title, what))
+                })
+                .collect();
+            if found.is_empty() {
+                s.bien("no memory carries a credential");
+            } else {
+                s.mal(format!(
+                    "{} {} {} a credential: `mem edit <id>` to replace it with where it lives",
+                    found.len(),
+                    if found.len() == 1 { "memory" } else { "memories" },
+                    if found.len() == 1 { "carries" } else { "carry" }
+                ));
+                for (id, title, what) in found.iter().take(10) {
+                    // The title is the first line of the body, so it can
+                    // carry the very value this section exists to avoid
+                    // printing.
+                    let safe: String = crate::secrets::redact(title).chars().take(70).collect();
+                    s.info(format!("{id}: {safe} — {what}"));
+                }
+                if found.len() > 10 {
+                    s.info(format!("and {} more", found.len() - 10));
+                }
+            }
+        }
+        Err(e) => s.mal(format!("could not read the memories: {e}")),
+    }
+    s
 }
 
 fn binary_section() -> Section {
@@ -394,6 +457,21 @@ fn received_waiting(conn: &Connection, s: &mut Section) {
              until `mem accept <id>`. See them with `mem recent --external`"
         )),
         Err(e) => s.warning(format!("could not count the received memories: {e}")),
+    }
+    // The greeting goes into the system prompt of every session, so a
+    // memory that arrived from elsewhere and rides in it is a problem and
+    // not a note. `mem pin` refuses new ones; this is the ones already
+    // pinned before the rule existed.
+    match conn.query_row(
+        "select count(*) from memories where pinned = 1 and received_from is not null",
+        [], |r| r.get::<_, i64>(0)) {
+        Ok(0) => {}
+        Ok(n) => s.mal(format!(
+            "{n} pinned {} arrived from elsewhere and travels in every greeting: \
+             `mem unpin <id>` unless you have read and trust it",
+            if n == 1 { "memory" } else { "memories" }
+        )),
+        Err(e) => s.warning(format!("could not check the pinned received memories: {e}")),
     }
 }
 

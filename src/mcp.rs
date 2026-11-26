@@ -85,7 +85,7 @@ pub fn tool_defs() -> Value {
           "budget": {"type": "integer", "description": "Token budget; the `budget` setting by default, 1200 unless it was changed"},
           "limit": {"type": "integer", "description": "How many candidates at most; 20 by default. Each one carries only a short excerpt: for the full body of one, use get_memory with its id."}}}},
       {"name": "save_memory",
-       "description": "Saves a memory now: when the user asks to remember something, or when closing a task with a finding worth keeping.\n\nCORRECTIONS. An UPDATED VERSION of something already saved — a correction, a fact that changed, a revised decision — has to say so, or the old one keeps competing in searches. Two parameters for two cases: `supersedes` (id) corrects ONE SPECIFIC EXISTING MEMORY you found with `search_memory`, which stops appearing (it is not deleted); `topic` (key) is for a subject that will KEEP EVOLVING, and the new save replaces the active one under that key in this project. Use EXACTLY the key shown as `[topic: key]`; keys are lowercase with collapsed whitespace, and beyond that they are exact. A new key does NOT replace a memory saved without one — use `supersedes` for that. Both may be sent at once; if they point at different memories nothing is saved and the response says why. Pick a short, stable key naming the SUBJECT and not the content (`frontend-stack`, `payment-provider`), and do not reuse one across unrelated facts: the previous version would vanish from searches. The response names what it replaced, with its id.",
+       "description": "Saves a memory now: when the user asks to remember something, or when closing a task with a finding worth keeping. **Never save a credential** — a token, a private key, a password. Save where it lives (\"the deploy token is in ~/.config/deploy/env\"); a save that looks like a secret is refused.\n\nCORRECTIONS. An UPDATED VERSION of something already saved — a correction, a fact that changed, a revised decision — has to say so, or the old one keeps competing in searches. Two parameters for two cases: `supersedes` (id) corrects ONE SPECIFIC EXISTING MEMORY you found with `search_memory`, which stops appearing (it is not deleted); `topic` (key) is for a subject that will KEEP EVOLVING, and the new save replaces the active one under that key in this project. Use EXACTLY the key shown as `[topic: key]`; keys are lowercase with collapsed whitespace, and beyond that they are exact. A new key does NOT replace a memory saved without one — use `supersedes` for that. Both may be sent at once; if they point at different memories nothing is saved and the response says why. Pick a short, stable key naming the SUBJECT and not the content (`frontend-stack`, `payment-provider`), and do not reuse one across unrelated facts: the previous version would vanish from searches. The response names what it replaced, with its id.",
        "inputSchema": {"type": "object", "required": ["text"], "properties": {
           "text": {"type": "string"},
           "project": {"type": "string"},
@@ -392,6 +392,9 @@ fn call_tool(
             let text = args["text"].as_str().unwrap_or_default();
             if text.trim().is_empty() {
                 return Ok(text_result("Not saved: the text is empty.".into()));
+            }
+            if let Some(what) = crate::secrets::find(text) {
+                return Ok(text_result(crate::secrets::refusal_from_agent(what)));
             }
             // With no `project`, it is derived from the repository the
             // server runs in. The agent launches it standing in the project,

@@ -10,6 +10,10 @@ pub fn record(
     agent: Option<&str>,
     cwd: Option<&str>,
 ) -> Result<i64> {
+    // A query is text somebody typed, and an agent may paste a credential into
+    // one to ask whether it is already stored. The row is for `mem stats`;
+    // the value is not.
+    let query = &crate::secrets::redact(query);
     conn.execute(
         "insert into search_log (ts, query, project, returned_ids, budget_used, agent, cwd)
          values (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
