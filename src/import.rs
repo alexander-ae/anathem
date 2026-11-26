@@ -35,6 +35,9 @@ pub struct ParsedMemory {
     /// `db::add_provenance_columns`.
     pub received_from: Option<String>,
     pub received_at: Option<String>,
+    /// The interval the memory was true for, when the export carried it.
+    pub valid_from: Option<String>,
+    pub valid_until: Option<String>,
     /// What it was checked against: path, symbol, hash, state, when. Kept as
     /// exported: the state was true where it was written, and the first
     /// `mem verify --check` decides what it is here.
@@ -137,6 +140,8 @@ pub fn parse(text: &str) -> Option<ParsedMemory> {
             "event_end" => m.event_end = Some(unquote(v)).filter(|s| !s.is_empty()),
             "received_from" => m.received_from = Some(unquote(v)).filter(|s| !s.is_empty()),
             "received_at" => m.received_at = Some(unquote(v)).filter(|s| !s.is_empty()),
+            "valid_from" => m.valid_from = Some(unquote(v)).filter(|s| !s.is_empty()),
+            "valid_until" => m.valid_until = Some(unquote(v)).filter(|s| !s.is_empty()),
             "anchor" | "anchor_sha256" | "anchor_state" | "anchor_checked_at" => {
                 campos_ancla.insert(k.to_string(), unquote(v));
             }
@@ -230,12 +235,13 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
         tx.execute(
             "insert into memories
                (project, title, body, created, updated, event_start, event_end,
-                source, status, pinned, ext_id, topic, received_from, received_at)
-             values (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+                source, status, pinned, ext_id, topic, received_from, received_at,
+                valid_from, valid_until)
+             values (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
             params![
                 m.project, m.title, m.body, m.created, m.updated, m.event_start,
                 m.event_end, m.source, m.status, m.pinned as i64, m.ext_id, m.topic,
-                m.received_from, m.received_at
+                m.received_from, m.received_at, m.valid_from, m.valid_until
             ],
         )?;
         let new_id = tx.last_insert_rowid();

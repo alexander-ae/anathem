@@ -363,15 +363,24 @@ pub fn memory(conn: &Connection, id: i64) -> Result<Option<Memory>> {
 /// arrive by routes that do not pass through `link`: a hand-edited database,
 /// a future import, a bug in a later task. A guard that never fires costs
 /// one comparison; its absence would cost an infinite loop.
-pub fn history(conn: &Connection, id: i64) -> Result<Vec<(i64, String, String)>> {
+pub fn history(
+    conn: &Connection,
+    id: i64,
+) -> Result<Vec<(i64, String, String, Option<String>, Option<String>)>> {
     let mut out = Vec::new();
     let mut cur = Some(id);
     while let Some(c) = cur {
-        let row: rusqlite::Result<(i64, String, String, Option<i64>)> = conn.query_row(
-            "select id, title, status, supersedes_id from memories where id=?1",
-            [c], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)));
+        let row: rusqlite::Result<(
+            i64, String, String, Option<String>, Option<String>, Option<i64>)> =
+            conn.query_row(
+                "select id, title, status, valid_from, valid_until, supersedes_id
+                   from memories where id=?1",
+                [c], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)));
         match row {
-            Ok((i, t, s, prev)) => { out.push((i, t, s)); cur = prev; }
+            Ok((i, t, s, from, until, prev)) => {
+                out.push((i, t, s, from, until));
+                cur = prev;
+            }
             Err(_) => break,
         }
         if out.len() > 50 { break; } // corta ciclos

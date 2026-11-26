@@ -9,6 +9,10 @@ before any of it runs.
 Nothing here needs configuring. The defaults were measured, and this
 document says what they were measured against.
 
+Why the first stage is BM25 and not a neural retriever — and what evidence
+would reverse that — is in
+[`research.md`](research.md#retrieval-why-bm25-and-what-would-replace-it).
+
 ## Two stages: many candidates, excerpts long enough to recognise
 
 The MCP tool `search_memory` returns **up to 20 candidates with an excerpt of
@@ -512,6 +516,29 @@ said", never "known to be wrong".**
 would quietly bury a correct hunch, and nothing here moves a ranking on
 something that has not been measured. What the mark changes is what the model
 reads, not what it is shown.
+
+### What was true then: `--as-of`
+
+`--since` and `--until` bound when a memory was *written*. `--as-of` asks a
+different question: what was **true** on a date. Every memory carries a
+validity interval — from the day it was saved until something replaced it —
+and a supersession closes the old one at that instant.
+
+```
+$ mem search "payment provider" --as-of 2026-10-01
+[42] [p] el proveedor de pagos es Adyen
+```
+
+A version superseded in November comes back for an October question, because
+that is when it held. Without the flag nothing changes: the current version
+is what you get. `mem history` prints the interval next to each version, and
+the interval travels in `mem export`.
+
+The dates are day-granular and, for anything stored before this existed, they
+are what the database can honestly say: the memory has been valid since it was
+created, and one already superseded stopped when it was last touched. That is
+a backfill and not a record, and `mem doctor` says when the two ends disagree
+with the status.
 
 ### `[anchor: …]`, the evidence behind a note
 

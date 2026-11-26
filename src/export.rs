@@ -74,6 +74,8 @@ struct Fila {
     topic: Option<String>,
     received_from: Option<String>,
     received_at: Option<String>,
+    valid_from: Option<String>,
+    valid_until: Option<String>,
     /// What it was checked against: path, symbol, hash, state, when.
     anchor: Option<(String, Option<String>, String, String, String)>,
 }
@@ -92,7 +94,7 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
         .prepare(
             "select id, project, title, body, created, updated, status, source,
                     pinned, ext_id, supersedes_id, event_start, event_end, topic,
-                    received_from, received_at
+                    received_from, received_at, valid_from, valid_until
                from memories order by id",
         )?
         .query_map([], |r| {
@@ -113,6 +115,8 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
                 topic: r.get(13)?,
                 received_from: r.get(14)?,
                 received_at: r.get(15)?,
+                valid_from: r.get(16)?,
+                valid_until: r.get(17)?,
                 anchor: None,
             })
         })?
@@ -243,6 +247,12 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
         }
         if let Some(e) = &f.event_end {
             optional.push_str(&format!("event_end: {}\n", yaml_dq(e)));
+        }
+        if let Some(v) = &f.valid_from {
+            optional.push_str(&format!("valid_from: {}\n", yaml_dq(v)));
+        }
+        if let Some(v) = &f.valid_until {
+            optional.push_str(&format!("valid_until: {}\n", yaml_dq(v)));
         }
         if let Some((path, symbol, sha, state, checked)) = &f.anchor {
             let spec = match symbol {

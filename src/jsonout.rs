@@ -284,10 +284,16 @@ pub fn why(id: i64, appearances: &[crate::logsearch::Appearance]) -> Value {
 }
 
 /// `mem history <id> --json`.
-pub fn history(id: i64, chain: &[(i64, String, String)]) -> Value {
+pub fn history(
+    id: i64,
+    chain: &[(i64, String, String, Option<String>, Option<String>)],
+) -> Value {
     let rows: Vec<Value> = chain
         .iter()
-        .map(|(i, title, status)| json!({ "id": i, "title": title, "status": status }))
+        .map(|(i, title, status, from, until)| json!({
+            "id": i, "title": title, "status": status,
+            "valid_from": from, "valid_until": until,
+        }))
         .collect();
     json!({ "schema": SCHEMA, "id": id, "chain": rows })
 }
