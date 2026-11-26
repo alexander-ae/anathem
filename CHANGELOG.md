@@ -12,6 +12,12 @@ live in the database, not in the binary.
 
 ### Added
 
+- **An identifier query is a phrase, not a bag of fragments.** `unicode61`
+  splits `OP-204` into `op` and `204`, so an `OR` of the parts let a note
+  that repeated `204` outrank the note carrying the identifier. The query
+  now also emits the adjacent-token phrase (`"OP 204"`), so the exact
+  identifier wins. It is query-side only — no reindex — and a prose query
+  keeps the expression it had.
 - **`mem eval --compare`: the per-query cost of fusing two rankings.** Runs
   the same cases through BM25 alone, the vector arm alone and the fused
   ranking, and reports how often fusion places the expected memory below the

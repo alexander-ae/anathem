@@ -373,6 +373,24 @@ table: a transformation applied in the trigger would be reverted by the next
 rebuild without saying anything. An existing database migrates itself the
 next time it is opened.
 
+## Identifiers
+
+`unicode61` splits `OP-204` into `op` and `204`, `v0.8.0` into `v0`, `8` and
+`0`, and `n+1` into `n` and `1`. Before this, a query for `OP-204` became
+`"OP" OR "204"`: the note that carried the identifier competed with every
+note that repeated `204`, and on a two-note fixture the wrong one came
+first.
+
+A query now also emits the adjacent-token phrase — `"OP 204"` — so the exact
+identifier outranks a bag of fragments. It is query-side only: the tokens
+are already adjacent in `fts_body`, so there is no reindex and no change to
+the index format. A prose query produces exactly the expression it produced
+before, and `match_terms` still returns the individual terms, because that
+is what `word_evidence` and the stopword pruning count.
+
+The phrase is capped at eight branches and the whole expression at fifty, so
+a pathological query cannot grow the `MATCH` expression without bound.
+
 ## When nothing matched
 
 A vector ranking has no notion of *too far*. It orders the whole corpus by

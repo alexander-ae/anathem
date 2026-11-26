@@ -300,9 +300,60 @@ pub fn match_terms(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// Identifier-looking spans: alphanumeric runs joined by a separator that
+/// `unicode61` treats as a word boundary. `OP-204`, `v0.8.0`, `n+1`,
+/// `mem_eval`, a URL.
+fn identifier_re() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"[A-Za-z0-9]+(?:[-._+/:@][A-Za-z0-9]+)+").unwrap())
+}
+
+/// The span as an FTS5 phrase, or `None` when it has too few or too many
+/// parts to be worth one.
+///
+/// `unicode61` splits `OP-204` into `op` and `204`, so an `OR` of the parts
+/// lets a note that repeats `204` outrank the note carrying the identifier.
+/// The phrase requires the tokens to be adjacent, which is what "this
+/// identifier is written here" means to the index.
+fn identifier_phrase(span: &str) -> Option<String> {
+    let parts: Vec<&str> = span
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|p| !p.is_empty())
+        .collect();
+    if parts.len() < 2 || parts.len() > 8 {
+        return None;
+    }
+    Some(format!("\"{}\"", parts.join(" ")))
+}
+
+/// The query's distinct identifier phrases, already quoted.
+///
+/// This is the query-side half of the fix: no reindex and no change to the
+/// index format, because the tokens are already adjacent in `fts_body`. It
+/// is capped because every phrase is another branch of the MATCH expression,
+/// and the expression has a ceiling (`MAX_TERMS`).
+pub fn identifier_phrases(text: &str) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    identifier_re()
+        .find_iter(text)
+        .filter_map(|m| identifier_phrase(m.as_str()))
+        .filter(|p| seen.insert(p.to_lowercase()))
+        .take(8)
+        .collect()
+}
+
 /// Turns free text into a safe FTS5 MATCH expression.
+///
+/// The identifier phrases are appended after the terms, so trimming the
+/// terms to fit `MAX_TERMS` cannot drop them: the exact identifier is the
+/// narrower, stronger signal, and the individual terms still cover the rest
+/// of the prose.
 pub fn to_match(text: &str) -> String {
-    match_terms(text).join(" OR ")
+    let phrases = identifier_phrases(text);
+    let mut terms = match_terms(text);
+    terms.truncate(MAX_TERMS.saturating_sub(phrases.len()));
+    terms.extend(phrases);
+    terms.join(" OR ")
 }
 
 fn est_tokens(s: &str) -> usize {
@@ -836,7 +887,7 @@ fn memories_with(
 /// `None` means "keep what you had": nothing was dropped, or everything was,
 /// and a query made only of common words has to return what it always
 /// returned rather than nothing.
-fn without_common_terms(conn: &Connection, terms: &[String]) -> Option<String> {
+fn without_common_terms(conn: &Connection, terms: &[String]) -> Option<Vec<String>> {
     if terms.len() < 2 {
         return None;
     }
@@ -851,14 +902,15 @@ fn without_common_terms(conn: &Connection, terms: &[String]) -> Option<String> {
     // a quarter took 0.6 points and a tenth took 4.2 — so the line stays at
     // the zero point and the rest of the cost is left where it is.
     let cap = chunks / 2;
-    let kept: Vec<&String> = terms
+    let kept: Vec<String> = terms
         .iter()
         .filter(|term| doc_freq(conn, term).map_or(true, |df| df <= cap))
+        .cloned()
         .collect();
     if kept.is_empty() || kept.len() == terms.len() {
         return None;
     }
-    Some(kept.into_iter().cloned().collect::<Vec<_>>().join(" OR "))
+    Some(kept)
 }
 
 pub fn run_explained(
@@ -895,7 +947,10 @@ pub fn run_explained(
         // is treated: a scoped one is already 20x faster, and pruning there
         // would change what its benchmarks measure for no gain.
         if let Some(pruned) = without_common_terms(conn, &match_terms(text)) {
-            m = pruned;
+            let mut kept = pruned;
+            kept.extend(identifier_phrases(text));
+            kept.truncate(MAX_TERMS);
+            m = kept.join(" OR ");
             podado = true;
         }
     }
@@ -912,7 +967,6 @@ pub fn run_explained(
             // answer with everything the stopword matched, and pruning it to
             // nothing is a regression, not an optimisation.
             m = original.clone();
-            podado = false;
             rows = candidate_rows(conn, &m, q, chunk_range, "", Some(CANDIDATES))?;
         }
         // A separate, unlimited guarantee: every pinned memory matching the
