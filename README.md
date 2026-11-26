@@ -354,6 +354,14 @@ Counted the looser way, as the fraction of the evidence that lands there:
 90.5% and 92.9%. The strict one is the one to carry, because it is the one
 that answers "did I get everything I needed".
 
+On **StaleBench** — 468 value-agnostic questions over 995 statements, scored
+by its frozen evaluator — the same retrieval engine goes from
+`contamination@5` **0.987** with every version stored to **0.000** after
+supersession, at `current@1` 0.979, which is the keep-latest oracle's row.
+The difference is the write policy, not a better ranker
+([the numbers](docs/benchmarks.md#versioned-facts-contamination5)).
+
+
 Those are retrieval numbers: whether the evidence was handed to the model,
 not whether the model then answered correctly. The method, the three
 definitions of recall and what none of it proves are in

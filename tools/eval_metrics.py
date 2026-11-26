@@ -48,9 +48,11 @@ def measures(path, evalset):
 def contamination(path):
     """Mean contamination@5 over the cases that label their stale versions.
 
-    StaleBench's metric: the share of the top 5 holding a superseded version
-    of the fact the question asks about. `None` when no case labels any, so
-    a zero that was not measured is never printed as one.
+    StaleBench's metric: a case is contaminated when its top 5 holds BOTH a
+    current and a stale version of the fact the question asks about. It is
+    not the share of stale entries; a context with only the old value is a
+    miss, which the recall columns already show. `None` when no case labels
+    any, so a zero that was not measured is never printed as one.
     """
     r = json.load(open(path, encoding="utf-8"))
     vals = [c["contamination_at_5"] for c in r["per_case"]
@@ -83,7 +85,7 @@ def main(argv):
     measured = [(r["system"], contamination(p)) for p, (r, _, _) in zip(argv[2:], rows)]
     measured = [(name, v) for name, v in measured if v is not None]
     if measured:
-        print("\ncontamination@5, share of the top 5 holding a superseded value")
+        print("\ncontamination@5, top 5 holding both a current and a stale version")
         for name, v in measured:
             print(f"  {name:<30} {v:5.1f} %")
 

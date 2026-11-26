@@ -387,15 +387,24 @@ pub fn run_cases(
         // Currency is a different question from recall: the right entity
         // with the wrong value matches the query exactly as well as the
         // current one, which is why a stale fact needs its own column.
+        //
+        // The definition is StaleBench's frozen one: contamination is
+        // whether the top five holds BOTH a current and a stale version of
+        // the asked fact, averaged over the cases that label it. It is not
+        // the share of stale entries — a context with one stale row and no
+        // current one is not contaminated, it is simply wrong in a different
+        // way, and `current@k` already reports that.
         let contam = if c.stale_docs.is_empty() {
             None
         } else {
-            let n = hits
-                .iter()
-                .take(5)
-                .filter(|h| c.stale_docs.iter().any(|d| matches(d, h)))
-                .count();
-            Some(n as f64 / 5.0)
+            let top: Vec<_> = hits.iter().take(5).collect();
+            let has_current = top.iter().any(|h| {
+                c.expect_docs.iter().any(|d| matches(d, h))
+            });
+            let has_stale = top.iter().any(|h| {
+                c.stale_docs.iter().any(|d| matches(d, h))
+            });
+            Some(if has_current && has_stale { 1.0 } else { 0.0 })
         };
         if let Some(v) = contam {
             contams.push(v);

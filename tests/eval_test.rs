@@ -307,12 +307,42 @@ fn a_superseded_value_in_the_top_five_is_contamination_and_supersede_clears_it()
     let rank = r.per_case[0].first_rank.expect("the current one is in the results");
     assert!(rank <= 5, "both versions are near the top: rank {rank}");
     let before = r.contamination_at_5.expect("the case labels its stale doc");
-    assert!(before > 0.0, "the superseded value is in the top 5: {before}");
+    assert_eq!(before, 1.0, "the top five holds both versions: {before}");
 
     anathem::supersede::link(&conn, new, old).unwrap();
     let r = evalrun::run(&conn, &evalset, "after", &search::SearchContext::bm25_only()).unwrap();
     assert_eq!(r.contamination_at_5, Some(0.0), "supersession takes it out of the results");
     assert_eq!(r.per_case[0].first_rank, Some(1), "and the current one still wins");
+}
+
+#[test]
+fn a_stale_version_without_the_current_one_is_not_contamination() {
+    // StaleBench's definition is not "the top five contains a stale row": it
+    // is "the context argues with itself", both a current and a stale
+    // version. A top five holding only the old value is a miss, which
+    // `current@k` already measures; counting it here would conflate the two.
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    for (ext, body) in [
+        ("vieja", "El equipo de Ana es Riot"),
+        ("otra", "El equipo de Beto es Cloud9"),
+    ] {
+        ingest::insert(&conn, &NewMemory {
+            project: "p".into(), title: body.into(), body: body.into(),
+            created: "2026-09-01".into(), event_start: None, event_end: None,
+            source: "migrated".into(), ext_id: Some(ext.into()),
+            tags: vec![], refs: vec![],
+        }).unwrap();
+    }
+    let evalset = dir.path().join("evalset.json");
+    std::fs::write(&evalset, r#"{"cases": [
+      {"id":"q1","query":"equipo de Ana","expect_docs":["nueva"],"stale_docs":["vieja"]}
+    ]}"#).unwrap();
+    let r = evalrun::run(&conn, &evalset, "x", &search::SearchContext::bm25_only()).unwrap();
+    assert_eq!(
+        r.contamination_at_5, Some(0.0),
+        "stale without current is not the both-versions contamination"
+    );
 }
 
 #[test]
