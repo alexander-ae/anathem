@@ -254,6 +254,13 @@ pub fn run_as_mcp(
     run_cases_as_mcp(conn, &set.cases, system, ctx, cfg)
 }
 
+/// The cases of an eval set, for a caller that runs them more than once with
+/// different settings. `mem tune --depth` is the caller; reading the file
+/// once keeps the four points on exactly the same questions.
+pub fn cases_from_file(evalset: &Path) -> Result<Vec<Case>> {
+    Ok(read_evalset(evalset)?.cases)
+}
+
 /// The measurement itself, over cases already in hand.
 ///
 /// `run` reads a file and calls this; `tune` builds its cases out of the

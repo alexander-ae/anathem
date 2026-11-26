@@ -690,3 +690,25 @@ fn an_identifier_is_also_an_adjacent_phrase_in_the_match_expression() {
 fn a_prose_query_keeps_its_expression_unchanged() {
     assert_eq!(search::to_match("cache staleness"), "\"cache\" OR \"staleness\"");
 }
+
+#[test]
+fn the_retrieval_depth_bounds_the_pool_before_the_limit() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    for i in 0..50 {
+        seed(&conn, &format!("m{i}"), "p", &format!("cache numero {i}"));
+    }
+    let q = search::Query { text: "cache".into(), limit: 50, ..Default::default() };
+    let shallow = search::SearchContext::bm25_only().with_depth(10);
+    let deep = search::SearchContext::bm25_only().with_depth(50);
+    assert_eq!(search::run(&conn, &q, &shallow).unwrap().len(), 10);
+    assert_eq!(search::run(&conn, &q, &deep).unwrap().len(), 50);
+}
+
+#[test]
+fn with_depth_rejects_zero_and_the_far_end() {
+    let zero = search::SearchContext::bm25_only().with_depth(0);
+    assert_eq!(zero.depth(), 1, "zero would return nothing at all");
+    let huge = search::SearchContext::bm25_only().with_depth(usize::MAX);
+    assert_eq!(huge.depth(), search::MAX_RETRIEVAL_DEPTH);
+}

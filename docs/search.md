@@ -341,6 +341,36 @@ do is give you a quality figure — a topic key names its subject in keywords,
 so those questions flatter the lexical side — and the command says so above
 its own table.
 
+## Retrieval depth: how many chunks the ranking may see
+
+`candidates` is what `search_memory` returns; `retrieval_depth` is how many
+chunks each retriever may nominate **before** deduplication and fusion. They
+are different numbers on purpose: with a pool of twenty, fusion is choosing
+among the twenty already returned, and a better second ranking cannot change
+the answer.
+
+It was a constant (200) until this was measured. LongMemEval-S, 470 scoped
+questions, 23,854 memories, no pack:
+
+| `retrieval_depth` | recall@5 | recall@50 | MRR | p50 | tokens (p50) |
+|---|--:|--:|--:|--:|--:|
+| 100 | 96.2 % | 100 % | 0.912 | 102.3 ms | 1,153 |
+| **200 (default)** | **96.2 %** | **100 %** | **0.912** | **101.5 ms** | **1,153** |
+| 500 | 96.2 % | 100 % | 0.912 | 102.2 ms | 1,153 |
+| 1000 | 96.2 % | 100 % | 0.912 | 103.7 ms | 1,153 |
+
+All four rows are the same to the precision reported. Deeper did not recover
+anything the twenty shown were missing on this corpus, and it did not cost
+latency either, because the scoped search is already narrow and the payload
+is still capped at 20 candidates and 1,200 tokens. **The default stays 200.**
+
+The other corpus — the private technical notes — is the one that could
+disagree, so `mem tune --depth --evalset <file>` prints the same table on any
+eval set. The decision rule is fixed before the run: keep 200 unless a deeper
+pool improves `recall@5` or MRR on both corpora beyond noise, or improves one
+and leaves the other within noise; a latency regression above 25 % kills the
+change regardless.
+
 ## Chinese and Japanese
 
 FTS5's `unicode61` tokenizer splits on whitespace and punctuation. A Japanese

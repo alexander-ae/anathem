@@ -786,8 +786,10 @@ pub fn serve(conn: &Connection, dir: &Path, cfg: &Config) -> Result<()> {
             );
         let ctx = if needs_pack {
             search::SearchContext::for_server(live_pack.current(conn), cfg.bm25_weight)
+                .with_depth(cfg.retrieval_depth)
         } else {
             search::SearchContext::for_server(None, cfg.bm25_weight)
+                .with_depth(cfg.retrieval_depth)
         };
         if let Some(res) = handle_con_agente(conn, &ctx, cfg, &req, &mut agent)? {
             writeln!(stdout, "{}", serde_json::to_string(&res)?)?;

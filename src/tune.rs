@@ -108,6 +108,51 @@ pub fn best_weight(scored: &[(f64, f64)]) -> f64 {
 pub const MAX_WEIGHT: f64 = 256.0;
 pub const MIN_WEIGHT: f64 = 1.0 / 256.0;
 
+/// The depths `mem tune --depth` compares. 200 is the default; the two
+/// below it check whether the pool is paying for itself, and 1000 checks
+/// whether it is truncating evidence the agent would have used.
+pub const DEPTHS: &[usize] = &[100, 200, 500, 1000];
+
+/// One row of `mem tune --depth`.
+#[derive(Debug)]
+pub struct DepthPoint {
+    pub depth: usize,
+    pub recall_at_5: f64,
+    pub recall_at_50: f64,
+    pub mrr: f64,
+    pub p50_ms: f64,
+    /// Median tokens of the `search_memory` payload at the same settings.
+    pub tokens_p50: usize,
+}
+
+/// Runs the same cases at each depth in `DEPTHS`. The pack is optional:
+/// depth is a lexical question too, and a machine without one still has
+/// something to measure.
+pub fn sweep_depth(
+    conn: &Connection,
+    cases: &[Case],
+    pack: Option<&crate::pack::Pack>,
+    weight: f64,
+    cfg: &crate::config::Config,
+) -> Result<Vec<DepthPoint>> {
+    let mut out = Vec::with_capacity(DEPTHS.len());
+    for &depth in DEPTHS {
+        let ctx = search::SearchContext::for_reading(pack, weight).with_depth(depth);
+        let label = format!("depth={depth}");
+        let r = crate::evalrun::run_cases(conn, cases, &label, &ctx)?;
+        let payload = crate::evalrun::run_cases_as_mcp(conn, cases, &label, &ctx, cfg)?;
+        out.push(DepthPoint {
+            depth,
+            recall_at_5: r.recall_at_5,
+            recall_at_50: r.recall_at_50,
+            mrr: r.mrr,
+            p50_ms: r.p50_ms,
+            tokens_p50: payload.median_tokens,
+        });
+    }
+    Ok(out)
+}
+
 /// Runs the grid, returning `(weight, mrr, recall@5)` per point.
 ///
 /// The pack is required: `bm25_weight` only exists to balance the lexical
@@ -117,10 +162,11 @@ pub fn sweep(
     conn: &Connection,
     cases: &[Case],
     pack: &crate::pack::Pack,
+    depth: usize,
 ) -> Result<Vec<(f64, f64, f64)>> {
     let mut out = Vec::new();
     for &w in WEIGHTS {
-        out.push(punto(conn, cases, pack, w)?);
+        out.push(punto(conn, cases, pack, w, depth)?);
     }
     Ok(out)
 }
@@ -130,8 +176,9 @@ fn punto(
     cases: &[Case],
     pack: &crate::pack::Pack,
     w: f64,
+    depth: usize,
 ) -> Result<(f64, f64, f64)> {
-    let ctx = search::SearchContext::for_reading(Some(pack), w);
+    let ctx = search::SearchContext::for_reading(Some(pack), w).with_depth(depth);
     let r = crate::evalrun::run_cases(conn, cases, &format!("w={w}"), &ctx)?;
     Ok((w, r.mrr, r.recall_at_5))
 }
@@ -152,8 +199,9 @@ pub fn sweep_until_interior(
     conn: &Connection,
     cases: &[Case],
     pack: &crate::pack::Pack,
+    depth: usize,
 ) -> Result<Vec<(f64, f64, f64)>> {
-    let mut out = sweep(conn, cases, pack)?;
+    let mut out = sweep(conn, cases, pack, depth)?;
     loop {
         let pares: Vec<(f64, f64)> = out.iter().map(|(w, m, _)| (*w, *m)).collect();
         let best = best_weight(&pares);
@@ -166,7 +214,7 @@ pub fn sweep_until_interior(
         } else {
             return Ok(out);
         };
-        let p = punto(conn, cases, pack, next)?;
+        let p = punto(conn, cases, pack, next, depth)?;
         if next > high {
             out.push(p);
         } else {

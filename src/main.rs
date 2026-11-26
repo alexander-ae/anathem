@@ -173,8 +173,15 @@ enum Cmd {
     Tune {
         /// Writes the recommended value into `config.json`, keeping every
         /// other key it already has
-        #[arg(long)]
+        #[arg(long, conflicts_with = "depth")]
         apply: bool,
+        /// Sweeps `retrieval_depth` instead of `bm25_weight`: 100, 200, 500
+        /// and 1000, with recall, MRR, latency and the payload's tokens
+        #[arg(long)]
+        depth: bool,
+        /// Eval set for `--depth`; without it the topic keys are used
+        #[arg(long, requires = "depth")]
+        evalset: Option<PathBuf>,
     },
     /// Runs the evaluation harness
     Eval {
@@ -713,7 +720,8 @@ fn run(cli: Cli) -> Result<()> {
             let dir = path.parent().unwrap_or(Path::new("."));
             let cfg = anathem::config::load(dir)?;
             let p = anathem::packstore::resolve_and_warn(&conn, dir);
-            let ctx = anathem::search::SearchContext::for_reading(p.as_ref(), cfg.bm25_weight);
+            let ctx = anathem::search::SearchContext::for_reading(p.as_ref(), cfg.bm25_weight)
+                .with_depth(cfg.retrieval_depth);
             let scopes = anathem::search::parse_scopes(&scope)?;
             let q = anathem::search::Query {
                 text: query, project, tags: tag, topic: None, limit,
@@ -1092,10 +1100,53 @@ fn run(cli: Cli) -> Result<()> {
                 }
             }
         }
-        Cmd::Tune { apply } => {
+        Cmd::Tune { apply, depth, evalset } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new("."));
             let cfg = anathem::config::load(dir)?;
+            if depth {
+                let cases = match evalset {
+                    Some(p) => anathem::evalrun::cases_from_file(&p)?,
+                    None => {
+                        let cases = anathem::tune::cases_from_topics(&conn)?;
+                        anathem::tune::check_enough(cases.len())?;
+                        println!(
+                            "Reading {} topic keys as the eval set. They are lexical by \
+                             construction,\nso they are good for choosing between \
+                             depths and wrong to quote as a quality\nfigure.\n",
+                            cases.len()
+                        );
+                        cases
+                    }
+                };
+                if cases.is_empty() {
+                    anyhow::bail!("the eval set has no cases, so there is nothing to measure");
+                }
+                let pack = anathem::packstore::resolve_and_warn(&conn, dir);
+                let points = anathem::tune::sweep_depth(
+                    &conn, &cases, pack.as_ref(), cfg.bm25_weight, &cfg,
+                )?;
+                println!(
+                    "{:>6}  {:>9}  {:>10}  {:>7}  {:>8}  {:>11}",
+                    "depth", "recall@5", "recall@50", "MRR", "p50(ms)", "tokens(p50)"
+                );
+                for p in &points {
+                    let here = if p.depth == cfg.retrieval_depth { "  <- yours" } else { "" };
+                    println!(
+                        "{:>6}  {:>8.0}%  {:>9.0}%  {:>7.3}  {:>8.1}  {:>11}{here}",
+                        p.depth, p.recall_at_5 * 100.0, p.recall_at_50 * 100.0,
+                        p.mrr, p.p50_ms, p.tokens_p50
+                    );
+                }
+                println!(
+                    "\n`retrieval_depth` stays at {} unless a deeper pool improves \
+                     recall@5 or MRR\non both corpora beyond noise, or improves one and \
+                     leaves the other within\nnoise; a latency regression above 25 % \
+                     kills the change. This command writes\nnothing.",
+                    cfg.retrieval_depth
+                );
+                return Ok(());
+            }
             let cases = anathem::tune::cases_from_topics(&conn)?;
             anathem::tune::check_enough(cases.len())?;
             let Some(pack) = anathem::packstore::resolve_and_warn(&conn, dir) else {
@@ -1116,7 +1167,9 @@ fn run(cli: Cli) -> Result<()> {
                 cases.len()
             );
 
-            let scored = anathem::tune::sweep_until_interior(&conn, &cases, &pack)?;
+            let scored = anathem::tune::sweep_until_interior(
+                &conn, &cases, &pack, cfg.retrieval_depth,
+            )?;
             println!("{:>8}  {:>7}  {:>9}", "weight", "MRR", "recall@5");
             for (w, mrr, r5) in &scored {
                 let here = if (*w - cfg.bm25_weight).abs() < f64::EPSILON { "  <- yours" } else { "" };
@@ -1196,10 +1249,15 @@ every other key the file has, or put it in {} yourself:",
             let dir = path.parent().unwrap_or(Path::new("."));
             let cfg = anathem::config::load(dir)?;
             let p = anathem::packstore::resolve_and_warn(&conn, dir);
-            let ctx = anathem::search::SearchContext::for_reading(p.as_ref(), cfg.bm25_weight);
+            let ctx = anathem::search::SearchContext::for_reading(p.as_ref(), cfg.bm25_weight)
+                .with_depth(cfg.retrieval_depth);
             if compare {
-                let bm25_ctx = anathem::search::SearchContext::bm25_only();
-                let vector_ctx = p.as_ref().map(anathem::search::SearchContext::vector_only);
+                let bm25_ctx = anathem::search::SearchContext::bm25_only()
+                    .with_depth(cfg.retrieval_depth);
+                let vector_ctx = p
+                    .as_ref()
+                    .map(|pack| anathem::search::SearchContext::vector_only(pack)
+                        .with_depth(cfg.retrieval_depth));
                 let r = anathem::evalrun::compare(
                     &conn, &evalset, &label, &ctx, &bm25_ctx, vector_ctx.as_ref(),
                 )?;
