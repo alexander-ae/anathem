@@ -103,3 +103,22 @@ fn depth_sweep_reports_every_grid_point_and_the_payload_tokens() {
         assert!(p.tokens_p50 > 0, "the payload is measured too: {p:?}");
     }
 }
+
+#[test]
+fn bm25_sweep_includes_the_fts5_baseline_and_returns_finite_points() {
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&d.path().join("t.db")).unwrap();
+    for i in 0..3 {
+        save(&conn, &format!("cache {i}"), &format!("cache del breakdown {i}"), Some(&format!("tema-{i}")));
+    }
+    let cases = tune::cases_from_topics(&conn).unwrap();
+    let points = tune::sweep_bm25(&conn, &cases, 200).unwrap();
+    assert!(!points.is_empty());
+    assert!(
+        points.iter().any(|p| p.k1 == 1.2 && p.b == 0.75 && p.delta == 0.0),
+        "the baseline has to be in the table"
+    );
+    for p in &points {
+        assert!(p.mrr.is_finite() && (0.0..=1.0).contains(&p.recall_at_5), "{p:?}");
+    }
+}

@@ -173,14 +173,18 @@ enum Cmd {
     Tune {
         /// Writes the recommended value into `config.json`, keeping every
         /// other key it already has
-        #[arg(long, conflicts_with = "depth")]
+        #[arg(long, conflicts_with_all = ["depth", "bm25"])]
         apply: bool,
         /// Sweeps `retrieval_depth` instead of `bm25_weight`: 100, 200, 500
         /// and 1000, with recall, MRR, latency and the payload's tokens
-        #[arg(long)]
+        #[arg(long, conflicts_with = "bm25")]
         depth: bool,
-        /// Eval set for `--depth`; without it the topic keys are used
-        #[arg(long, requires = "depth")]
+        /// Sweeps BM25's `k1`, `b` and BM25+ `delta` over the candidate pool
+        #[arg(long)]
+        bm25: bool,
+        /// Eval set for `--depth` or `--bm25`; without it the topic keys are
+        /// used
+        #[arg(long)]
         evalset: Option<PathBuf>,
     },
     /// Runs the evaluation harness
@@ -721,7 +725,8 @@ fn run(cli: Cli) -> Result<()> {
             let cfg = anathem::config::load(dir)?;
             let p = anathem::packstore::resolve_and_warn(&conn, dir);
             let ctx = anathem::search::SearchContext::for_reading(p.as_ref(), cfg.bm25_weight)
-                .with_depth(cfg.retrieval_depth);
+                .with_depth(cfg.retrieval_depth)
+                .with_bm25(cfg.bm25_params());
             let scopes = anathem::search::parse_scopes(&scope)?;
             let q = anathem::search::Query {
                 text: query, project, tags: tag, topic: None, limit,
@@ -1100,10 +1105,13 @@ fn run(cli: Cli) -> Result<()> {
                 }
             }
         }
-        Cmd::Tune { apply, depth, evalset } => {
+        Cmd::Tune { apply, depth, bm25, evalset } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new("."));
             let cfg = anathem::config::load(dir)?;
+            if !depth && !bm25 && evalset.is_some() {
+                anyhow::bail!("`--evalset` only applies with `--depth` or `--bm25`");
+            }
             if depth {
                 let cases = match evalset {
                     Some(p) => anathem::evalrun::cases_from_file(&p)?,
@@ -1147,6 +1155,58 @@ fn run(cli: Cli) -> Result<()> {
                 );
                 return Ok(());
             }
+            if bm25 {
+                let cases = match evalset {
+                    Some(p) => anathem::evalrun::cases_from_file(&p)?,
+                    None => {
+                        let cases = anathem::tune::cases_from_topics(&conn)?;
+                        anathem::tune::check_enough(cases.len())?;
+                        println!(
+                            "Reading {} topic keys as the eval set. They are lexical by \
+                             construction,\nso they over-represent the queries BM25 already \
+                             wins; good for choosing\nbetween settings, wrong to quote as a \
+                             quality figure.\n",
+                            cases.len()
+                        );
+                        cases
+                    }
+                };
+                if cases.is_empty() {
+                    anyhow::bail!("the eval set has no cases, so there is nothing to measure");
+                }
+                let mut points = anathem::tune::sweep_bm25(
+                    &conn, &cases, cfg.retrieval_depth,
+                )?;
+                points.sort_by(|a, b| {
+                    b.mrr.partial_cmp(&a.mrr).unwrap_or(std::cmp::Ordering::Equal)
+                });
+                println!(
+                    "{:>7}  {:>5}  {:>6}  {:>9}  {:>10}  {:>7}  {:>8}",
+                    "k1", "b", "delta", "recall@5", "recall@50", "MRR", "p50(ms)"
+                );
+                let current = cfg.bm25_params().unwrap_or_default();
+                for p in &points {
+                    let here = if (p.k1 - current.k1).abs() < 1e-9
+                        && (p.b - current.b).abs() < 1e-9
+                        && (p.delta - current.delta).abs() < 1e-9
+                    {
+                        "  <- yours"
+                    } else {
+                        ""
+                    };
+                    println!(
+                        "{:>7.2}  {:>5.2}  {:>6.2}  {:>8.0}%  {:>9.0}%  {:>7.3}  {:>8.1}{here}",
+                        p.k1, p.b, p.delta, p.recall_at_5 * 100.0,
+                        p.recall_at_50 * 100.0, p.mrr, p.p50_ms
+                    );
+                }
+                println!(
+                    "\nThis is a coordinate descent over k1, b and delta, not the full \
+                     product.\nIt writes nothing: a value is adopted only if it improves \
+                     both corpora, as\nwritten in docs/search.md."
+                );
+                return Ok(());
+            }
             let cases = anathem::tune::cases_from_topics(&conn)?;
             anathem::tune::check_enough(cases.len())?;
             let Some(pack) = anathem::packstore::resolve_and_warn(&conn, dir) else {
@@ -1168,7 +1228,7 @@ fn run(cli: Cli) -> Result<()> {
             );
 
             let scored = anathem::tune::sweep_until_interior(
-                &conn, &cases, &pack, cfg.retrieval_depth,
+                &conn, &cases, &pack, cfg.retrieval_depth, cfg.bm25_params(),
             )?;
             println!("{:>8}  {:>7}  {:>9}", "weight", "MRR", "recall@5");
             for (w, mrr, r5) in &scored {
@@ -1250,10 +1310,12 @@ every other key the file has, or put it in {} yourself:",
             let cfg = anathem::config::load(dir)?;
             let p = anathem::packstore::resolve_and_warn(&conn, dir);
             let ctx = anathem::search::SearchContext::for_reading(p.as_ref(), cfg.bm25_weight)
-                .with_depth(cfg.retrieval_depth);
+                .with_depth(cfg.retrieval_depth)
+                .with_bm25(cfg.bm25_params());
             if compare {
                 let bm25_ctx = anathem::search::SearchContext::bm25_only()
-                    .with_depth(cfg.retrieval_depth);
+                    .with_depth(cfg.retrieval_depth)
+                    .with_bm25(cfg.bm25_params());
                 let vector_ctx = p
                     .as_ref()
                     .map(|pack| anathem::search::SearchContext::vector_only(pack)

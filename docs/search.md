@@ -341,6 +341,46 @@ do is give you a quality figure — a topic key names its subject in keywords,
 so those questions flatter the lexical side — and the command says so above
 its own table.
 
+## `k1`, `b` and `delta`: FTS5's scorer, or yours
+
+FTS5's `bm25()` fixes `k1 = 1.2` and `b = 0.75`; there is no SQL knob for
+either. Setting **any** of `bm25_k1`, `bm25_b` or `bm25_delta` turns on a
+rescoring pass over the candidate pool: FTS5 still decides who is in the
+pool, and the pass reorders it with the formula below. With none of the
+three set, FTS5 scores exactly as it always has.
+
+```text
+score = Σ idf(t) · ( tf·(k1+1) / (tf + k1·(1 − b + b·dl/avgdl)) + delta )
+idf(t) = ln(1 + (N − df + 0.5) / (df + 0.5))
+```
+
+`N` is chunks, `df` comes from the FTS5 vocabulary, and `avgdl` is 125
+tokens — the 500-character chunk cut in four — so the corpus is not scanned
+on every query. The tokenizer splits on non-alphanumerics and folds the
+Latin-1 accents `unicode61 remove_diacritics 2` folds. It is close to FTS5's
+tokenizer, not byte-identical: FTS5 does not expose term frequencies, so
+this is the closest a rescoring pass can get without a second index.
+
+Measured on LongMemEval-S, 23,854 memories, no pack:
+
+| scorer | k1 | b | delta | recall@5 | recall@50 | MRR | p50 |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| FTS5 (default) | 1.2 | 0.75 | — | 96.2 % | 100 % | 0.912 | 101.5 ms |
+| rescoring, tuned | 0.6 | 0.75 | 0 | 96.2 % | 100 % | 0.912 | 106.1 ms |
+
+The coordinate descent on a 40-question subset found `0.6 / 0.75 / 0` at
+MRR **0.921** against **0.920** for FTS5, and the rescoring defaults scored
+**0.909** — the measurement moved by about a case. On the full 470 questions
+the difference disappears entirely. The honest conclusion is that this
+corpus does not need the knobs, so the defaults stay absent and FTS5 keeps
+scoring; the private notes corpus is the one that could disagree.
+
+`mem tune --bm25` walks `k1`, then `b`, then `delta`, twice, and prints the
+table on an eval set (or on the topic keys). It writes nothing, and the rule
+is fixed before the run: adopt a value only if it improves MRR or
+`recall@5` on **both** corpora, or improves one and leaves the other within
+noise; a latency regression above 10 % kills it.
+
 ## Retrieval depth: how many chunks the ranking may see
 
 `candidates` is what `search_memory` returns; `retrieval_depth` is how many

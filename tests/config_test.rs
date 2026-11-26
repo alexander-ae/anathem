@@ -194,3 +194,31 @@ fn retrieval_depth_past_the_ceiling_is_rejected_instead_of_clamped() {
     assert!(e.contains("retrieval_depth"), "the error has to name the field: {e}");
     assert!(e.contains(&too_deep.to_string()), "and the value it read: {e}");
 }
+
+#[test]
+fn bm25_parameters_are_absent_by_default_and_partial_ones_take_the_rest() {
+    let d = tempfile::tempdir().unwrap();
+    assert!(config::load(d.path()).unwrap().bm25_params().is_none());
+
+    std::fs::write(d.path().join("config.json"), r#"{"bm25_k1": 3.0}"#).unwrap();
+    let p = config::load(d.path()).unwrap().bm25_params().unwrap();
+    assert_eq!(p.k1, 3.0);
+    assert_eq!(p.b, 0.75, "the absent b keeps FTS5's value");
+    assert_eq!(p.delta, 0.0);
+}
+
+#[test]
+fn an_out_of_range_bm25_b_is_rejected_naming_the_field() {
+    let d = tempfile::tempdir().unwrap();
+    std::fs::write(d.path().join("config.json"), r#"{"bm25_b": 1.5}"#).unwrap();
+    let e = config::load(d.path()).unwrap_err().to_string();
+    assert!(e.contains("bm25_b"), "the error has to name the field: {e}");
+}
+
+#[test]
+fn a_negative_bm25_k1_is_rejected_naming_the_field() {
+    let d = tempfile::tempdir().unwrap();
+    std::fs::write(d.path().join("config.json"), r#"{"bm25_k1": -1.0}"#).unwrap();
+    let e = config::load(d.path()).unwrap_err().to_string();
+    assert!(e.contains("bm25_k1"), "the error has to name the field: {e}");
+}

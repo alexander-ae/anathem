@@ -113,6 +113,110 @@ pub const MIN_WEIGHT: f64 = 1.0 / 256.0;
 /// whether it is truncating evidence the agent would have used.
 pub const DEPTHS: &[usize] = &[100, 200, 500, 1000];
 
+/// The one-axis grids `mem tune --bm25` walks. It is a coordinate descent
+/// rather than the full product: 8 × 5 × 3 = 120 points over 470 questions
+/// is an afternoon, and the axes interact little enough that two rounds
+/// find the same neighbourhood.
+pub const K1S: &[f64] = &[0.6, 1.2, 2.0, 3.0, 5.0, 10.0, 16.0, 25.0];
+pub const BS: &[f64] = &[0.0, 0.4, 0.6, 0.75, 1.0];
+pub const DELTAS: &[f64] = &[0.0, 0.5, 1.0];
+
+/// One row of `mem tune --bm25`.
+#[derive(Debug, Clone)]
+pub struct Bm25Point {
+    pub k1: f64,
+    pub b: f64,
+    pub delta: f64,
+    pub recall_at_5: f64,
+    pub recall_at_50: f64,
+    pub mrr: f64,
+    pub p50_ms: f64,
+}
+
+fn bm25_point(
+    conn: &Connection,
+    cases: &[Case],
+    depth: usize,
+    k1: f64,
+    b: f64,
+    delta: f64,
+) -> Result<Bm25Point> {
+    let params = search::Bm25Params { k1, b, delta };
+    let ctx = search::SearchContext::bm25_only()
+        .with_depth(depth)
+        .with_bm25(Some(params));
+    let r = crate::evalrun::run_cases(
+        conn,
+        cases,
+        &format!("k1={k1} b={b} delta={delta}"),
+        &ctx,
+    )?;
+    Ok(Bm25Point {
+        k1,
+        b,
+        delta,
+        recall_at_5: r.recall_at_5,
+        recall_at_50: r.recall_at_50,
+        mrr: r.mrr,
+        p50_ms: r.p50_ms,
+    })
+}
+
+fn best_mrr(points: &[Bm25Point]) -> Option<&Bm25Point> {
+    points.iter().max_by(|a, c| {
+        a.mrr.partial_cmp(&c.mrr).unwrap_or(std::cmp::Ordering::Equal)
+    })
+}
+
+/// Walks `k1`, then `b`, then `delta`, twice, keeping the best MRR at each
+/// step. The baseline (1.2, 0.75, 0) is always included so the table has the
+/// value FTS5 uses to compare against.
+pub fn sweep_bm25(
+    conn: &Connection,
+    cases: &[Case],
+    depth: usize,
+) -> Result<Vec<Bm25Point>> {
+    let mut points: Vec<Bm25Point> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut evaluate = |k1: f64, b: f64, delta: f64, points: &mut Vec<Bm25Point>| -> Result<()> {
+        let key = format!("{k1:.6}|{b:.6}|{delta:.6}");
+        if seen.insert(key) {
+            points.push(bm25_point(conn, cases, depth, k1, b, delta)?);
+        }
+        Ok(())
+    };
+
+    let (mut k1, mut b, mut delta) = (1.2, 0.75, 0.0);
+    evaluate(k1, b, delta, &mut points)?;
+    for _ in 0..2 {
+        for &candidate in K1S {
+            evaluate(candidate, b, delta, &mut points)?;
+        }
+        if let Some(p) = best_mrr(&points) {
+            k1 = p.k1;
+            b = p.b;
+            delta = p.delta;
+        }
+        for &candidate in BS {
+            evaluate(k1, candidate, delta, &mut points)?;
+        }
+        if let Some(p) = best_mrr(&points) {
+            k1 = p.k1;
+            b = p.b;
+            delta = p.delta;
+        }
+        for &candidate in DELTAS {
+            evaluate(k1, b, candidate, &mut points)?;
+        }
+        if let Some(p) = best_mrr(&points) {
+            k1 = p.k1;
+            b = p.b;
+            delta = p.delta;
+        }
+    }
+    Ok(points)
+}
+
 /// One row of `mem tune --depth`.
 #[derive(Debug)]
 pub struct DepthPoint {
@@ -163,10 +267,11 @@ pub fn sweep(
     cases: &[Case],
     pack: &crate::pack::Pack,
     depth: usize,
+    bm25: Option<search::Bm25Params>,
 ) -> Result<Vec<(f64, f64, f64)>> {
     let mut out = Vec::new();
     for &w in WEIGHTS {
-        out.push(punto(conn, cases, pack, w, depth)?);
+        out.push(punto(conn, cases, pack, w, depth, bm25)?);
     }
     Ok(out)
 }
@@ -177,8 +282,11 @@ fn punto(
     pack: &crate::pack::Pack,
     w: f64,
     depth: usize,
+    bm25: Option<search::Bm25Params>,
 ) -> Result<(f64, f64, f64)> {
-    let ctx = search::SearchContext::for_reading(Some(pack), w).with_depth(depth);
+    let ctx = search::SearchContext::for_reading(Some(pack), w)
+        .with_depth(depth)
+        .with_bm25(bm25);
     let r = crate::evalrun::run_cases(conn, cases, &format!("w={w}"), &ctx)?;
     Ok((w, r.mrr, r.recall_at_5))
 }
@@ -200,8 +308,9 @@ pub fn sweep_until_interior(
     cases: &[Case],
     pack: &crate::pack::Pack,
     depth: usize,
+    bm25: Option<search::Bm25Params>,
 ) -> Result<Vec<(f64, f64, f64)>> {
-    let mut out = sweep(conn, cases, pack, depth)?;
+    let mut out = sweep(conn, cases, pack, depth, bm25)?;
     loop {
         let pares: Vec<(f64, f64)> = out.iter().map(|(w, m, _)| (*w, *m)).collect();
         let best = best_weight(&pares);
@@ -214,7 +323,7 @@ pub fn sweep_until_interior(
         } else {
             return Ok(out);
         };
-        let p = punto(conn, cases, pack, next, depth)?;
+        let p = punto(conn, cases, pack, next, depth, bm25)?;
         if next > high {
             out.push(p);
         } else {

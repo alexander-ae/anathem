@@ -317,6 +317,126 @@ fn identifier_re() -> &'static Regex {
     R.get_or_init(|| Regex::new(r"[A-Za-z0-9]+(?:[-._+/:@][A-Za-z0-9]+)+").unwrap())
 }
 
+/// Parameters for the optional rescoring pass.
+///
+/// FTS5's `bm25()` hardcodes `k1 = 1.2` and `b = 0.75`. When any of these is
+/// set in `config.json`, the candidate pool is rescored with the formula
+/// below instead, which is the only way to vary them without leaving FTS5.
+/// The default is `None`, and then FTS5 keeps scoring exactly as it did.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Bm25Params {
+    pub k1: f64,
+    pub b: f64,
+    /// BM25+'s lower bound on the saturated term weight. Zero is plain BM25.
+    pub delta: f64,
+}
+
+impl Default for Bm25Params {
+    fn default() -> Self {
+        Self { k1: 1.2, b: 0.75, delta: 0.0 }
+    }
+}
+
+/// The average length, in tokens, of a chunk. Chunks are cut at 500
+/// characters with a 400-character step, so this is the one corpus statistic
+/// the rescoring pass does not have to measure by scanning every row.
+const AVG_CHUNK_TOKENS: f64 = 125.0;
+
+/// Fold the accents `unicode61 remove_diacritics 2` folds, so a query and a
+/// body compare equal on the same letters. It covers the Latin-1 range this
+/// corpus is written in; the candidate set still comes from FTS5, so a
+/// character this misses costs ranking precision and never recall.
+fn fold_diacritic(c: char) -> char {
+    match c {
+        'á' | 'à' | 'â' | 'ä' | 'ã' | 'å' | 'ā' => 'a',
+        'é' | 'è' | 'ê' | 'ë' | 'ē' => 'e',
+        'í' | 'ì' | 'î' | 'ï' | 'ī' => 'i',
+        'ó' | 'ò' | 'ô' | 'ö' | 'õ' | 'ō' => 'o',
+        'ú' | 'ù' | 'û' | 'ü' | 'ū' => 'u',
+        'ñ' => 'n',
+        'ç' => 'c',
+        'ý' | 'ÿ' => 'y',
+        _ => c,
+    }
+}
+
+/// The candidate's tokens and their counts, folded the same way the query is.
+fn token_counts(text: &str) -> (HashMap<String, usize>, usize) {
+    let mut counts = HashMap::new();
+    let mut total = 0usize;
+    for token in text.split(|c: char| !c.is_alphanumeric()).filter(|t| !t.is_empty()) {
+        let folded: String = token.to_lowercase().chars().map(fold_diacritic).collect();
+        *counts.entry(folded).or_insert(0) += 1;
+        total += 1;
+    }
+    (counts, total)
+}
+
+/// The query's terms with their IDF, or `None` when there is nothing to
+/// score. Document frequency comes from `fts5vocab`; `N` is the number of
+/// chunks, the unit the index is built in.
+fn bm25_query_terms(
+    conn: &Connection,
+    text: &str,
+) -> Result<Option<(Vec<(String, f64)>, HashMap<String, i64>)>> {
+    let chunks: i64 = conn.query_row("select count(*) from chunks", [], |r| r.get(0))?;
+    if chunks <= 0 {
+        return Ok(None);
+    }
+    let n = chunks as f64;
+    let cap = if (chunks as usize) >= MIN_CHUNKS_FOR_DF { chunks / 2 + 1 } else { i64::MAX };
+    let mut seen = std::collections::HashSet::new();
+    let mut terms = Vec::new();
+    let mut frequencies = HashMap::new();
+    for quoted in match_terms(text) {
+        let raw = quoted.trim_matches('"').to_lowercase();
+        let folded: String = raw.chars().map(fold_diacritic).collect();
+        if folded.is_empty() || !seen.insert(folded.clone()) {
+            continue;
+        }
+        // The vocabulary answers by looking the term up, which is cheaper
+        // than walking its postings; the capped scan is the fallback for an
+        // index the module cannot read.
+        let df = match doc_freq(conn, &folded) {
+            Some(n) => n,
+            None => count_chunks_with(conn, &quoted, cap)?,
+        };
+        frequencies.insert(raw, df);
+        if df > chunks / 2 {
+            continue;
+        }
+        let df = df as f64;
+        let idf = (1.0 + (n - df + 0.5) / (df + 0.5)).ln();
+        terms.push((folded, idf));
+    }
+    if terms.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some((terms, frequencies)))
+    }
+}
+
+/// BM25 (or BM25+ when `delta > 0`) over one candidate.
+///
+/// `text` is the chunk in indexed form: CJK already bigrammed and, when the
+/// database was written with stemming, its stems appended. That is what
+/// makes the tokens comparable with the ones the query produced.
+fn bm25_score(text: &str, terms: &[(String, f64)], params: Bm25Params) -> f64 {
+    let (counts, dl) = token_counts(text);
+    let dl = dl as f64;
+    let mut score = 0.0;
+    for (term, idf) in terms {
+        let tf = *counts.get(term).unwrap_or(&0) as f64;
+        if tf == 0.0 {
+            continue;
+        }
+        let saturated = (tf * (params.k1 + 1.0))
+            / (tf + params.k1 * (1.0 - params.b + params.b * dl / AVG_CHUNK_TOKENS));
+        score += idf * (saturated + params.delta);
+    }
+    score
+}
+
 /// The span as an FTS5 phrase, or `None` when it has too few or too many
 /// parts to be worth one.
 ///
@@ -500,6 +620,9 @@ pub struct SearchContext<'a> {
     /// How many chunks each retriever may nominate before deduplication and
     /// fusion. See `DEFAULT_RETRIEVAL_DEPTH`.
     depth: usize,
+    /// When set, the lexical pool is rescored with these parameters instead
+    /// of FTS5's hardcoded ones. `None` keeps the old behaviour exactly.
+    bm25: Option<Bm25Params>,
 }
 
 impl SearchContext<'static> {
@@ -511,6 +634,7 @@ impl SearchContext<'static> {
             bm25_weight: 1.0,
             lexical: true,
             depth: DEFAULT_RETRIEVAL_DEPTH,
+            bm25: None,
         }
     }
 }
@@ -525,6 +649,7 @@ impl<'a> SearchContext<'a> {
             bm25_weight,
             lexical: true,
             depth: DEFAULT_RETRIEVAL_DEPTH,
+            bm25: None,
         }
     }
 
@@ -538,6 +663,7 @@ impl<'a> SearchContext<'a> {
             bm25_weight: 1.0,
             lexical: false,
             depth: DEFAULT_RETRIEVAL_DEPTH,
+            bm25: None,
         }
     }
 
@@ -547,6 +673,18 @@ impl<'a> SearchContext<'a> {
     pub fn with_depth(mut self, depth: usize) -> SearchContext<'a> {
         self.depth = depth.clamp(1, MAX_RETRIEVAL_DEPTH);
         self
+    }
+
+    /// The same context with the rescoring pass enabled. `None` is FTS5's
+    /// own scorer.
+    pub fn with_bm25(mut self, bm25: Option<Bm25Params>) -> SearchContext<'a> {
+        self.bm25 = bm25;
+        self
+    }
+
+    /// The rescoring parameters, when this context asks for them.
+    pub fn bm25(&self) -> Option<Bm25Params> {
+        self.bm25
     }
 
     /// For the MCP server, which searches and also saves.
@@ -560,6 +698,7 @@ impl<'a> SearchContext<'a> {
             bm25_weight,
             lexical: true,
             depth: DEFAULT_RETRIEVAL_DEPTH,
+            bm25: None,
         }
     }
 
@@ -821,6 +960,7 @@ fn word_evidence(
     terms: &[String],
     ids: &[i64],
     range: Option<(i64, i64)>,
+    frequencies: Option<&HashMap<String, i64>>,
 ) -> Result<(usize, HashMap<i64, usize>)> {
     let mut per: HashMap<i64, usize> = HashMap::new();
     if terms.is_empty() || ids.is_empty() {
@@ -834,9 +974,13 @@ fn word_evidence(
     for term in terms {
         // One past the threshold is all it takes to know the term is over
         // it, and the vocabulary is what keeps this from being a walk.
-        let df = match doc_freq(conn, term) {
+        let key = term.trim_matches('"').to_lowercase();
+        let df = match frequencies.and_then(|m| m.get(&key).copied()) {
             Some(n) => n,
-            None => count_chunks_with(conn, term, cap)?,
+            None => match doc_freq(conn, term) {
+                Some(n) => n,
+                None => count_chunks_with(conn, term, cap)?,
+            },
         };
         if df > cap {
             continue;
@@ -1001,6 +1145,7 @@ pub fn run_explained(
     }
 
     // --- lexical retrieval: identical to how it was ---
+    let mut bm25_frequencies: Option<HashMap<String, i64>> = None;
     let mut best: HashMap<i64, (SearchHit, i64)> = HashMap::new();
     let mut orden_bm25: Vec<i64> = Vec::new();
     if ctx.lexical && !m.is_empty() {
@@ -1046,6 +1191,19 @@ pub fn run_explained(
                         SearchHit { memory_id: id, ext_id, project, title, snippet: body, score },
                         pinned,
                     ));
+                }
+            }
+        }
+        // FTS5 scores the pool with its hardcoded k1 and b. When the
+        // configuration asks for different ones, the pool is rescored here;
+        // FTS5 still decided who is in it.
+        if let Some(params) = ctx.bm25() {
+            if let Some((terms, frequencies)) = bm25_query_terms(conn, text)? {
+                bm25_frequencies = Some(frequencies);
+                let stemming = crate::stem::enabled(conn);
+                for (_, (hit, _)) in best.iter_mut() {
+                    let indexed = crate::stem::indexed_form(&hit.snippet, stemming);
+                    hit.score = -bm25_score(&indexed, &terms, params);
                 }
             }
         }
@@ -1158,7 +1316,9 @@ pub fn run_explained(
     // Counted once the list is final, so the work is proportional to what
     // is returned and not to the candidate pool.
     let ids: Vec<i64> = out.iter().map(|e| e.hit.memory_id).collect();
-    let (words_total, per) = word_evidence(conn, &match_terms(text), &ids, chunk_range)?;
+    let (words_total, per) = word_evidence(
+        conn, &match_terms(text), &ids, chunk_range, bm25_frequencies.as_ref(),
+    )?;
     for e in out.iter_mut() {
         e.words_total = words_total;
         e.words_matched = per.get(&e.hit.memory_id).copied().unwrap_or(0);

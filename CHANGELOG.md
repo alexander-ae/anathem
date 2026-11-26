@@ -12,6 +12,14 @@ live in the database, not in the binary.
 
 ### Added
 
+- **`bm25_k1`, `bm25_b` and `bm25_delta`: FTS5's scorer becomes tunable.**
+  FTS5 fixes `k1 = 1.2` and `b = 0.75` with no SQL knob. Setting any of the
+  three keys turns on a rescoring pass over the candidate pool (FTS5 still
+  chooses it), with BM25+ `delta` available; with none set, FTS5 scores
+  exactly as before. `mem tune --bm25` walks `k1`, `b` and `delta` and
+  prints the table. Measured on LongMemEval-S: the tuned value gained
+  nothing over FTS5 on the full 470 questions (MRR 0.912 in both, p50
+  101.5 → 106.1 ms), so the default stays absent.
 - **`retrieval_depth`: the pool each retriever nominates is a setting, not a
   constant.** It is separate from `candidates` — the twenty the agent sees —
   and defaults to 200. `mem tune --depth` sweeps 100/200/500/1000 and prints
