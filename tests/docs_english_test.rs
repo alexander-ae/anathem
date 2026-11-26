@@ -281,6 +281,9 @@ fn repo_paths_in_line() -> impl Fn(&str) -> Vec<String> {
                     .find(|c: char| c.is_whitespace() || "`)\"',;".contains(c))
                     .unwrap_or(rest.len());
                 let path = rest[..end].trim_end_matches('.').to_string();
+                // A Markdown fragment is not part of the file name:
+                // `docs/research.md#retrieval` names `docs/research.md`.
+                let path = path.split('#').next().unwrap_or(&path).to_string();
                 // Only paths with an extension: a mention of `docs/` with no
                 // file names nothing that could be missing.
                 if path.contains('.')

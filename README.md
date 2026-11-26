@@ -263,7 +263,10 @@ the pack format and how to generate one.
 ## How it works
 
 - **Search** is BM25 over chunks, merged with a vector ranking when a pack
-  is installed. `search_memory` returns up to twenty candidates with a ~300
+  is installed. Why BM25 and not a neural retriever, and what would reverse
+  it:
+  [`docs/research.md`](docs/research.md#retrieval-why-bm25-and-what-would-replace-it).
+  `search_memory` returns up to twenty candidates with a ~300
   character excerpt each, so the model picks among more options at the same
   token cost — and with enough of each one to tell what it is about, which
   turned out to be the difference between 45% and 63% answered over a public
