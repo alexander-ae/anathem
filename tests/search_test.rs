@@ -659,3 +659,34 @@ fn an_unscoped_search_survives_having_all_its_terms_pruned() {
     let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
     assert!(!hits.is_empty(), "a corpus of 40 with a term in 30 still answers");
 }
+
+#[test]
+fn an_identifier_query_prefers_the_note_that_carries_it() {
+    let (_d, conn) = fixture();
+    seed(&conn, "exact", "acme-billing", "OP-204: the deploy flag lives in ops/feature_flags.rs");
+    seed(&conn, "noise", "acme-billing", "204 tickets were closed in the 204 sprint; 204 is a lot; op is a word");
+    let q = search::Query { text: "OP-204".into(), ..Default::default() };
+    let hits = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
+    assert_eq!(
+        hits[0].ext_id.as_deref(), Some("exact"),
+        "the note that carries the identifier has to win over one that repeats a fragment"
+    );
+}
+
+#[test]
+fn an_identifier_is_also_an_adjacent_phrase_in_the_match_expression() {
+    assert_eq!(
+        search::to_match("OP-204"),
+        "\"OP\" OR \"204\" OR \"OP 204\"",
+        "the phrase is the exact signal; the parts keep the recall"
+    );
+    assert_eq!(
+        search::to_match("v0.8.0"),
+        "\"v0\" OR \"8\" OR \"0\" OR \"v0 8 0\""
+    );
+}
+
+#[test]
+fn a_prose_query_keeps_its_expression_unchanged() {
+    assert_eq!(search::to_match("cache staleness"), "\"cache\" OR \"staleness\"");
+}
