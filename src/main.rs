@@ -1201,6 +1201,10 @@ every other key the file has, or put it in {} yourself:",
                 r.system, r.recall_at_5 * 100.0, r.recall_at_50 * 100.0,
                 r.mrr, r.p50_ms, r.n_cases
             );
+            if let Some(c) = r.contamination_at_5 {
+                println!("  contamination@5={:.1}%  (share of the top 5 holding a superseded value)",
+                    c * 100.0);
+            }
             if let Some(o) = out {
                 if let Some(p) = o.parent() { std::fs::create_dir_all(p)?; }
                 std::fs::write(&o, serde_json::to_string_pretty(&r)?)?;

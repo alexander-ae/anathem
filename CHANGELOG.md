@@ -12,6 +12,18 @@ live in the database, not in the binary.
 
 ### Added
 
+- **`contamination@5`: the metric that sees a superseded value.** `mem eval`
+  measured whether the right memory arrived, never whether it was still true;
+  after a rename or a bump the stale statement matches the query as well as
+  the current one. A case may now carry `stale_docs`, and the run reports the
+  share of the top five holding a superseded version — StaleBench's metric
+  (arXiv 2611.19752), which also shows that the usual retrieval metrics can
+  rank memory policies backwards. `tools/eval_metrics.py` prints the mean next
+  to the recall tables, a case without the field is reported as *not
+  measured* rather than zero, and `tests/eval_test.rs` pins both halves on a
+  corpus where supersession is the only thing that can tell the versions
+  apart.
+
 - **A credential is refused; where it lives is saved.** `docs/security.md`
   covered injection and control characters and did not mention secrets once,
   and a stored token is not only on disk: every search that matches it puts
