@@ -15,6 +15,7 @@ use anathem::config;
 /// The keys the struct accepts today.
 const CANONICAL: &[&str] = &[
     "bm25_weight", "candidates", "excerpt", "retrieval_depth",
+    "bm25_k1", "bm25_b", "bm25_delta",
     "handoff_items", "handoff_window", "release_pack_after",
 ];
 

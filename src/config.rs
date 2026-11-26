@@ -80,6 +80,24 @@ pub struct Config {
     #[serde(default = "default_retrieval_depth")]
     pub retrieval_depth: usize,
 
+    /// BM25's term-frequency saturation, when the FTS5 default of 1.2 is not
+    /// the right one for this corpus. Setting any of `bm25_k1`, `bm25_b` or
+    /// `bm25_delta` turns on a rescoring pass over the candidate pool; with
+    /// none of them FTS5 keeps scoring exactly as it did.
+    #[serde(default)]
+    pub bm25_k1: Option<f64>,
+
+    /// How much document length normalizes the score; FTS5 fixes 0.75.
+    /// Must be between 0 and 1 when set.
+    #[serde(default)]
+    pub bm25_b: Option<f64>,
+
+    /// BM25+'s lower bound on the saturated term weight. Zero or absent is
+    /// plain BM25; positive values make long documents less punished for
+    /// their length.
+    #[serde(default)]
+    pub bm25_delta: Option<f64>,
+
     /// Replaces a long memory's excerpt with a deterministic outline of the
     /// whole memory: its first paragraph and its headings. Off by default.
     ///
@@ -181,11 +199,31 @@ impl Default for Config {
             excerpt: default_excerpt(),
             budget: default_budget(),
             retrieval_depth: default_retrieval_depth(),
+            bm25_k1: None,
+            bm25_b: None,
+            bm25_delta: None,
             outline: false,
             handoff_items: default_handoff_items(),
             handoff_window: default_handoff_window(),
             release_pack_after: release_after_default(),
         }
+    }
+}
+
+impl Config {
+    /// The rescoring parameters, if any of the three keys was set. Absent
+    /// means FTS5's own scorer, which is what every published figure was
+    /// measured with.
+    pub fn bm25_params(&self) -> Option<crate::search::Bm25Params> {
+        if self.bm25_k1.is_none() && self.bm25_b.is_none() && self.bm25_delta.is_none() {
+            return None;
+        }
+        let d = crate::search::Bm25Params::default();
+        Some(crate::search::Bm25Params {
+            k1: self.bm25_k1.unwrap_or(d.k1),
+            b: self.bm25_b.unwrap_or(d.b),
+            delta: self.bm25_delta.unwrap_or(d.delta),
+        })
     }
 }
 
@@ -292,6 +330,33 @@ pub fn load(dir: &Path) -> Result<Config> {
             crate::search::MAX_RETRIEVAL_DEPTH,
             c.retrieval_depth
         );
+    }
+    if let Some(k1) = c.bm25_k1 {
+        if !(k1.is_finite() && k1 >= 0.0) {
+            bail!(
+                "{}: bm25_k1 has to be a finite number greater than or equal to zero, not {}",
+                pack_path.display(),
+                k1
+            );
+        }
+    }
+    if let Some(b) = c.bm25_b {
+        if !(b.is_finite() && (0.0..=1.0).contains(&b)) {
+            bail!(
+                "{}: bm25_b has to be between 0 and 1, not {}",
+                pack_path.display(),
+                b
+            );
+        }
+    }
+    if let Some(delta) = c.bm25_delta {
+        if !(delta.is_finite() && delta >= 0.0) {
+            bail!(
+                "{}: bm25_delta has to be a finite number greater than or equal to zero, not {}",
+                pack_path.display(),
+                delta
+            );
+        }
     }
     Ok(c)
 }

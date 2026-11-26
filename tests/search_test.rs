@@ -712,3 +712,27 @@ fn with_depth_rejects_zero_and_the_far_end() {
     let huge = search::SearchContext::bm25_only().with_depth(usize::MAX);
     assert_eq!(huge.depth(), search::MAX_RETRIEVAL_DEPTH);
 }
+
+#[test]
+fn at_fts5_defaults_the_rescorer_keeps_the_order_on_a_fixture() {
+    // The rescoring pass cannot be byte-identical to FTS5's scorer — FTS5
+    // does not expose term frequencies, so this tokenizes the indexed body
+    // itself — but at its defaults it has to agree on a fixture where the
+    // order is not a tie. If it ever stops agreeing, the difference is the
+    // thing to explain, not to wave through.
+    let dir = tempfile::tempdir().unwrap();
+    let conn = db::open(&dir.path().join("t.db")).unwrap();
+    seed(&conn, "a", "p", "cache cache cache del breakdown");
+    seed(&conn, "b", "p", "cache del breakdown con staleness y mas texto para diluir");
+    seed(&conn, "c", "p", "otra nota sobre cache y deployment");
+    let q = search::Query { text: "cache breakdown".into(), ..Default::default() };
+    let fts = search::run(&conn, &q, &search::SearchContext::bm25_only()).unwrap();
+    let rescored = search::run(
+        &conn, &q,
+        &search::SearchContext::bm25_only()
+            .with_bm25(Some(search::Bm25Params::default())),
+    ).unwrap();
+    let a: Vec<_> = fts.iter().map(|h| h.ext_id.clone()).collect();
+    let b: Vec<_> = rescored.iter().map(|h| h.ext_id.clone()).collect();
+    assert_eq!(a, b, "the rescoring pass changed an order at FTS5's defaults");
+}
