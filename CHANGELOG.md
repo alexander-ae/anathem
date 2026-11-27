@@ -8,7 +8,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 what you would be getting. Memories are never touched by an upgrade: they
 live in the database, not in the binary.
 
-## [Unreleased]
+## [1.6.0] - 2026-11-27
 
 ### Changed
 
