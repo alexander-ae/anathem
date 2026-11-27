@@ -354,8 +354,8 @@ score = Σ idf(t) · ( tf·(k1+1) / (tf + k1·(1 − b + b·dl/avgdl)) + delta )
 idf(t) = ln(1 + (N − df + 0.5) / (df + 0.5))
 ```
 
-`N` is chunks, `df` comes from the FTS5 vocabulary, and `avgdl` is 125
-tokens — the 500-character chunk cut in four — so the corpus is not scanned
+`N` is chunks, `df` comes from the FTS5 vocabulary, and `avgdl` is 250
+tokens — the 1,000-character chunk cut in four — so the corpus is not scanned
 on every query. The tokenizer splits on non-alphanumerics and folds the
 Latin-1 accents `unicode61 remove_diacritics 2` folds. It is close to FTS5's
 tokenizer, not byte-identical: FTS5 does not expose term frequencies, so

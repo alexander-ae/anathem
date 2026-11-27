@@ -10,6 +10,18 @@ live in the database, not in the binary.
 
 ## [Unreleased]
 
+### Changed
+
+- **Chunks are 1,000 characters with a step of 800, up from 500/400**, and it
+  is faster *and* more accurate: on LongMemEval-S recall@5 goes 96.2 % →
+  97.2 % and the median 107 ms → 82 ms (623,648 chunks → 314,944); on LoCoMo
+  88.8 % → 89.8 %. Half the rows to score, and a longer chunk keeps evidence
+  in one place instead of splitting it across neighbours. 2,000/1,600 is
+  faster still and was not taken: the excerpt is 300 characters, and a match
+  that can sit two screenfuls away explains the candidate less. **Run `mem
+  reindex` after upgrading**: chunks are built at write time, so the new size
+  applies to what is indexed after it.
+
 ## [1.5.0] - 2026-11-26
 
 ### Added
