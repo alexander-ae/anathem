@@ -2,8 +2,8 @@ use crate::{chunk, model::NewMemory};
 use anyhow::{bail, Result};
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 
-pub const CHUNK_SIZE: usize = 500;
-pub const CHUNK_STEP: usize = 400;
+pub const CHUNK_SIZE: usize = 1000;
+pub const CHUNK_STEP: usize = 800;
 
 /// Must match the check constraint on `memory_refs.kind` in db::SCHEMA.
 const VALID_REF_KINDS: [&str; 3] = ["ticket", "pr", "sha"];

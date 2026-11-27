@@ -168,9 +168,9 @@ uses the `en-es` pack, 256 dimensions, 623,648 chunks, full coverage.
 | p50 per query                     | 375ms |  369ms |   -6ms |
 
 The p50 row predates the scoped-search fix: the same command on the same
-corpus now reports **110 ms** for bm25, with the recall columns unchanged to
-the case. Hybrid was not re-run after the fix, so its 369 ms is still the old
-figure.
+corpus reported **110 ms** for bm25 after it, with the recall columns
+unchanged to the case, and **82 ms** once the chunk size doubled (below).
+Hybrid was not re-run after either, so its 369 ms is still the old figure.
 
 The middle row is the textbook Recall@k when a query has several relevant
 documents — the mean fraction of them inside the top k — and it is the one to
@@ -1009,6 +1009,40 @@ skipped by `mem import`, whose identity is project plus body; the count is 994.
 This is the measurement the project's claim hangs on: the ranking can look
 good while the context argues with itself, and only the write policy — not a
 better retriever — takes contamination to zero.
+
+## Chunk size: the one lever that paid
+
+A memory is split into chunks of `CHUNK_SIZE` characters, stepping by
+`CHUNK_STEP`, and the search ranks chunks and returns the memory they come
+from. At 500/400 a session of about 4,000 characters becomes eight chunks, and
+FTS5 scores every one of them against every word of the question — which is
+what the latency section below measures. So the chunk size sets both the cost
+and the granularity of a match.
+
+Swept on the two corpora, rebuilding the index with `mem reindex` and asking
+the same questions:
+
+| chunk/step | LongMemEval chunks | recall@5 | MRR | p50 | LoCoMo recall@5 | MRR | p50 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 500/400 | 623,648 | 96.2 % | 0.912 | 107 ms | 88.8 % | 0.760 | 4.9 ms |
+| **1,000/800** | **314,944** | **97.2 %** | 0.913 | **82 ms** | **89.8 %** | **0.766** | 4.7 ms |
+| 2,000/1,600 | 160,499 | 96.8 % | 0.915 | 62 ms | 89.5 % | 0.765 | 4.6 ms |
+
+**Bigger chunks win on both axes**, which is not the trade that was expected:
+recall@5 goes up a point on each corpus and the median falls 24 % at
+1,000/800. Half as many rows means half as much to score, and a longer chunk
+holds more of the evidence in one place instead of splitting it across
+neighbouring rows that then compete with each other.
+
+What it costs is locality, and it is why 2,000/1,600 was not taken even though
+it is faster still: the excerpt a model reads is 300 characters, so the
+farther a match can sit from the excerpt, the less the excerpt explains why the
+candidate was returned. At 1,000 the gap is one screenful; at 2,000 it is two.
+The CLI, which prints the chunk rather than an excerpt, also gets longer lines.
+
+**Existing databases do not change by themselves.** Chunks are built at write
+time, so an upgraded install keeps its 500-character index until `mem reindex`
+runs; the figures above are what that command produces.
 
 ## What a bigger haystack costs: the distractor curve
 

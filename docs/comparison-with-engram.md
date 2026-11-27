@@ -131,8 +131,8 @@ where the direction is against anathem, so it stays in the table.
 1.9 in LoCoMo turns.** The margin shrinks as the unit of memory gets finer, and
 the reason is architectural rather than mysterious: Engram indexes a whole
 memory as one FTS5 document, so a 4,000-character session dilutes every term's
-weight; anathem indexes 300-character chunks and returns the memory they come
-from. When a memory is a single turn, there is nothing to dilute and the two
+weight; anathem indexes 1,000-character chunks and returns the memory they
+come from, with a 300-character excerpt. When a memory is a single turn, there is nothing to dilute and the two
 are within noise of each other — 52.2 against 50.3, and 30.6 against 30.0 at
 rank 1.
 

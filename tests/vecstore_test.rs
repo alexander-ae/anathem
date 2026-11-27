@@ -200,15 +200,17 @@ fn editing_a_memory_invalidates_its_vectors() {
 #[test]
 fn search_collapses_several_chunks_of_one_memory() {
     // `seed` uses bodies of 4-5 characters, which always fit in a single
-    // chunk (CHUNK_SIZE=500) and never exercise the collapse-by-maximum in
+    // chunk (`ingest::CHUNK_SIZE`) and never exercise the collapse-by-maximum in
     // `search_vectors` (the `best.entry(mid).or_insert(...)`). This memory is
     // deliberately long so as to force at least two chunks: the first,
     // padding of "mundo", and the second, the only one containing "hola" — so
     // the result depends on `search_vectors` picking the closest chunk and
     // not either of the two.
     let (_d, conn, p) = fixture();
-    let relleno = "mundo ".repeat(100); // 600 caracteres, puro "mundo"
-    let goal = "hola ".repeat(50); // 250 caracteres, puro "hola"
+    // Long enough for two chunks whatever the chunk size is, with the two
+    // words in different pieces.
+    let relleno = "mundo ".repeat(250); // 1.500 caracteres, puro "mundo"
+    let goal = "hola ".repeat(60); // 300 caracteres, puro "hola"
     let body = format!("{relleno}{goal}");
     let id = seed(&conn, &body);
 
