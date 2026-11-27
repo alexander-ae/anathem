@@ -22,6 +22,13 @@ for `longmemeval_m_cleaned.json`, where each question drags around 500
 haystack sessions and all 500 questions do not fit on a laptop: what makes -M
 the harder benchmark is the depth of one haystack, not how many there are.
 
+`--inflate N` grows each question's haystack by N: the sessions it already
+has, plus evenly spaced sessions taken from the other instances, written
+under the same project. It is MeMo's noise test (arXiv 2605.15156) applied to
+this corpus, and the only honest way to ask whether recall holds as the pool
+grows. The evidence sessions of other instances are included, which is fair:
+a distractor is a distractor.
+
 `--distractors FRACTION` keeps every evidence session and an evenly spaced
 share of the rest. It is how the synthetic scope in `docs/benchmarks.md` is
 built: the most a perfect scope could do is drop distractors while keeping
@@ -130,10 +137,23 @@ def kept_sessions(ids, sessions, dates, evidence, fraction):
     return keep
 
 
-def convert(instances, out, distractors=None):
+def convert(instances, out, distractors=None, inflate=1):
     memories = out / "memories"
     memories.mkdir(parents=True, exist_ok=True)
     cases = []
+    # The pool an inflated haystack draws from: every session of every
+    # instance, so a question sees other people's conversations as
+    # distractors. Built once because the loop needs it per instance.
+    pool = []
+    if inflate > 1:
+        for inst in instances:
+            for sid, session, date in zip(
+                inst.get("haystack_session_ids") or [],
+                inst.get("haystack_sessions") or [],
+                list(inst.get("haystack_dates") or [])
+                + [""] * len(inst.get("haystack_session_ids") or []),
+            ):
+                pool.append((inst["question_id"], sid, session, date))
     # ext_id -> body already written. LongMemEval lists the same session
     # twice inside one instance in 13 of its 500 cases. Writing it twice is
     # harmless when the body matches; writing a *different* body over it
@@ -187,6 +207,37 @@ def convert(instances, out, distractors=None):
                     "w", encoding="utf-8", newline="\n") as fh:
                 fh.write(text)
 
+        if inflate > 1 and pool:
+            # (N-1) x the sessions it already had, drawn from elsewhere.
+            want = (inflate - 1) * len(ids)
+            ajenas = [r for r in pool if r[0] != qid]
+            if ajenas:
+                step = max(1, len(ajenas) // max(want, 1))
+                for src_qid, sid, session, date in ajenas[::step][:want]:
+                    body = render(session)
+                    if not body:
+                        continue
+                    ext_id = f"{qid}/extra:{src_qid}:{sid}"
+                    if ext_id in seen:
+                        continue
+                    seen[ext_id] = body
+                    created = iso_date(date)
+                    title = " ".join(body.split())[:120]
+                    text = (
+                        "---\n"
+                        f"project: {yaml_dq(qid)}\n"
+                        f"description: {yaml_dq(title)}\n"
+                        f"created: {yaml_dq(created)}\n"
+                        "status: active\n"
+                        "source: migrated\n"
+                        f"ext_id: {yaml_dq(ext_id)}\n"
+                        "---\n\n"
+                        f"{body}\n"
+                    )
+                    with (memories / file_name(ext_id)).open(
+                            "w", encoding="utf-8", newline="\n") as fh:
+                        fh.write(text)
+
         if answerable:
             cases.append({
                 "id": qid,
@@ -207,7 +258,7 @@ def convert(instances, out, distractors=None):
 
 
 def main(argv):
-    args, questions, distractors = [], None, None
+    args, questions, distractors, inflate = [], None, None, 1
     rest = argv[1:]
     while rest:
         a = rest.pop(0)
@@ -216,6 +267,15 @@ def main(argv):
                 print("--questions needs a number", file=sys.stderr)
                 return 2
             questions = int(rest.pop(0))
+        elif a == "--inflate":
+            if not rest:
+                print("--inflate needs a number of 2 or more", file=sys.stderr)
+                return 2
+            inflate = int(rest.pop(0))
+            if inflate < 2:
+                print("--inflate is for growing the haystack; 1 is the corpus itself",
+                      file=sys.stderr)
+                return 2
         elif a == "--distractors":
             if not rest:
                 print("--distractors needs a fraction between 0 and 1", file=sys.stderr)
@@ -234,7 +294,7 @@ def main(argv):
         print(__doc__.split("\n\n")[0], file=sys.stderr)
         print(
             f"\nusage: {argv[0]} <longmemeval file.json> <output dir> "
-            "[--questions N] [--distractors FRACTION]",
+            "[--questions N] [--distractors FRACTION] [--inflate N]",
             file=sys.stderr,
         )
         return 2
@@ -264,7 +324,7 @@ def main(argv):
         instances = [instances[(i * total) // questions] for i in range(questions)]
 
     written, cases, duplicates, conflicts = convert(
-        instances, pathlib.Path(args[1]), distractors
+        instances, pathlib.Path(args[1]), distractors, inflate
     )
     if conflicts:
         print(
