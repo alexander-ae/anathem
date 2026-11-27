@@ -1059,3 +1059,40 @@ instances, which is fairer than synthetic fakes in one sense and easier in
 another: they share domains and names, but they do not deliberately contradict
 the evidence. A curve built with contradictory distractors would be harder, and
 nobody has run it. The sample is 100 questions with one model-free ranker.
+### What actually makes a search slow: its terms
+
+The distractor curve above grows latency with the haystack, and it is worth
+knowing what inside the query does it, because it is not the ranking depth.
+Measured on LongMemEval-S, one project's scope (1,245 chunks), same binary:
+
+| query | terms | p50 |
+|---|---:|---:|
+| `graduate` | 1 | 5 ms |
+| `degree graduate` | 2 | 10 ms |
+| `what degree did i graduate with` | 5 | 50 ms |
+| `when did i go to the store and what did i buy there with my friends` | 9 | 170 ms |
+
+FTS5 has no top-k: it scores every matching chunk against every term. So the
+cost is terms x chunks-in-scope, and the pair of them is what a long question
+in a deep project pays. `mem tune --depth` confirms the other half of that:
+from depth 100 to 1,000, on this corpus, recall@5 and MRR do not move and the
+median goes 104.7 ms to 111.3 ms. Depth is not the lever.
+
+**And dropping the common terms inside the scope was tried and rejected.** The
+pruner that runs unscoped (terms past BM25's zero point over the whole corpus)
+was extended to use the scope's own frequencies, swept over four thresholds on
+LoCoMo, 1,536 questions:
+
+| threshold | recall@5 | recall@50 | MRR | p50 | 9-term query |
+|---|---:|---:|---:|---:|---:|
+| no scoped pruning | 88.80 % | 99.93 % | 0.759 | 6.4 ms | 170 ms |
+| half the scope | 88.35 % | 99.93 % | 0.761 | 5.6 ms | 110 ms |
+| a quarter | 87.96 % | 98.44 % | 0.753 | 5.0 ms | 100 ms |
+| a tenth | 87.17 % | 94.86 % | 0.754 | 3.4 ms | 90 ms |
+
+At the zero point the trade is roughly neutral — 0.45 points of recall@5 for
+12 % of the median and a third of the pathological query — and every step
+past it buys less time with more recall. The rule this repository follows is
+that a ranker does not trade answers for milliseconds without a reason, so
+scoped pruning is not in the build. What would pay is a different index
+(a top-k one), not a tighter filter.
