@@ -76,6 +76,7 @@ struct Fila {
     received_at: Option<String>,
     valid_from: Option<String>,
     valid_until: Option<String>,
+    questions: Vec<String>,
     /// What it was checked against: path, symbol, hash, state, when.
     anchor: Option<(String, Option<String>, String, String, String)>,
 }
@@ -117,6 +118,7 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
                 received_at: r.get(15)?,
                 valid_from: r.get(16)?,
                 valid_until: r.get(17)?,
+                questions: Vec::new(),
                 anchor: None,
             })
         })?
@@ -135,9 +137,19 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
         let (id, anchor) = row?;
         anchors.insert(id, anchor);
     }
+    let mut preguntas: std::collections::HashMap<i64, Vec<String>> =
+        std::collections::HashMap::new();
+    for row in conn
+        .prepare("select memory_id, question from memory_questions order by rowid")?
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?
+    {
+        let (id, q) = row?;
+        preguntas.entry(id).or_default().push(q);
+    }
     let mut rows = rows;
     for f in rows.iter_mut() {
         f.anchor = anchors.remove(&f.id);
+        f.questions = preguntas.remove(&f.id).unwrap_or_default();
     }
 
     // slug() truncates to the first 8 words, so two memories with the same
@@ -247,6 +259,12 @@ pub fn to_markdown(conn: &Connection, dir: &Path) -> Result<usize> {
         }
         if let Some(e) = &f.event_end {
             optional.push_str(&format!("event_end: {}\n", yaml_dq(e)));
+        }
+        if !f.questions.is_empty() {
+            optional.push_str("questions:\n");
+            for q in &f.questions {
+                optional.push_str(&format!("  - {}\n", yaml_dq(q)));
+            }
         }
         if let Some(v) = &f.valid_from {
             optional.push_str(&format!("valid_from: {}\n", yaml_dq(v)));

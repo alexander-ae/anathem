@@ -25,6 +25,7 @@ pub mod permissions;
 pub mod packstore;
 pub mod project;
 pub mod recent;
+pub mod questions;
 pub mod search;
 pub mod secrets;
 pub mod stats;

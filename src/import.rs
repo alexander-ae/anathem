@@ -38,6 +38,7 @@ pub struct ParsedMemory {
     /// The interval the memory was true for, when the export carried it.
     pub valid_from: Option<String>,
     pub valid_until: Option<String>,
+    pub questions: Vec<String>,
     /// What it was checked against: path, symbol, hash, state, when. Kept as
     /// exported: the state was true where it was written, and the first
     /// `mem verify --check` decides what it is here.
@@ -105,6 +106,11 @@ pub fn parse(text: &str) -> Option<ParsedMemory> {
         let l = lines[i];
         i += 1;
         // Refs are a list of pairs on following lines, indented.
+        if l.trim_start().starts_with("- ") && !l.contains("kind:") && !l.contains("value:") {
+            // A `questions:` list item, in the block the export writes.
+            m.questions.push(unquote(l.trim_start().trim_start_matches("- ")));
+            continue;
+        }
         if l.trim_start().starts_with("- kind:") {
             let kind = unquote(l.split_once("kind:").map(|x| x.1).unwrap_or(""));
             let value = lines
@@ -245,6 +251,12 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
             ],
         )?;
         let new_id = tx.last_insert_rowid();
+        for q in &m.questions {
+            tx.execute(
+                "insert or ignore into memory_questions (memory_id, question) values (?1, ?2)",
+                params![new_id, q],
+            )?;
+        }
         if let Some((path, symbol, sha, state, checked)) = &m.anchor {
             tx.execute(
                 "insert or replace into memory_anchors
@@ -267,6 +279,11 @@ pub fn import_dir(conn: &Connection, dir: &Path, merge: bool) -> Result<Summary>
                 params![new_id, ord as i64, body,
                         crate::stem::indexed_form(body, crate::stem::enabled(&tx))],
             )?;
+        }
+        // After the chunks exist: the questions are indexed onto the first
+        // one, so doing this before the insert would have nothing to append to.
+        if !m.questions.is_empty() {
+            crate::questions::append_to_index(&tx, new_id)?;
         }
         for t in &m.tags {
             tx.execute(

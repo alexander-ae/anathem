@@ -136,6 +136,11 @@ enum Cmd {
         /// Saves the text even when it looks like a credential
         #[arg(long)]
         allow_secret: bool,
+        /// A question this memory answers, indexed with it and never shown
+        /// in an excerpt. Repeatable; it is what lets a paraphrased question
+        /// find the note
+        #[arg(long = "question", value_name = "TEXT")]
+        question: Vec<String>,
     },
     /// Edits an existing memory's body in $EDITOR
     Edit {
@@ -225,6 +230,12 @@ enum Cmd {
         /// Pins it even though it arrived from another machine
         #[arg(long)]
         force: bool,
+    },
+    /// Adds a question this memory answers, indexed with it
+    Question {
+        id: i64,
+        /// The question, in the words a person would use
+        text: String,
     },
     /// Lists the memories that arrived from elsewhere, with who sent them
     Taint {
@@ -584,6 +595,7 @@ fn json_supported(cmd: &Cmd) -> bool {
             | Cmd::Stale { .. }
             | Cmd::Save { .. }
             | Cmd::Accept { .. }
+            | Cmd::Question { .. }
             | Cmd::Doctor { .. }
     )
 }
@@ -833,7 +845,7 @@ fn run(cli: Cli) -> Result<()> {
                 anathem::output::print_line(&format!("    {snippet}"), raw);
             }
         }
-        Cmd::Save { text, project, tag, topic, external, from, ext_id, anchor, allow_secret } => {
+        Cmd::Save { text, project, tag, topic, external, from, ext_id, anchor, allow_secret, question } => {
             let conn = anathem::db::open(&path)?;
             let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
             // `-` means the body comes on stdin, which is what lets a note
@@ -919,6 +931,9 @@ fn run(cli: Cli) -> Result<()> {
             let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
             let project = anathem::project::resolve(project, &cwd);
             let g = anathem::ingest::save_with_topic(&conn, &text, &project, tag, topic.as_deref(), None)?;
+            if !question.is_empty() {
+                anathem::questions::add(&conn, g.id, &question)?;
+            }
             if let Some(spec) = anchor.as_deref() {
                 // Resolved against where the command runs, not the database:
                 // the agent is standing in the repository the anchor names.
@@ -1419,6 +1434,15 @@ every other key the file has, or put it in {} yourself:",
             anathem::maint::pin_checked(&conn, id, true, force)?;
             println!("memory {id} pinned");
         }
+        Cmd::Question { id, text } => {
+            let conn = anathem::db::open(&path)?;
+            let n = anathem::questions::add(&conn, id, &[text])?;
+            if n == 0 {
+                println!("memory {id} already answers that question");
+            } else {
+                println!("memory {id}: question indexed");
+            }
+        }
         Cmd::Taint { limit } => {
             let conn = anathem::db::open(&path)?;
             let rows = anathem::maint::tainted(&conn, limit)?;
@@ -1727,6 +1751,9 @@ every other key the file has, or put it in {} yourself:",
             println!("saved: {}{who}", short_when(&m.when));
             if let Some(t) = &m.topic {
                 println!("topic: {t}");
+            }
+            for q in anathem::questions::list(&conn, id)? {
+                println!("question: {q}");
             }
             if let Some((path, symbol, _, state, checked)) = anathem::anchor::get(&conn, id)? {
                 let what = match symbol {

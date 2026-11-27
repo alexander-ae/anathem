@@ -12,6 +12,9 @@ fn rechunk(conn: &Connection, memory_id: i64, body: &str) -> Result<()> {
                     crate::stem::indexed_form(c, crate::stem::enabled(conn))],
         )?;
     }
+    // The questions are not in `body`, so a rechunk drops them from the
+    // index unless they are put back. `reindex` goes through here.
+    crate::questions::append_to_index(conn, memory_id)?;
     Ok(())
 }
 

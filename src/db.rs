@@ -48,6 +48,14 @@ create table if not exists memory_anchors (
   state      text not null default 'ok' check (state in ('ok','moved','missing'))
 );
 
+-- The questions a memory was written to answer. Indexed with it, never
+-- shown in an excerpt. See `questions.rs`.
+create table if not exists memory_questions (
+  memory_id integer not null references memories(id) on delete cascade,
+  question  text not null,
+  primary key (memory_id, question)
+);
+
 create table if not exists memory_refs (
   memory_id integer not null references memories(id) on delete cascade,
   kind      text not null check (kind in ('ticket','pr','sha')),

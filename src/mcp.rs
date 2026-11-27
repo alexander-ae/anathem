@@ -92,6 +92,8 @@ pub fn tool_defs() -> Value {
           "tags": {"type": "array", "items": {"type": "string"}},
           "topic": {"type": "string", "description": "Topic key, optional. Set it if the subject will keep evolving: it replaces the active memory under the same key in the same project. A short, stable phrase naming the subject, e.g. `branching-policy`."},
           "supersedes": {"type": "integer", "description": "Id of a specific, active memory that this one corrects and replaces, optional. It is the one that will stop appearing in searches. Use it to correct something already saved, with or without a topic key."},
+          "questions": {"type": "array", "items": {"type": "string"},
+            "description": "Two or three questions this memory answers, in the words a person would use when asking. Indexed with the memory and never shown in an excerpt: this is what lets a paraphrased question find it. Optional."},
           "anchor": {"type": "string", "description": "What the memory was checked against: `<path>` or `<path>:<symbol>`, relative to the project. Recorded with the hash so a later `check_anchor` can say whether the code still matches."},
           "verified": {"type": "boolean", "description": "Optional, false by default. Set it to true ONLY for something you checked against the world in this session: a command you ran and read the output of, a file you opened, a test that passed. Not for what you inferred, what you were told, or what seems right. A memory saved this way comes back marked `[verified]`, and the mark is worth exactly as much as your honesty about it: marking a guess makes the next session trust a guess. What you did not check is still worth saving — save it unmarked, and mark it later with `mem verify <id>` when something confirms it."}}}},
       {"name": "recent_memories",
@@ -454,6 +456,10 @@ fn call_tool(
             // saved either way, and an anchor that cannot be checked is worth
             // a sentence and not a failed save. Relative paths resolve from
             // where the server runs, which is the project the agent is in.
+            if let Some(qs) = args["questions"].as_array() {
+                let qs: Vec<String> = qs.iter().filter_map(|v| v.as_str().map(str::to_string)).collect();
+                crate::questions::add(conn, id, &qs)?;
+            }
             if let Some(spec) = args["anchor"].as_str().filter(|s| !s.trim().is_empty()) {
                 let cwd = std::env::current_dir()
                     .unwrap_or_else(|_| std::path::PathBuf::from("."));
