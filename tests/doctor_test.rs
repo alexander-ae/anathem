@@ -566,3 +566,39 @@ fn the_fts5_index_is_compared_by_ids_and_not_only_by_count() {
     assert!(o.stdout.contains("FTS5 index out of sync"), "{}", o.stdout);
     assert!(o.stdout.contains("1 unindexed, 1 indexed that no longer exist"), "{}", o.stdout);
 }
+
+/// The chunk size is written when the index is built, so a database upgraded
+/// without `mem reindex` can be told apart from one that was not.
+#[test]
+fn the_chunk_size_of_the_index_is_reported_and_its_staleness_flagged() {
+    let d = tempfile::tempdir().unwrap();
+    let db = d.path().join("mem.db");
+    let out = Command::new(env!("CARGO_BIN_EXE_mem"))
+        .args(["--db", db.to_str().unwrap(), "init"]).output().unwrap();
+    assert!(out.status.success());
+    let out = Command::new(env!("CARGO_BIN_EXE_mem"))
+        .args(["--db", db.to_str().unwrap(), "save", "una nota", "--project", "p"])
+        .output().unwrap();
+    assert!(out.status.success());
+
+    let doctor = || {
+        let o = Command::new(env!("CARGO_BIN_EXE_mem"))
+            .args(["--db", db.to_str().unwrap(), "doctor"]).output().unwrap();
+        format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr))
+    };
+    assert!(doctor().contains("index built with 1000-character chunks"),
+        "a fresh database records its size: {}", doctor());
+
+    // What a database indexed by an older binary looks like.
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute("update meta set value = '500' where key = 'chunk_size'", []).unwrap();
+    drop(conn);
+    let text = doctor();
+    assert!(text.contains("built with 500-character chunks"), "{text}");
+    assert!(text.contains("mem reindex"), "and how to fix it: {text}");
+
+    let o = Command::new(env!("CARGO_BIN_EXE_mem"))
+        .args(["--db", db.to_str().unwrap(), "reindex"]).output().unwrap();
+    assert!(o.status.success());
+    assert!(doctor().contains("index built with 1000-character chunks"), "{}", doctor());
+}

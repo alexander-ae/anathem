@@ -12,6 +12,9 @@ fn rechunk(conn: &Connection, memory_id: i64, body: &str) -> Result<()> {
                     crate::stem::indexed_form(c, crate::stem::enabled(conn))],
         )?;
     }
+    // `reindex` goes through here, so this is what records the size for the
+    // whole database after a rebuild.
+    ingest::note_chunk_size(conn)?;
     Ok(())
 }
 

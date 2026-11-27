@@ -3,6 +3,23 @@ use anyhow::{bail, Result};
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 
 pub const CHUNK_SIZE: usize = 1000;
+
+/// The chunk size the index was built with, kept in `meta`.
+///
+/// Chunks are written at save time, so an upgrade does not rebuild them: a
+/// database can be days old and still carry the previous size. `mem doctor`
+/// compares this with the binary's constant and says so, because a sentence in
+/// the changelog is not a mechanism.
+pub const META_CHUNK_SIZE: &str = "chunk_size";
+
+pub fn note_chunk_size(conn: &Connection) -> Result<()> {
+    conn.execute(
+        "insert into meta (key, value) values (?1, ?2)
+         on conflict(key) do update set value = excluded.value",
+        params![META_CHUNK_SIZE, CHUNK_SIZE.to_string()],
+    )?;
+    Ok(())
+}
 pub const CHUNK_STEP: usize = 800;
 
 /// Must match the check constraint on `memory_refs.kind` in db::SCHEMA.
@@ -65,6 +82,9 @@ fn insert_row(tx: &Connection, m: &NewMemory, agent: Option<&str>) -> Result<i64
             params![id, kind, value],
         )?;
     }
+    // Every memory is indexed at the size this binary uses; recording it
+    // here is what lets `mem doctor` notice a database left on an older one.
+    note_chunk_size(tx)?;
     Ok(id)
 }
 
