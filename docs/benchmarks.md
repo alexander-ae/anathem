@@ -1009,3 +1009,53 @@ skipped by `mem import`, whose identity is project plus body; the count is 994.
 This is the measurement the project's claim hangs on: the ranking can look
 good while the context argues with itself, and only the write policy — not a
 better retriever — takes contamination to zero.
+
+## What a bigger haystack costs: the distractor curve
+
+Every number above was measured with each question's own history — about fifty
+sessions for LongMemEval-S. Nobody's memory stays that size, so the question a
+year of notes asks is different: **what does the ranker do when the pool
+doubles, and doubles again?**
+
+MeMo (arXiv 2605.15156) reports this as a noise test: it doubles the corpus
+with fake documents, RAG loses 6.2 points and their trained memory model does
+not move. The same question can be asked here without a model, and the answer
+is not the same.
+
+**Method.** 100 questions evenly spaced through LongMemEval-S, each with its
+own haystack. At 1x the haystack is what the dataset gives. At 2x, 4x and 8x it
+is that plus evenly spaced sessions taken from the *other* instances, written
+under the same project so the search sees them. The evidence sessions are never
+touched, and a distractor from another question's history is as real as a
+distractor gets.
+
+```bash
+python3 tools/longmemeval_to_memories.py longmemeval_s_cleaned.json d8/ \
+    --questions 100 --inflate 8
+mem --db d8/bench.db init
+mem --db d8/bench.db import --from d8/memories
+mem --db d8/bench.db eval --evalset d8/evalset.json --label "8x"
+```
+
+| haystack | memories | recall@5 | MRR | p50 |
+|---|---:|---:|---:|---:|
+| 1x | 4,746 | **97.9 %** | 0.917 | 37 ms |
+| 2x | 9,494 | 96.8 % | 0.889 | 63 ms |
+| 4x | 18,990 | 93.6 % | 0.839 | 137 ms |
+| 8x | 37,982 | **89.4 %** | 0.792 | 209 ms |
+
+**Eight times the haystack costs 8.5 points of recall@5 and 0.125 of MRR**, and
+the slope is steeper as the pool grows: 1.1 points for the first doubling, 3.2
+for the second, 4.2 for the third. There is no cliff — the ranker degrades like
+a ranker, not like a system that breaks — but there is no plateau either, and
+this is the row that matters for a memory that will be used for years.
+
+Latency grows with the pool (5.6x at 8x) even though every question is scoped
+to its own project: the FTS scan is what it is, and this is the same cost that
+[issue #80](../docs) went after on the unscoped path.
+
+**What this does not show.** The distractors are real conversations from other
+instances, which is fairer than synthetic fakes in one sense and easier in
+another: they share domains and names, but they do not deliberately contradict
+the evidence. A curve built with contradictory distractors would be harder, and
+nobody has run it. The sample is 100 questions with one model-free ranker.
