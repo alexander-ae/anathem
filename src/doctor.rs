@@ -587,6 +587,38 @@ fn check_database(conn: &Connection, s: &mut Section) {
     guard(s, "the near-duplicates", |s| near_duplicates(conn, s));
     guard(s, "the anchors", |s| anchors(conn, s));
     guard(s, "the validity intervals", |s| validity(conn, s));
+    guard(s, "the chunk size", |s| chunk_size(conn, s));
+}
+
+/// The chunk size the index was built with, against the one this binary uses.
+///
+/// Chunks are written when a memory is saved, so an upgrade leaves the old
+/// ones in place; a database indexed at 500 characters still answers, it just
+/// misses the recall and the speed of the new size. A warning and not a
+/// problem: nothing is broken, and the fix is one command.
+fn chunk_size(conn: &Connection, s: &mut Section) -> anyhow::Result<()> {
+    if !has_table(conn, "memories").unwrap_or(false) {
+        return Ok(());
+    }
+    let stored: Option<String> = conn
+        .query_row(
+            "select value from meta where key = ?1",
+            [crate::ingest::META_CHUNK_SIZE],
+            |r| r.get(0),
+        )
+        .ok();
+    let ours = crate::ingest::CHUNK_SIZE.to_string();
+    match stored.as_deref() {
+        None => s.info(
+            "this database does not record the size it was indexed with; `mem reindex` records it",
+        ),
+        Some(v) if v == ours => s.bien(format!("index built with {ours}-character chunks")),
+        Some(v) => s.warning(format!(
+            "the index was built with {v}-character chunks and this binary uses {ours}: \
+             `mem reindex` rebuilds it"
+        )),
+    }
+    Ok(())
 }
 
 /// The interval a memory was true for, and whether the two ends agree with
