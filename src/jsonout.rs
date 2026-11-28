@@ -76,11 +76,13 @@ pub fn search(
         // between the ranking and this read, and losing the whole answer over
         // one result that no longer exists is worse than a result fewer. The
         // prose path has the same shape, for the same reason.
-        let Some((topic, status, verified, received_from)): Option<(Option<String>, String, i64, Option<String>)> =
+        let Some((topic, status, verified, received_from, supersedes, valid_from)):
+            Option<(Option<String>, String, i64, Option<String>, Option<i64>, Option<String>)> =
             conn.query_row(
-                "select topic, status, verified, received_from from memories where id = ?1",
+                "select topic, status, verified, received_from, supersedes_id, valid_from
+                   from memories where id = ?1",
                 [id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
             )
             .optional()?
         else {
@@ -101,6 +103,10 @@ pub fn search(
             "status": status,
             "verified": verified != 0,
             "received_from": received_from,
+            "supersedes": supersedes.map(|old| json!({
+                "id": old,
+                "since": valid_from.as_deref().map(|d| &d[..10.min(d.len())]),
+            })),
         }));
     }
     Ok(json!({

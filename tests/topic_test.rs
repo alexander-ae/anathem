@@ -837,3 +837,29 @@ fn show_topic_is_byte_identical_across_runs() {
     assert_eq!(a, b, "the output has to be diffable, not depend on the run");
     assert!(!a.contains('\u{1b}'), "no colour codes in output that gets piped");
 }
+
+/// The value alone does not say it was corrected, or when: the search result
+/// has to carry the dependency path (Raw-RAG, arXiv 2610.30755).
+#[test]
+fn a_correction_says_what_it_replaced_and_when() {
+    let d = tempfile::tempdir().unwrap();
+    mem_ok(d.path(), &["save", "el proveedor es Stripe", "--project", "p", "--topic", "pagos"]);
+    mem_ok(d.path(), &["save", "el proveedor es Adyen", "--project", "p", "--topic", "pagos"]);
+
+    let (ok, out, err) = mem(d.path(), &["search", "proveedor", "--project", "p", "--json"]);
+    assert!(ok, "{out} {err}");
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let hit = &v["results"][0];
+    assert_eq!(hit["id"], 2);
+    assert_eq!(hit["supersedes"]["id"], 1, "the chain travels: {hit}");
+    assert_eq!(hit["supersedes"]["since"].as_str().map(str::len), Some(10), "{hit}");
+
+    let (_, prose, _) = mem(d.path(), &["search", "proveedor", "--project", "p"]);
+    assert!(prose.contains("[supersedes: 1, since "), "{prose}");
+
+    // A memory with no chain pays nothing: the label is absent, not empty.
+    mem_ok(d.path(), &["save", "la oficina está en Miraflores", "--project", "p"]);
+    let (_, out, _) = mem(d.path(), &["search", "Miraflores", "--project", "p", "--json"]);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert!(v["results"][0]["supersedes"].is_null(), "{out}");
+}
