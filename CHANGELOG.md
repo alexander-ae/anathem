@@ -8,6 +8,56 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 what you would be getting. Memories are never touched by an upgrade: they
 live in the database, not in the binary.
 
+## [1.6.1] - 2026-11-28
+
+### Added
+
+- **A search result says what it replaced, and when.** A memory that was
+  corrected now carries the pointer the model was missing:
+
+  ```
+  [id:52] [p] 2026-11-28 [topic: pagos] [supersedes: 41, since 2026-11-28]
+  ```
+
+  In the MCP response, in `mem search` and in its JSON (`"supersedes":
+  {"id": 41, "since": "2026-11-28"}`). Only for memories with a chain: the
+  majority replaced nothing and pay nothing, and a memory without one reports
+  `null` rather than an empty string. The date is `valid_from`, and the id is
+  what `get_memory` takes to read the old version — the value alone does not
+  say it was a correction, which is the difference Raw-RAG calls *path*
+  coverage against *result* coverage (`arXiv 2610.30755`).
+
+- **Every line of the greeting says why it is there**: `[pinned]`,
+  `[topic-current]` or `[recent]`, with the legend in the framing sentence.
+  Which memories travel is unchanged — same selection, same cap, same window
+  — and the marks cost about nine characters per line. Before, only the
+  pinned ones carried a reason and the rest had to be inferred from their
+  position, which is the part of a state `arXiv 2611.31800` calls
+  inspectable.
+
+### Fixed
+
+- **`mem doctor` said nothing when the index was built at an older chunk
+  size.** 1.6.0 changed the size but chunks are built at write time, so a
+  database indexed before it keeps the old ones until `mem reindex` and loses
+  the recall that motivated the change. The diagnosis now compares the index
+  against the compiled constant and names the command.
+
+### Internal
+
+- `search_log` records the session a search belonged to, from
+  `OPENCODE_SESSION_ID` when the harness exposes one. Nothing reads it: it is
+  the instrument for two questions that cannot be answered with the log that
+  exists today — whether past use predicts future use, and whether the
+  greeting carries what the next session needed. At the time of writing the
+  log held 106 searches, 68 memories opened and one agent.
+
+- `docs/handoff.md` now says why the greeting is a window and not a state,
+  with the measurement: five items chosen by recency reach 23.8 % of the
+  evidence a question needs, and five chosen by relevance reach 97.2 %.
+  Reaching 80 % by recency takes half the history and 96 % takes all of it.
+  `tools/greeting_coverage.py` reproduces it on LongMemEval-S.
+
 ## [1.6.0] - 2026-11-27
 
 ### Changed
