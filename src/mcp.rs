@@ -374,7 +374,8 @@ fn call_tool(
                 .sum();
             let cwd = std::env::current_dir().ok();
             logsearch::record(conn, &text, project.as_deref(), &ids, used, agent,
-                              cwd.as_deref().and_then(|p| p.to_str()))?;
+                              cwd.as_deref().and_then(|p| p.to_str()),
+                              std::env::var("OPENCODE_SESSION_ID").ok().as_deref())?;
 
             if hits.is_empty() {
                 // An empty scope and an empty answer are different things,

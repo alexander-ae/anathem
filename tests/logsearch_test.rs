@@ -203,3 +203,17 @@ fn doctor_reports_how_big_the_search_log_is() {
     assert!(out.contains('2'), "how many rows it has: {out}");
     assert!(out.contains("2026-11-01"), "and since when it has been growing: {out}");
 }
+
+/// A search says which session it belonged to, so a question about what a
+/// session needed can be asked of the log at all (#86, #87 phase 2).
+#[test]
+fn a_search_records_its_session() {
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&d.path().join("t.db")).unwrap();
+    anathem::logsearch::record(&conn, "proveedor", Some("p"), &["1".into()], 100,
+                               Some("opencode"), None, Some("ses_abc")).unwrap();
+    let session: Option<String> = conn
+        .query_row("select session from search_log order by id desc limit 1", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(session.as_deref(), Some("ses_abc"));
+}

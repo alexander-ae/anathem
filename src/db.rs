@@ -156,6 +156,7 @@ pub fn open(path: &Path) -> Result<Connection> {
     add_provenance_columns(&conn)?;
     add_verified_column(&conn)?;
     add_validity_columns(&conn)?;
+    add_search_session_column(&conn)?;
     migrate_indexed_body(&conn)?;
     migrate_project_name(&conn)?;
     restringir(path);
@@ -406,6 +407,15 @@ fn add_provenance_columns(conn: &Connection) -> Result<()> {
 /// value without that cost. Today it holds 0 and 1.
 ///
 /// `default 0` is what makes this additive. Every memory that existed before
+/// Which session a search belonged to.
+///
+/// Without it the log is a flat list: `followed_up_id` says a memory was used
+/// but not by whom or in which conversation, so no question about a session's
+/// state can be asked of it. #86 and the second phase of #87 both need it.
+fn add_search_session_column(conn: &Connection) -> Result<()> {
+    add_column(conn, "search_log", "session", "text")
+}
+
 /// The interval a memory was true for, so `mem search --as-of` can answer
 /// what held then. `valid_until` NULL means "still" — a memory that was never
 /// superseded.
