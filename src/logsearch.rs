@@ -9,14 +9,16 @@ pub fn record(
     budget_used: usize,
     agent: Option<&str>,
     cwd: Option<&str>,
+    session: Option<&str>,
 ) -> Result<i64> {
     // A query is text somebody typed, and an agent may paste a credential into
     // one to ask whether it is already stored. The row is for `mem stats`;
     // the value is not.
     let query = &crate::secrets::redact(query);
     conn.execute(
-        "insert into search_log (ts, query, project, returned_ids, budget_used, agent, cwd)
-         values (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "insert into search_log
+           (ts, query, project, returned_ids, budget_used, agent, cwd, session)
+         values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             chrono::Local::now().to_rfc3339(),
             query,
@@ -24,7 +26,8 @@ pub fn record(
             ids.join(","),
             budget_used as i64,
             agent,
-            cwd
+            cwd,
+            session
         ],
     )?;
     Ok(conn.last_insert_rowid())

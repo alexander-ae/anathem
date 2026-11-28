@@ -69,8 +69,8 @@ fn the_search_log_keeps_the_row_and_loses_the_value() {
     let d = tempfile::tempdir().unwrap();
     let conn = db::open(&d.path().join("mem.db")).unwrap();
     let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop";
-    logsearch::record(&conn, jwt, Some("p"), &[], 100, None, None).unwrap();
-    logsearch::record(&conn, "cache breakdown", Some("p"), &[], 100, None, None).unwrap();
+    logsearch::record(&conn, jwt, Some("p"), &[], 100, None, None, Some("ses_test")).unwrap();
+    logsearch::record(&conn, "cache breakdown", Some("p"), &[], 100, None, None, Some("ses_test")).unwrap();
 
     let queries: Vec<String> = conn
         .prepare("select query from search_log order by id")
