@@ -829,6 +829,26 @@ fn run(cli: Cli) -> Result<()> {
                     let line = format!("{:2}. [{}]{} {}", i + 1, e.hit.project, from, e.hit.title);
                     anathem::output::print_line(&line, raw);
                 }
+                let replaced: String = conn
+                    .query_row(
+                        "select supersedes_id, valid_from from memories where id = ?1",
+                        [e.hit.memory_id],
+                        |r| Ok((r.get::<_, Option<i64>>(0)?, r.get::<_, Option<String>>(1)?)),
+                    )
+                    .unwrap_or((None, None))
+                    .0
+                    .map(|old| match conn
+                        .query_row("select valid_from from memories where id = ?1",
+                                   [e.hit.memory_id], |r| r.get::<_, Option<String>>(0))
+                        .unwrap_or(None)
+                    {
+                        Some(d) => format!(" [supersedes: {old}, since {}]", &d[..10.min(d.len())]),
+                        None => format!(" [supersedes: {old}]"),
+                    })
+                    .unwrap_or_default();
+                if !replaced.is_empty() {
+                    anathem::output::print_line(&format!("    {replaced}"), raw);
+                }
                 let snippet: String = e.hit.snippet.chars().take(180).collect();
                 anathem::output::print_line(&format!("    {snippet}"), raw);
             }

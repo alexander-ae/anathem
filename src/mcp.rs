@@ -176,6 +176,29 @@ fn received_label_of(conn: &Connection, id: i64) -> String {
 /// Said only when it is bad news: an anchor that still matches is not worth
 /// a line, and one that does not tells the model the code has moved since
 /// the note was written — which is the whole point of recording it.
+/// ` [supersedes: 41, since 2026-11-20]` when this memory replaced another.
+///
+/// Raw-RAG (arXiv 2610.30755) calls this the dependency path: the value alone
+/// does not say it was corrected, or when, and the model has no way to ask for
+/// what it does not know exists.
+fn supersedes_label_of(conn: &Connection, id: i64) -> String {
+    let row: Option<(Option<i64>, Option<String>)> = conn
+        .query_row("select supersedes_id, valid_from from memories where id = ?1", [id],
+                   |r| Ok((r.get(0)?, r.get(1)?)))
+        .ok();
+    match row {
+        Some((Some(old), from)) => {
+            let day = from
+                .as_deref()
+                .map(|d| d.get(..10.min(d.len())).unwrap_or(d))
+                .map(|d| format!(", since {d}"))
+                .unwrap_or_default();
+            format!(" [supersedes: {old}{day}]")
+        }
+        _ => String::new(),
+    }
+}
+
 fn anchor_label_of(conn: &Connection, id: i64) -> String {
     let row: Option<(String, Option<String>)> = conn
         .query_row(
@@ -366,13 +389,14 @@ fn call_tool(
             }
             let body = hits.iter()
                 .map(|e| format!(
-                    "[id:{}] [{}]{}{}{}{}{}{} {}\n{}",
+                    "[id:{}] [{}]{}{}{}{}{}{}{} {}\n{}",
                     e.hit.memory_id,
                     e.hit.project,
                     date_label_of(conn, e.hit.memory_id),
                     topic_label_of(conn, e.hit.memory_id),
                     received_label_of(conn, e.hit.memory_id),
                     verified_label_of(conn, e.hit.memory_id),
+                    supersedes_label_of(conn, e.hit.memory_id),
                     anchor_label_of(conn, e.hit.memory_id),
                     word_label(e),
                     e.hit.title,
