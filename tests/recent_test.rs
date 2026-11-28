@@ -589,7 +589,8 @@ fn pinned_memories_share_the_slot_count() {
     }
     let txt = recent::handoff_instructions(&conn, &p, 5, "24h", None).unwrap();
     assert_eq!(txt.lines().filter(|l| l.starts_with("- ")).count(), 5, "{txt}");
-    assert_eq!(txt.matches("[pinned] ").count(), 5, "{txt}");
+    // Only lines: the legend in the framing sentence names the mark too.
+    assert_eq!(txt.lines().filter(|l| l.starts_with("- [pinned] ")).count(), 5, "{txt}");
 }
 
 /// Task 4: the handoff text is the ONLY thing that reaches the model's system
@@ -713,4 +714,23 @@ fn with_no_drafts_the_greeting_is_unchanged() {
     ingest::save_explicit(&conn, "una nota", &project_of_cwd(), vec![]).unwrap();
     let t = instructions_for(&conn, &Config::default(), "claude-code").unwrap();
     assert!(!t.contains("waiting for review"), "{t}");
+}
+
+/// Every line of the greeting says why it is there, not only the pinned ones.
+#[test]
+fn each_greeting_line_says_why_it_is_there() {
+    let d = tempfile::tempdir().unwrap();
+    let conn = db::open(&db_ruta(&d)).unwrap();
+    let p = project_of_cwd();
+    let (fija, _) = ingest::save_explicit(&conn, "una regla que hay que tener a mano", &p, vec![]).unwrap();
+    anathem::maint::pin(&conn, fija, true).unwrap();
+    let tema = ingest::save_with_topic(&conn, "el proveedor es Adyen", &p, vec![], Some("pagos"), None).unwrap();
+    let (suelta, _) = ingest::save_explicit(&conn, "una nota del día", &p, vec![]).unwrap();
+
+    let txt = recent::handoff_instructions(&conn, &p, 10, "24h", None).unwrap();
+    let line = |id: i64| txt.lines().find(|l| l.contains(&format!("id:{id}"))).unwrap().to_string();
+    assert!(line(fija).contains("[pinned] "), "{}", line(fija));
+    assert!(line(tema.id).contains("[topic-current] "), "{}", line(tema.id));
+    assert!(line(suelta).contains("[recent] "), "{}", line(suelta));
+    assert!(txt.contains("Each line says why it is here"), "the legend travels with the marks:\n{txt}");
 }
